@@ -208,7 +208,7 @@ name = "commandcore-agent-rust"
 version = "0.9.0-rc7"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "ed25519-dalek",
  "futures-util",
