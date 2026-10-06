@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a scoped CommandCore improvement
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or operator problem should CommandCore solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful solution.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and permission impact
+      description: Mention new authority, network exposure, secrets, or privilege boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility impact
+      description: MCP, Agent Protocol, installer, database, platform, or upgrade implications.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and the roadmap.
+          required: true
+        - label: This request does not include sensitive vulnerability details.
+          required: true

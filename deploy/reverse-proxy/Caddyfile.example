@@ -1,0 +1,10 @@
+# Example only. Adapt this to the host's existing TLS/reverse-proxy setup.
+#
+# CommandCore is designed to use one canonical public origin:
+#   https://commandcore.example.com/
+#   https://commandcore.example.com/mcp
+#   wss://commandcore.example.com/agent
+
+commandcore.example.com {
+    reverse_proxy 127.0.0.1:8787
+}

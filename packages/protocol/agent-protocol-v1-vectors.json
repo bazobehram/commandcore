@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "note": "TEST-ONLY deterministic vectors. Private seeds are fixtures, never production keys.",
+  "protocol_version": "1",
+  "device_id": "device-test-001",
+  "keys": {
+    "old_private_seed_b64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+    "old_public_key_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
+    "new_private_seed_b64": "ISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=",
+    "new_public_key_b64": "5/FioQvsVZr+oZXk3OhLaVaNXSywlj60RsBoXisX8vA="
+  },
+  "auth": {
+    "nonce": "nonce-example",
+    "message_utf8": "commandcore-agent-auth-v1\ndevice-test-001\nnonce-example",
+    "signature_b64": "T6KCwDrZf+HbLdO0B8bVnIH7O968dSp3+jcfdyHkjokizAJaVGt4gz6L6hpB7HLkz/4sL4NJVyCc2nrgeT+GDA=="
+  },
+  "key_rotation_prepare": {
+    "nonce": "rotation-nonce-example",
+    "message_utf8": "commandcore-key-rotation-prepare-v1\ndevice-test-001\nrotation-nonce-example\n5/FioQvsVZr+oZXk3OhLaVaNXSywlj60RsBoXisX8vA=",
+    "old_signature_b64": "DRg2TUf/amk79lEl1l0VHI1PFTKOz3rM1sqAQailejLMZWoaI5Rg6jaGZEwNDWRqyCryaKLFUJUOkL4zrdfwAw==",
+    "new_signature_b64": "YenB3VGHcpsa01yUQE7FAhzAXUwanwARxOfzcTxg4HAjJtEDNoZtmGeVFFn1LEuHyq94xMtgdd7lDQC1xDhqAQ=="
+  },
+  "key_rotation_confirm": {
+    "rotation_id": "rotation-id-example",
+    "message_utf8": "commandcore-key-rotation-confirm-v1\ndevice-test-001\nrotation-id-example",
+    "new_signature_b64": "hPDC2N8EbqUsipZnM4coBdI49VY4Khpbuq+TVqorekX/vXBfXhNeFtjpuUJvKIfVlOKRmGDgPVyBpO6B3e6iDQ=="
+  },
+  "envelopes": {
+    "challenge": {
+      "type": "challenge",
+      "nonce": "nonce-example",
+      "protocol_version": "1"
+    },
+    "job_request": {
+      "type": "job.request",
+      "execution_id": "exec-test-001",
+      "tool": "shell.exec",
+      "permission_profile": "STANDARD",
+      "arguments": {
+        "command": "hostname"
+      }
+    }
+  }
+}

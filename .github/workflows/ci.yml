@@ -1,0 +1,179 @@
+name: CommandCore CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - name: Python compile and correctness lint
+        run: make lint
+      - name: Python formatting
+        run: make format-check
+      - name: Unit and integration tests
+        run: make test
+      - name: Standard MCP round-trip
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/integration_smoke.py
+      - name: Restricted-mode round-trip
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/restricted_mode_smoke.py
+      - name: OAuth/JWKS round-trip
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/oauth_smoke.py
+      - name: Panel/API smoke
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/panel_smoke.py
+      - name: Device-key rotation smoke
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/key_rotation_smoke.py
+      - name: Signed update activate/rollback smoke
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/update_rollout_smoke.py
+      - name: Fleet canary/ring rollout smoke
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/fleet_rollout_smoke.py
+      - name: Panel JavaScript syntax
+        if: matrix.python-version == '3.13'
+        run: |
+          node --check apps/web/panel.js
+          node --check apps/web/legacy-admin.js
+          node scripts/legacy_admin_smoke.mjs
+      - name: Agent-initiated enrollment and reconnect
+        if: matrix.python-version == '3.13'
+        run: PYTHONPATH=apps/server:agent python scripts/enrollment_smoke.py
+      - name: Release archive safety test
+        if: matrix.python-version == '3.13'
+        run: |
+          git add -A
+          git -c user.name=ci -c user.email=ci@example.invalid commit -m 'ci snapshot' --allow-empty
+          bash scripts/package.sh /tmp/commandcore-ci.zip
+
+  linux-full-control:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      # The unprivileged Agent cannot traverse the runner's private checkout.
+      # Install normal wheels into the shared toolchain, not editable packages.
+      - run: pip install -r requirements-dev.txt . ./agent
+      - name: Privilege-separated FULL_CONTROL smoke
+        run: sudo -E "$(which python)" scripts/full_control_smoke.py
+        env:
+          PYTHONPATH: apps/server:agent
+      - name: Root policy ownership and local configuration failure gates
+        run: sudo -E "$(which python)" -m pytest tests/test_root_trust.py tests/test_full_control_configuration.py tests/test_privileged_helper.py -q
+        env:
+          PYTHONPATH: apps/server:agent
+
+  rust-agent-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Ensure stable Rust toolchain
+        run: |
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+          rustc --version
+          cargo --version
+      - name: Rust components
+        run: rustup component add rustfmt clippy
+      - name: Rust format gate
+        run: cargo fmt --manifest-path agent/rust/Cargo.toml --check
+      - name: Rust compile and unit tests
+        run: cargo test --locked --manifest-path agent/rust/Cargo.toml
+      - name: Rust clippy gate
+        run: cargo clippy --locked --manifest-path agent/rust/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: Build native Agent
+        run: cargo build --locked --release --manifest-path agent/rust/Cargo.toml
+      - name: Rust Agent black-box parity
+        env:
+          COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
+          PYTHONPATH: apps/server:agent
+        run: python scripts/rust_agent_smoke.py
+      - name: Rust Agent FULL_CONTROL helper parity
+        env:
+          COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
+          PYTHONPATH: apps/server:agent
+        run: sudo -E "$(which python)" scripts/rust_full_control_smoke.py
+      - name: Native enrollment
+        env:
+          COMMANDCORE_ENROLLMENT_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
+          COMMANDCORE_ENROLLMENT_INSTALLER: ${{ github.workspace }}/install/linux.sh
+          PYTHONPATH: apps/server:agent
+        run: python scripts/enrollment_smoke.py
+
+  windows-core-candidate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements-dev.txt -e . -e ./agent
+      - name: Native Windows strict build gates
+        run: |
+          rustup component add rustfmt clippy
+          cargo fmt --manifest-path agent/rust/Cargo.toml --check
+          cargo clippy --locked --manifest-path agent/rust/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --locked --manifest-path agent/rust/Cargo.toml
+          cargo build --release --locked --manifest-path agent/rust/Cargo.toml
+      - name: Native release verification and pinned installer packaging
+        env:
+          COMMANDCORE_NATIVE_VERIFIER: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust.exe
+        run: python scripts/native_release_smoke.py
+      - name: Native Windows runtime core and disconnect acceptance
+        env:
+          COMMANDCORE_ENROLLMENT_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust.exe
+        run: python scripts/enrollment_smoke.py
+      - name: Enrollment and core reconnect acceptance
+        run: python scripts/enrollment_smoke.py
+      - name: Enrollment authorization tests
+        run: python -m pytest tests/test_enrollment_v1.py tests/test_onboarding_routes.py tests/test_agent_cli.py tests/test_security_sessions.py -q
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements-dev.txt pip-audit
+      - name: Source and history secret scan
+        run: python scripts/secret_scan.py --history
+      - name: Python dependency audit
+        run: pip-audit -r requirements-server.lock
+      - name: Locked server container build
+        run: docker build --tag commandcore-ci:locked .
+      - name: Rust dependency audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file agent/rust/Cargo.lock

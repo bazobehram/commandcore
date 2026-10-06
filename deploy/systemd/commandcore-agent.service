@@ -1,0 +1,27 @@
+[Unit]
+Description=CommandCore Agent
+After=network-online.target commandcore-helper.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=commandcore
+Group=commandcore
+Environment=COMMANDCORE_AGENT_STATE=/var/lib/commandcore/agent.json
+Environment=COMMANDCORE_AGENT_POLICY=/etc/commandcore/agent-policy.json
+Environment=COMMANDCORE_HELPER_SECRET=/etc/commandcore/helper.key
+Environment=COMMANDCORE_HELPER_SOCKET=/run/commandcore/helper.sock
+Environment=COMMANDCORE_AGENT_HEALTH_FILE=/run/commandcore-agent/health.json
+ExecStart=/usr/local/bin/commandcore-agent run
+Restart=always
+RestartSec=3
+RuntimeDirectory=commandcore-agent
+RuntimeDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/var/lib/commandcore /run/commandcore-agent
+
+[Install]
+WantedBy=multi-user.target

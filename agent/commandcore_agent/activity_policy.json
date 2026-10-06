@@ -1,0 +1,82 @@
+{
+  "fields": "tool request_id execution_id source client_id client_name type cwd path root source_path destination_path src dst command argv script process_id pid offset length limit timeout_ms encoding mode recursive follow_symlinks create_parents status exit_code duration_ms bytes bytes_written bytes_returned next_offset eof found changed replacements patch_count atomic running available termination_reason truncated stdout stderr preview error reason retry_in_seconds event timestamp_unix device_id channel client session_id hostname platform architecture cpu_count memory_total permission_profile source destination stdout_bytes stderr_bytes stdout_truncated stderr_truncated repo query max_results max_bytes max_depth pattern stdout_limit stderr_limit memory_max_bytes cpu_quota_percent max_runtime_ms resource_warning health health_at_start state",
+  "patterns": [
+    [
+      "(?is)-----BEGIN [A-Z ]*PRIVATE KEY-----.*",
+      "[REDACTED PRIVATE KEY]"
+    ],
+    [
+      "(?i)(authorization|proxy-authorization|cookie|set-cookie)[\\\"']?\\s*[:=]\\s*[^\\r\\n]+",
+      "$1: [REDACTED]"
+    ],
+    [
+      "(?i)(bearer|basic|device)\\s+[A-Za-z0-9_./+~:=\\-]+",
+      "$1 [REDACTED]"
+    ],
+    [
+      "(?i)((?:[A-Za-z0-9_-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credential)[A-Za-z0-9_-]*)[\\\"']?\\s*(?:=|:|[ \\t])\\s*)(\\\"[^\\\"]*(?:\\\"|$)|'[^']*(?:'|$)|[^\\s,;&]+)",
+      "$1[REDACTED]"
+    ],
+    [
+      "(?i)((?:--user|--password|--cookie)\\s+)(\"[^\"]*(?:\"|$)|'[^']*(?:'|$)|[^\\s;&]+)",
+      "$1[REDACTED]"
+    ],
+    [
+      "(?i)(\\bcurl\\b[^\\r\\n]*?\\s(?:-u|-b)\\s+)(\"[^\"]*(?:\"|$)|'[^']*(?:'|$)|[^\\s;&]+)",
+      "$1[REDACTED]"
+    ],
+    [
+      "(?i)(https?://)[^/\\s]+@",
+      "$1[REDACTED]@"
+    ],
+    [
+      "[A-Za-z0-9_+=-]{40,}",
+      "[REDACTED ENCODED VALUE]"
+    ]
+  ],
+  "tools": [
+    "agent.update.activate",
+    "agent.update.rollback",
+    "agent.update.stage",
+    "agent.update.status",
+    "clipboard.read",
+    "clipboard.write",
+    "desktop.windows",
+    "docker.exec",
+    "docker.inspect",
+    "docker.logs",
+    "docker.ps",
+    "docker.run",
+    "fs.copy",
+    "fs.delete",
+    "fs.list",
+    "fs.move",
+    "fs.patch",
+    "fs.read",
+    "fs.search",
+    "fs.stat",
+    "fs.write",
+    "git.diff",
+    "git.log",
+    "git.run",
+    "git.status",
+    "keyboard.keypress",
+    "keyboard.type",
+    "mouse.click",
+    "package.install",
+    "process.list",
+    "process.output",
+    "process.start",
+    "process.status",
+    "process.stop",
+    "screen.capture",
+    "services.manage",
+    "shell.exec",
+    "system.info",
+    "system.metrics",
+    "system.reboot",
+    "system.shutdown",
+    "transfer.download",
+    "transfer.upload"
+  ]
+}

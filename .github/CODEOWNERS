@@ -1,0 +1,13 @@
+# Default review ownership
+* @bazobehram
+
+# Security-sensitive boundaries
+/apps/server/ @bazobehram
+/agent/ @bazobehram
+/install/ @bazobehram
+/packages/protocol/ @bazobehram
+/scripts/*release* @bazobehram
+/scripts/*sign* @bazobehram
+/SECURITY.md @bazobehram
+/docs/SECURITY_MODEL.md @bazobehram
+/docs/THREAT_MODEL.md @bazobehram

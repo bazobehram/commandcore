@@ -1,0 +1,36 @@
+name: Repository policy
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  public-repository-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Public source policy
+        run: python scripts/public_repo_check.py
+      - name: Secret scan
+        run: python scripts/secret_scan.py --history
+
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Fetch base
+        run: git fetch origin "${{ github.base_ref }}"
+      - name: DCO sign-off
+        run: python scripts/check_dco.py --base "origin/${{ github.base_ref }}"

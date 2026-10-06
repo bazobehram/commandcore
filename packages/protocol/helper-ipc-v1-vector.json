@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "secret_b64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8w",
+  "payload": {
+    "action": "execute",
+    "request_id": "00000000-0000-4000-8000-000000000008",
+    "timestamp": 1700000000,
+    "nonce": "native-helper-vector-nonce-0001",
+    "execution_id": "exec-vector-1",
+    "permission_profile": "FULL_CONTROL",
+    "tool": "shell.exec",
+    "arguments": {
+      "command": "id -u",
+      "env": {
+        "B": "2",
+        "A": "1"
+      }
+    }
+  },
+  "canonical_utf8": "{\"action\":\"execute\",\"arguments\":{\"command\":\"id -u\",\"env\":{\"A\":\"1\",\"B\":\"2\"}},\"execution_id\":\"exec-vector-1\",\"nonce\":\"native-helper-vector-nonce-0001\",\"permission_profile\":\"FULL_CONTROL\",\"request_id\":\"00000000-0000-4000-8000-000000000008\",\"timestamp\":1700000000,\"tool\":\"shell.exec\"}",
+  "hmac_sha256_hex": "8417613e16855fdb763d936eaaf643d7b91660d339824a19d936c3241a4c1acf"
+}

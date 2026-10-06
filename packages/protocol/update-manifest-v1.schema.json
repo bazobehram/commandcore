@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommandCore Agent update manifest v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "product",
+    "version",
+    "artifacts",
+    "signing_key_id",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "product": {
+      "const": "commandcore-agent"
+    },
+    "version": {
+      "type": "string"
+    },
+    "published_at": {
+      "type": "string"
+    },
+    "signing_key_id": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "platform",
+          "architecture",
+          "url",
+          "sha256"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "filename": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "executable"
+            ]
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

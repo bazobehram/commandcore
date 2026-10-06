@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "commandcore-server"
+version = "0.9.0-rc7"
+description = "Vendor-neutral self-hosted remote computer control plane for MCP clients"
+license = "AGPL-3.0-or-later"
+readme = "README.md"
+keywords = ["mcp", "remote-control", "self-hosted", "ai-agents"]
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "websockets>=14,<17",
+  "cryptography>=50.0.1,<51",
+  "psutil>=6,<8",
+  "httpx>=0.27,<1",
+  "pydantic>=2.9,<3",
+  "PyJWT[crypto]>=2.9,<3",
+]
+
+[project.urls]
+Homepage = "https://github.com/bazobehram/commandcore"
+Repository = "https://github.com/bazobehram/commandcore"
+Issues = "https://github.com/bazobehram/commandcore/issues"
+Documentation = "https://github.com/bazobehram/commandcore/tree/main/docs"
+
+[project.scripts]
+commandcore-server = "commandcore_server.main:run"
+
+[tool.setuptools]
+package-dir = {"" = "apps/server"}
+
+[tool.setuptools.packages.find]
+where = ["apps/server"]
+
+[tool.setuptools.data-files]
+"share/commandcore/web" = ["apps/web/index.html", "apps/web/onboarding.html", "apps/web/onboarding.css", "apps/web/onboarding.js", "apps/web/legacy-admin.html", "apps/web/legacy-admin.css", "apps/web/legacy-admin.js", "apps/web/panel.css", "apps/web/panel.js"]

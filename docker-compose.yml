@@ -1,0 +1,23 @@
+services:
+  commandcore:
+    build: .
+    image: commandcore:${COMMANDCORE_VERSION:-0.9.0-rc7}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      COMMANDCORE_DB: /data/commandcore.sqlite3
+      COMMANDCORE_HOST: 0.0.0.0
+      COMMANDCORE_PORT: 8787
+    volumes:
+      - commandcore-data:/data
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/healthz',timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  commandcore-data:

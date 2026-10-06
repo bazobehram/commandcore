@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "commandcore-agent"
+version = "0.9.0-rc7"
+description = "CommandCore reference Agent (Python implementation)"
+license = "AGPL-3.0-or-later"
+keywords = ["mcp", "remote-control", "agent"]
+requires-python = ">=3.11"
+dependencies = [
+  "websockets>=14,<17",
+  "cryptography>=50.0.1,<51",
+  "httpx>=0.27,<1",
+  "psutil>=6,<8",
+]
+
+[project.urls]
+Homepage = "https://github.com/bazobehram/commandcore"
+Repository = "https://github.com/bazobehram/commandcore"
+
+[project.scripts]
+commandcore-agent = "commandcore_agent.cli:main"
+commandcore-helper = "commandcore_agent.privileged_helper:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["commandcore_agent*"]
+
+[tool.setuptools.package-data]
+commandcore_agent = ["activity_policy.json"]

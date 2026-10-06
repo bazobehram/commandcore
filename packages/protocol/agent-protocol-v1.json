@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommandCore Agent Protocol v1 envelope",
+  "type": "object",
+  "required": [
+    "type"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "challenge",
+        "hello",
+        "hello.ack",
+        "heartbeat",
+        "job.request",
+        "job.output",
+        "job.result",
+        "job.cancel",
+        "device.key.rotate.prepare",
+        "device.key.rotate.prepared",
+        "device.key.rotate.confirm",
+        "device.key.rotate.ack",
+        "device.key.rotate.error"
+      ]
+    },
+    "protocol_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "execution_id": {
+      "type": "string"
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "tool": {
+      "type": "string"
+    },
+    "arguments": {
+      "type": "object"
+    },
+    "permission_profile": {
+      "type": "string",
+      "enum": [
+        "READ_ONLY",
+        "STANDARD",
+        "FULL_CONTROL"
+      ]
+    },
+    "capabilities": {
+      "type": "object"
+    },
+    "agent_version": {
+      "type": "string"
+    },
+    "signature": {
+      "type": "string"
+    },
+    "nonce": {
+      "type": "string"
+    },
+    "key_rotation_nonce": {
+      "type": "string"
+    },
+    "new_public_key_b64": {
+      "type": "string"
+    },
+    "old_signature": {
+      "type": "string"
+    },
+    "new_signature": {
+      "type": "string"
+    },
+    "rotation_id": {
+      "type": "string"
+    },
+    "key_generation": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible non-sensitive CommandCore defect
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, access tokens, private keys, device identity
+        files, private URLs, databases, or vulnerability exploit details.
+        Sensitive security reports must follow SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: CommandCore version or commit
+      placeholder: 0.9.0-rc7 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Server / MCP
+        - Agent - Rust
+        - Agent - Python
+        - Enrollment / identity
+        - OAuth / authorization
+        - Privileged helper
+        - Installer / update / rollback
+        - Web panel
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, deployment mode, and MCP client if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Minimal steps that reproduce the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: Include only non-sensitive excerpts. Redact tokens, keys, IDs, and private URLs.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I removed secrets and private deployment data.
+          required: true
+        - label: This is not a sensitive vulnerability report.
+          required: true

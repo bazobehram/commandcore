@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<title>CommandCore</title>
+<link rel="stylesheet" href="/legacy-admin.css" />
+</head>
+<body>
+<div id="loginShell" class="login-shell hidden">
+  <div class="login">
+    <div class="mark"></div>
+    <h1>CommandCore</h1>
+    <p>Sign in to the local control panel with the deployment bootstrap token. The token is exchanged for an HttpOnly session cookie and is not stored by this page.</p>
+    <form id="loginForm">
+      <div class="field"><label>Bootstrap API token</label><input id="loginToken" class="input" type="password" autocomplete="current-password" required /></div>
+      <button class="btn primary" type="submit">Open CommandCore</button>
+      <p class="login-note">For multi-user deployments, configure the OAuth 2.1 resource-server settings and grant authenticated subjects access to specific devices. Bootstrap access remains the local admin/recovery path.</p>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <div class="topbar">
+    <div class="brand"><div class="mark"></div><div><h1>COMMANDCORE</h1><div id="versionLine" class="sub">CommandCore</div></div></div>
+    <div class="top-actions"><div class="connection"><span id="serverDot" class="dot"></span><span id="serverState">Checking</span></div><button class="btn ghost small" data-action="refreshAll(true)">Refresh</button><button class="btn ghost small" data-action="logout()">Sign out</button></div>
+  </div>
+
+  <div class="hero"><div><h2>Control plane</h2><p>Authorized devices, permissions, enrollment and execution activity.</p></div><div class="hero-actions"><button class="btn primary" data-action="openEnroll()">+ Add device</button></div></div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Devices</div><div id="statDevices" class="value">â€“</div><div class="hint">registered</div></div>
+    <div class="stat"><div class="label">Online</div><div id="statOnline" class="value">â€“</div><div class="hint">live Agent sockets</div></div>
+    <div class="stat"><div class="label">Pending</div><div id="statPending" class="value">â€“</div><div class="hint">approval required</div></div>
+    <div class="stat"><div class="label">Active jobs</div><div id="statJobs" class="value">â€“</div><div class="hint">currently executing</div></div>
+    <div class="stat"><div class="label">Enrollments</div><div id="statEnroll" class="value">â€“</div><div class="hint">unused tokens</div></div>
+    <div class="stat"><div class="label">Rollouts</div><div id="statRollouts" class="value">â€“</div><div class="hint">active fleet plans</div></div>
+  </div>
+
+  <section class="section">
+    <div class="section-head"><div class="section-title">Devices</div><div id="deviceCount" class="section-meta"></div></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Device</th><th>Status</th><th>Platform</th><th>Permission</th><th class="hide-md">Agent</th><th></th></tr></thead><tbody id="deviceRows"></tbody></table><div id="deviceEmpty" class="empty hidden">No devices enrolled yet.</div></div>
+  </section>
+
+  <section id="pendingSection" class="section hidden">
+    <div class="section-head"><div class="section-title">Pending approval</div><div class="section-meta">New devices cannot connect until approved</div></div>
+    <div id="pendingList" class="panel"></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div><div class="section-title">Fleet rollouts</div><div class="section-meta">Signed canary and ring-based Agent updates</div></div><button class="btn small" data-action="openFleetCreate()">+ New rollout</button></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Target</th><th>Status</th><th>Ring</th><th>Progress</th><th></th></tr></thead><tbody id="fleetRows"></tbody></table><div id="fleetEmpty" class="empty hidden">No fleet rollouts yet.</div></div>
+  </section>
+
+  <section class="section split">
+    <div class="panel"><div class="panel-head"><span class="section-title">Recent activity</span><span class="section-meta">Audited actions</span></div><div id="auditList" class="panel-body"></div></div>
+    <div class="panel"><div class="panel-head"><span class="section-title">Active jobs</span><span class="section-meta">Live executions</span></div><div id="jobList" class="panel-body"></div></div>
+  </section>
+</div>
+
+<div id="modalRoot"></div><div id="toasts" class="toast-wrap"></div>
+<script src="/legacy-admin.js" defer></script>
+</body>
+</html>

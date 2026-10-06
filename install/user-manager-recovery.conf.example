@@ -1,0 +1,7 @@
+# OPTIONAL administrator policy, not installed by the normal-user installer.
+# Install only for the intended OS user's user@UID.service after review.
+# Restarts that user's complete service manager after failure, affecting all
+# services it owns. It does not resume jobs ended during parent cleanup.
+[Service]
+Restart=on-failure
+RestartSec=5s
