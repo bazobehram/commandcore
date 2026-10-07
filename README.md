@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/web/commandcore-logo.jpg" alt="CommandCore" width="560">
+</p>
+
 # CommandCore
 
 [![CI](https://github.com/bazobehram/commandcore/actions/workflows/ci.yml/badge.svg)](https://github.com/bazobehram/commandcore/actions/workflows/ci.yml)

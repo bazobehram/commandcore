@@ -478,6 +478,16 @@ async def panel_styles(request: Request) -> Response:
     )
 
 
+@app.get("/commandcore-logo.jpg")
+async def commandcore_logo() -> Response:
+    path = web_asset("commandcore-logo.jpg")
+    return Response(
+        path.read_bytes(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @app.get("/panel.js")
 @app.get("/onboarding.js")
 @app.get("/legacy-admin.js")
