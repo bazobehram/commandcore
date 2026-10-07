@@ -167,13 +167,16 @@ def test_html_uses_asset_content_identity_and_sensitive_no_store(server):
             assert response.headers["cache-control"] == "no-store"
 
 
-def test_official_logo_is_served_as_local_asset(server):
+@pytest.mark.parametrize(
+    "name", ["commandcore-logo.webp", "commandcore-icon.webp"]
+)
+def test_official_brand_assets_are_served_locally(server, name):
     from commandcore_server.web_assets import web_asset
 
     with TestClient(server.app) as client:
-        response = client.get("/commandcore-logo.webp")
+        response = client.get(f"/{name}")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("image/webp")
         assert response.headers["cache-control"] == "public, max-age=86400"
         assert response.headers["x-content-type-options"] == "nosniff"
-        assert response.content == web_asset("commandcore-logo.webp").read_bytes()
+        assert response.content == web_asset(name).read_bytes()
