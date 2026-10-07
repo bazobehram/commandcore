@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/commandcore-logo.jpg" alt="CommandCore" width="560">
+  <img src="assets/branding/commandcore-logo.webp" alt="CommandCore" width="560">
 </p>
 
 # CommandCore

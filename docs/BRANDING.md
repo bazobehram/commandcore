@@ -1,17 +1,21 @@
 # CommandCore branding
 
-The official CommandCore logo is maintained in this repository at:
+The official CommandCore logo is maintained as the canonical public asset at:
 
-- `apps/web/commandcore-logo.jpg`
+- `assets/branding/commandcore-logo.webp`
 
-This asset is the canonical public logo for the project and is used by the
-README and self-hosted web interfaces. Keep the mark and the `CommandCore`
-wordmark together; do not recolor, distort, rotate, or add effects to the
-canonical asset.
+The self-hosted web interface packages the same Git blob at:
 
-The logo uses the project name only. It must not be combined with private
-deployment names, domains, or unrelated brands.
+- `apps/web/commandcore-logo.webp`
 
-When a dedicated icon-only asset is added later, it should be derived from the
-approved CommandCore mark and documented here before replacing square/icon
-placements.
+Use the approved mark and the `CommandCore` wordmark together. Do not recolor,
+distort, rotate, crop into a different mark, add effects, or combine it with
+private deployment names, domains, or unrelated brands.
+
+The root README uses the canonical branding asset. The packaged web copy exists
+only so installed CommandCore servers can serve the logo without an external
+CDN or network dependency.
+
+Small icon surfaces may use a dedicated icon-only derivative once that asset is
+reviewed and committed. Until then, use the approved square logo rather than
+inventing a substitute mark.
