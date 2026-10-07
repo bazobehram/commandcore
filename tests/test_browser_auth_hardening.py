@@ -167,9 +167,7 @@ def test_html_uses_asset_content_identity_and_sensitive_no_store(server):
             assert response.headers["cache-control"] == "no-store"
 
 
-@pytest.mark.parametrize(
-    "name", ["commandcore-logo.webp", "commandcore-icon.webp"]
-)
+@pytest.mark.parametrize("name", ["commandcore-logo.webp", "commandcore-icon.webp"])
 def test_official_brand_assets_are_served_locally(server, name):
     from commandcore_server.web_assets import web_asset
 
