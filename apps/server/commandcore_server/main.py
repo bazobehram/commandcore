@@ -478,6 +478,16 @@ async def panel_styles(request: Request) -> Response:
     )
 
 
+@app.get("/commandcore-logo.webp")
+async def commandcore_logo() -> Response:
+    path = web_asset("commandcore-logo.webp")
+    return Response(
+        path.read_bytes(),
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @app.get("/panel.js")
 @app.get("/onboarding.js")
 @app.get("/legacy-admin.js")

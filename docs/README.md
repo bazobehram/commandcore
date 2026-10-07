@@ -52,6 +52,7 @@ security material, and contributor/release documentation.
 - [Roadmap](ROADMAP.md)
 - [Validation status](VALIDATION_RESULTS.md)
 - [GitHub repository setup](GITHUB_SETUP.md)
+- [Branding](BRANDING.md)
 - [Public release checklist](PUBLIC_RELEASE_CHECKLIST.md)
 - [Publication readiness](PUBLICATION_READINESS.md)
 - [Licensing](LICENSING.md)
