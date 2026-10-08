@@ -39,6 +39,18 @@ docker compose up -d --build
 The example Compose file binds the server to localhost by default. Do not expose
 the internal application port directly to the internet.
 
+`/healthz` confirms that the server started; it does not confirm operator login,
+OAuth, device enrollment, or agent release distribution. The default template has
+OAuth and bootstrap disabled, so configure a deliberate login path before
+expecting to use the panel. For local HTTP evaluation, use loopback deployment
+URLs and set `COMMANDCORE_PANEL_COOKIE_SECURE=false` only for that local HTTP
+environment. Keep secure cookies enabled for HTTPS deployments.
+
+The server does not automatically manage its host. Install and enroll an agent on
+that host if desired, or enroll agents on other computers. A Linux server can be
+used with a Windows agent, but Windows remains preview. See
+[Installation](INSTALLATION.md) and [installation readiness](INSTALLATION_READINESS.md).
+
 ## Public URL
 
 Use one canonical deployment origin, for example:

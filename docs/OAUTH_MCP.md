@@ -79,6 +79,34 @@ refresh tokens to browser JavaScript.
 
 Use same-site/HttpOnly cookies, state validation, and exact callback URLs.
 
+### Operator configuration checklist
+
+Register the panel as a public Authorization Code + PKCE client with the exact
+redirect URI `https://commandcore.example.com/auth/callback`. Replace the example
+origin throughout. Configure the identity provider to issue asymmetric-signed JWT
+access tokens for your MCP resource and the required CommandCore scopes; opaque
+access tokens are not this server's validation path.
+
+| Server setting | Value to obtain/configure |
+|---|---|
+| `COMMANDCORE_OAUTH_ENABLED` | `true` after configuring the provider |
+| `COMMANDCORE_PUBLIC_BASE_URL` | Canonical HTTPS origin |
+| `COMMANDCORE_MCP_BASE_URL` | Canonical resource URL ending in `/mcp` |
+| `COMMANDCORE_AGENT_BASE_URL` | Canonical WSS URL ending in `/agent` |
+| `COMMANDCORE_PANEL_OAUTH_CLIENT_ID` | Registered public panel client ID |
+| `COMMANDCORE_OAUTH_ISSUER` | Exact issuer claim, including a trailing slash if used |
+| `COMMANDCORE_OAUTH_AUDIENCE` | Audience/resource the provider puts in the access token |
+| `COMMANDCORE_OAUTH_JWKS_URL` | Provider's published asymmetric signing-key URL |
+| `COMMANDCORE_OAUTH_AUTHORIZATION_SERVERS` | Provider authorization-server origin(s) |
+| `COMMANDCORE_OAUTH_ALGORITHMS` | Matching supported asymmetric algorithm allowlist |
+
+The provider must expose the authorization/token metadata used by the panel flow.
+Use [the client guides](README.md#client-integration) for the separate MCP client's
+registration requirements; the panel's callback is not that client's callback.
+After login, verify scopes and explicit device grants with a real request. Keep
+public bootstrap and recovery disabled for normal remote operation. A passing
+`/healthz` check does not validate any of these provider settings.
+
 ## auth.whoami
 
 auth.whoami may expose only verified identity context needed for diagnostics:

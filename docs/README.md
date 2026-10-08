@@ -5,6 +5,7 @@ security material, and contributor/release documentation.
 
 ## Start here
 
+- [Installation readiness](INSTALLATION_READINESS.md)
 - [Agent-assisted installation](AGENT_ASSISTED_INSTALL.md)
 - [Installation](INSTALLATION.md)
 - [Self-hosting](SELF_HOSTING.md)
