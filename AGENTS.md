@@ -351,3 +351,11 @@ If the user asks you to modify CommandCore itself:
 
 Security-boundary changes deserve explicit review even when ordinary solo
 maintainer PRs do not require a human approval.
+
+## Experimental browser control
+
+Do not enable the optional visual browser integration on production instances
+or use private authenticated profiles. Review [visual browser security and
+acceptance gates](docs/VISUAL_BROWSER_POC.md) before any evaluation. This
+feature is still an isolated, single-operator PoC, not supported browser
+automation.

@@ -1,0 +1,28 @@
+# EXPERIMENTAL: single-operator visual browser PoC only.
+# Use with:
+#   COMMANDCORE_BROWSER_ALLOW_HOSTS=example.com \
+#     docker compose -f docker-compose.yml -f docker-compose.browser.yml --profile browser up -d --build
+# Steel is NOT published to the host. Do not put credentials in this preview.
+services:
+  commandcore:
+    depends_on:
+      - steel
+    environment:
+      COMMANDCORE_BROWSER_ENABLED: "true"
+      COMMANDCORE_BROWSER_ALLOW_HOSTS: ${COMMANDCORE_BROWSER_ALLOW_HOSTS:?Set an explicit comma-separated HTTPS host allowlist}
+      COMMANDCORE_BROWSER_STEEL_URL: http://steel:3000
+      COMMANDCORE_BROWSER_CDP_URL: ws://steel:3000
+
+  steel:
+    profiles: [browser]
+    # Reviewed upstream image at time of preview; re-audit on updates.
+    image: ghcr.io/steel-dev/steel-browser@sha256:91d67a999e998bb77f7f596bf209202770bbb25aaf0d4b18d06ebcd07e03a5aa
+    restart: "no"
+    expose:
+      - "3000"
+    shm_size: 256m
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 256
+    # Deliberately no host ports, no host paths, no browser-profile mounts.
+    # This is NOT a hardened egress/SSRF boundary. See docs/VISUAL_BROWSER_POC.md.

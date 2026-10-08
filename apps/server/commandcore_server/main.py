@@ -37,14 +37,34 @@ from .security import (
     issue_panel_session,
     panel_session_claims,
 )
-from .tools import CORE_TOOL_DEFINITIONS, ToolError, ToolService
+from .tools import CORE_TOOL_DEFINITIONS, TOOL_DEFINITIONS, ToolError, ToolService
+from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
 
 settings = Settings()
 settings.validate()
 db = Database(settings.db_path)
 metrics = Metrics()
 agents = AgentManager(db, metrics, settings.max_job_output_bytes)
-tools = ToolService(db, agents, settings.selection_ttl_seconds)
+browser = (
+    BrowserGateway(
+        base_url=settings.browser_steel_url,
+        cdp_url=settings.browser_cdp_url,
+        allow_hosts=settings.browser_allow_hosts,
+    )
+    if settings.browser_enabled
+    else None
+)
+tools = ToolService(db, agents, settings.selection_ttl_seconds, browser=browser)
+visible_tools = (
+    TOOL_DEFINITIONS
+    if browser
+    else [t for t in TOOL_DEFINITIONS if t["name"] not in BROWSER_TOOL_NAMES]
+)
+visible_core_tools = (
+    CORE_TOOL_DEFINITIONS
+    if browser
+    else [t for t in CORE_TOOL_DEFINITIONS if t["name"] not in BROWSER_TOOL_NAMES]
+)
 fleet = FleetRolloutService(db, agents)
 branding_icons = [
     {
@@ -70,6 +90,7 @@ mcp = MCPHandler(
         if settings.oauth_enabled
         else None
     ),
+    definitions=visible_tools,
     icons=branding_icons,
 )
 oauth_verifier = (
@@ -89,7 +110,7 @@ core_mcp = MCPHandler(
     metrics,
     __version__,
     mcp.scope_challenge,
-    definitions=CORE_TOOL_DEFINITIONS,
+    definitions=visible_core_tools,
     name="CommandCore Core",
     icons=branding_icons,
 )

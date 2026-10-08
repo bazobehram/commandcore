@@ -118,11 +118,16 @@ def _with_server_info(
 
 
 def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
+    meta = dict(payload)
+    screenshot = meta.pop("screenshot_base64", None)
+    content: list[dict[str, Any]] = [
+        {"type": "text", "text": json.dumps(meta, ensure_ascii=False, indent=2)}
+    ]
+    if screenshot:
+        content.append({"type": "image", "mimeType": "image/png", "data": screenshot})
     result: dict[str, Any] = {
-        "content": [
-            {"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}
-        ],
-        "structuredContent": payload,
+        "content": content,
+        "structuredContent": meta,
         "isError": False,
     }
     return _modernize("tools/call", result) if modern else result

@@ -88,7 +88,29 @@ class Settings:
         "COMMANDCORE_AGENT_UPDATE_MANIFEST_URL", ""
     ).strip()
 
+    browser_enabled: bool = _bool("COMMANDCORE_BROWSER_ENABLED", False)
+    browser_steel_url: str = os.getenv(
+        "COMMANDCORE_BROWSER_STEEL_URL", "http://steel:3000"
+    ).strip()
+    browser_cdp_url: str = os.getenv(
+        "COMMANDCORE_BROWSER_CDP_URL", "ws://steel:3000"
+    ).strip()
+    browser_allow_hosts: tuple[str, ...] = tuple(
+        host.strip().lower()
+        for host in os.getenv("COMMANDCORE_BROWSER_ALLOW_HOSTS", "").split(",")
+        if host.strip()
+    )
+
     def validate(self) -> None:
+        if self.browser_enabled and not self.browser_allow_hosts:
+            raise RuntimeError(
+                "Browser enabled but COMMANDCORE_BROWSER_ALLOW_HOSTS is empty"
+            )
+        if self.browser_enabled and (
+            not self.browser_steel_url.startswith("http://")
+            or not self.browser_cdp_url.startswith("ws://")
+        ):
+            raise RuntimeError("Browser backend must use private HTTP/WS URLs")
         if len(self.api_token) < 32:
             raise RuntimeError(
                 "COMMANDCORE_API_TOKEN is required and must be at least 32 characters"
