@@ -44,6 +44,9 @@ For deployment work, read these files before acting:
 7. `docs/SECURITY_MODEL.md`
 8. the relevant client guide under `docs/clients/`
 
+Also read `docs/INSTALLATION_READINESS.md` for current installation limits and
+`docs/RELEASE_DOWNLOADS.md` before promising a signed agent installation.
+
 For contributor work, also read `CONTRIBUTING.md`, `SECURITY.md`, and the
 relevant architecture/protocol documents.
 
@@ -193,6 +196,9 @@ docker compose config
 
 Review the rendered configuration for accidental public port exposure and
 missing required values.
+The rendered configuration includes expanded secrets: inspect it locally and do
+not paste it into a chat, issue, or public log. Use `docker compose config --quiet`
+when only checking configuration validity.
 
 ### 4. Start the server
 
@@ -244,12 +250,20 @@ follow `docs/INSTALLATION.md`.
 A deployment may expose its signed Linux installer at:
 
 ```bash
-curl -fsSL https://commandcore.example.com/install/linux | sh
+curl -fsSL https://commandcore.example.com/install/linux | sh -s -- --server https://commandcore.example.com
 ```
 
 Before running a remote installer in a higher-trust environment, follow
 `docs/VERIFY_LINUX_INSTALLER.md` and confirm that the deployment is publishing
 the expected signed release material.
+
+The default Compose deployment does not publish this route: it returns 404 until
+`COMMANDCORE_DISTRIBUTION_DIR` points at a populated, readable release feed.
+Check the installer and manifest endpoints before telling the user to install.
+Pass `--server` explicitly; downloading a script from a host does not select that
+host as the enrollment server. If no signed feed exists, report that boundary
+and offer the documented source evaluation workflow instead of inventing a
+release, trusting an arbitrary key, or weakening verification.
 
 Enrollment is not authorization. Apply the minimum account-to-device grant and
 permission ceiling that satisfies the user's request.

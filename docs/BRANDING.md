@@ -1,8 +1,12 @@
 # CommandCore branding
 
-The official CommandCore logo is maintained as the canonical public asset at:
+The supplied original artwork is retained in the repository:
 
 - `assets/branding/commandcore-logo.webp`
+- `apps/web/commandcore-icon.png`: transparent square symbol for GitHub, favicons,
+  and client icon surfaces.
+- `apps/web/commandcore-wordmark.png`: original horizontal wordmark.
+- `assets/branding/commandcore-stacked.png`: original stacked wordmark.
 
 The self-hosted web interface packages the same Git blob at:
 
@@ -12,10 +16,10 @@ Use the approved mark and the `CommandCore` wordmark together. Do not recolor,
 distort, rotate, crop into a different mark, add effects, or combine it with
 private deployment names, domains, or unrelated brands.
 
-The root README uses the canonical branding asset. The packaged web copy exists
-only so installed CommandCore servers can serve the logo without an external
-CDN or network dependency.
+The root README pairs the square symbol with the CommandCore heading. Dark web
+headers pair that symbol with light text and a blue Core accent, avoiding a white
+box behind the supplied navy wordmark. Packaged assets let installed servers
+serve the branding without an external CDN or network dependency.
 
-Small icon surfaces may use a dedicated icon-only derivative once that asset is
-reviewed and committed. Until then, use the approved square logo rather than
-inventing a substitute mark.
+Use the supplied square symbol for small icon surfaces rather than inventing a
+substitute mark. The WebP path remains available for compatibility.

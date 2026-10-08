@@ -7,6 +7,12 @@ repository's deployment and security guidance.
 The repository contains a root-level [AGENTS.md](../AGENTS.md) file specifically
 for this workflow.
 
+Read [installation readiness](INSTALLATION_READINESS.md) before promising a complete
+installation. The default server has no published signed agent feed, Windows is
+preview, and a working remote deployment requires real OAuth/provider setup. An
+agent can automate mechanical work, but cannot manufacture release acceptance,
+account consent, or DNS ownership.
+
 ## Why AGENTS.md?
 
 `AGENTS.md` is a repository-scoped convention used by a growing number of

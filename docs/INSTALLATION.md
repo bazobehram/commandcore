@@ -2,15 +2,31 @@
 
 CommandCore separates server deployment from device Agent installation.
 
+The server and agent may run on the same Linux machine or on different machines.
+Each managed computer needs its own enrolled agent; starting the server does not
+automatically install one. See [installation readiness](INSTALLATION_READINESS.md)
+for supported platforms and remaining release work.
+
 ## Linux Agent
 
 A deployment can expose a signed installer at:
 
 ~~~bash
-curl -fsSL https://commandcore.example.com/install/linux | sh
+curl -fsSL https://commandcore.example.com/install/linux | sh -s -- --server https://commandcore.example.com
 ~~~
 
 Replace the example host with the CommandCore deployment.
+
+This command requires an operator-published signed feed and a generated installer
+with a pinned verification key. Default Compose does not publish either endpoint;
+404 means the feed has not been published, not that installation should bypass
+verification. Follow [release-feed setup](RELEASE_DOWNLOADS.md#publish-a-deployment-feed).
+Pass `--server` even when downloading from your own server.
+
+The current native Linux installer requires x86_64 or ARM64, glibc 2.36 or newer,
+curl 8.4 or newer, Python 3, and OpenSSL with Ed25519 support. The default service
+workflow also needs a working systemd user manager. Check these prerequisites
+before choosing a distribution; Linux support does not cover every distribution.
 
 The installer is designed to run as the normal user and to:
 
@@ -45,7 +61,7 @@ Enrollment and operational authorization are separate.
 ## Upgrade
 
 ~~~bash
-curl -fsSL https://commandcore.example.com/install/linux | sh -s -- --upgrade
+curl -fsSL https://commandcore.example.com/install/linux | sh -s -- --server https://commandcore.example.com --upgrade
 ~~~
 
 Upgrade requires a valid existing managed installation and preserves identity.
@@ -101,3 +117,28 @@ pip install -r requirements-dev.txt -e . -e ./agent
 ~~~
 
 This is not the same trust path as the signed end-user Agent installer.
+
+### Source agent evaluation (Linux)
+
+When no signed feed is available, a technical operator can run the Python reference
+agent from a reviewed checkout. Requires Python 3.11 or newer and an already
+configured server with a working operator login. Run as the normal device user:
+
+~~~bash
+python3 -m venv .venv-agent
+. .venv-agent/bin/activate
+python -m pip install ./agent
+commandcore-agent enroll https://commandcore.example.com --name my-linux-pc
+commandcore-agent run
+~~~
+
+Open the review URL printed by enrollment, sign in, compare the verification code,
+and approve the device. Explicitly select an initial account grant if that account
+should operate the device. Enrollment alone is not a grant. Replace the host and
+device name with your own values.
+
+This foreground evaluation does not create a service, enable boot persistence,
+or configure signed updates. Keep the terminal open while evaluating. Preserve
+the device identity; do not overwrite it to troubleshoot authentication. Use
+`commandcore-agent status` to inspect the enrolled configuration. For a managed
+installation, complete the signed feed and platform lifecycle acceptance first.

@@ -5,10 +5,10 @@ and authenticate the script first can use the procedure below. It requires curl,
 Python 3 and OpenSSL with Ed25519 support, and executes no downloaded script
 before verification.
 
-Obtain the release public key through an independently trusted channel. This
-deployment's key is `a6RnTs+moiCs4WWdWXC/GYLUaIPv4xPGHRSZIJI1WiM=` with SHA-256
-fingerprint `3196937c963bad261a5a3ea548d73dacd6a39bdd581052bf6480561cda540150`.
-Compare that fingerprint to a previously saved/operator-verified value. A key
+Obtain your deployment's release public key and its SHA-256 fingerprint through
+an independently trusted channel. Set `COMMANDCORE_RELEASE_PUBLIC_KEY_B64` and
+`COMMANDCORE_RELEASE_KEY_SHA256` in your local environment to those verified
+values; this repository does not prescribe a shared deployment trust key. A key
 and hash delivered by the same compromised website do not independently prove
 authenticity; initial HTTPS/DNS/provider/workstation trust remains necessary.
 
@@ -18,9 +18,10 @@ Run these commands in a new empty directory:
 curl --proto '=https' --tlsv1.2 -fsS https://commandcore.example.com/releases/agent/manifest.json -o manifest.json
 curl --proto '=https' --tlsv1.2 -fsS https://commandcore.example.com/install/linux -o linux.sh
 python3 - <<'PY'
-import base64, hashlib, json, pathlib
-key = base64.b64decode('a6RnTs+moiCs4WWdWXC/GYLUaIPv4xPGHRSZIJI1WiM=', validate=True)
-assert hashlib.sha256(key).hexdigest() == '3196937c963bad261a5a3ea548d73dacd6a39bdd581052bf6480561cda540150'
+import base64, hashlib, json, os, pathlib
+key = base64.b64decode(os.environ['COMMANDCORE_RELEASE_PUBLIC_KEY_B64'], validate=True)
+assert len(key) == 32
+assert hashlib.sha256(key).hexdigest() == os.environ['COMMANDCORE_RELEASE_KEY_SHA256'].lower()
 raw = pathlib.Path('manifest.json').read_bytes()
 assert len(raw) <= 1048576
 m = json.loads(raw)
@@ -33,7 +34,7 @@ openssl pkeyutl -verify -rawin -pubin -inkey public.pem -sigfile signature.bin -
 ```
 
 **Continue only if signature verification succeeds.** Check the script against
-the authenticated manifest (RC4's `installers.linux` metadata), then inspect it:
+the authenticated manifest's `installers.linux` metadata, then inspect it:
 
 ```sh
 python3 - <<'PY'
@@ -48,7 +49,7 @@ assert hashlib.sha256(script).hexdigest() == expected['sha256']
 print('Verified installer for release', m['version'])
 PY
 less linux.sh
-sh linux.sh --upgrade
+sh linux.sh --server https://commandcore.example.com --upgrade
 ```
 
 Stop if the manifest lacks installer metadata, verification fails, or the script

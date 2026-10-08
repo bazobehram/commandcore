@@ -147,6 +147,16 @@ explicitly told to read it first.
 
 ## Quick start
 
+Choose two roles: the **server** hosts the panel, identity/grants, and MCP endpoint;
+an **agent** runs on each computer you want to manage. They can share one Linux
+machine. Running the server alone does not enroll or give control of that machine.
+
+The source checkout is suitable for technical Linux operators. Remote setup also
+requires HTTPS/WSS and an OAuth/OIDC provider. The signed agent installer needs a
+separately published release feed; it is not enabled by the default Compose file.
+See the [installation readiness review](docs/INSTALLATION_READINESS.md) before
+choosing a platform or promising an unattended installation.
+
 ### 1. Run CommandCore
 
 Requirements: Docker with Compose.
@@ -163,6 +173,7 @@ cp .env.example .env
 # Set the deployment URLs in .env, then:
 docker compose up -d --build
 docker compose ps
+curl -fsS http://127.0.0.1:8787/healthz
 ~~~
 
 The public example binds the application port to `127.0.0.1`. Public bootstrap
@@ -180,12 +191,17 @@ configure an external OAuth/OIDC provider. See
 A deployment can publish its signed Linux installer at its own CommandCore URL:
 
 ~~~bash
-curl -fsSL https://commandcore.example.com/install/linux | sh
+curl -fsSL https://commandcore.example.com/install/linux | sh -s -- --server https://commandcore.example.com
 ~~~
 
 The installer verifies the signed release manifest and artifact, creates a
 versioned user installation, configures a systemd user service, and opens the
 device-enrollment flow. Replace commandcore.example.com with your deployment.
+
+First confirm the operator has published the signed feed and pinned installer.
+A fresh default server returns **404** for `/install/linux`. Operators should
+follow [release-feed setup](docs/RELEASE_DOWNLOADS.md#publish-a-deployment-feed);
+technical evaluators can use the [source agent workflow](docs/INSTALLATION.md#source-agent-evaluation-linux).
 
 See [Installation](docs/INSTALLATION.md) for upgrade, rollback, uninstall, and
 advanced installation details.
