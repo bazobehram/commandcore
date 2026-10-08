@@ -91,30 +91,38 @@ class CDP:
             msg["sessionId"] = session
         await self.ws.send(json.dumps(msg))
         for _ in range(200):
-            result = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=12))
+            result = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=30))
             if result.get("id") == call_id:
                 if result.get("error"):
                     raise BrowserError(f"CDP operation failed: {method}")
                 return result.get("result") or {}
         raise BrowserError("CDP response timeout")
 
-    async def attach_page(self) -> str:
+    async def attach_page(self, target_id: str | None) -> tuple[str, str]:
+        # Never attach to "the first page": Steel may have other tabs.
+        # The target is created explicitly and pinned for this owner.
+        if target_id is None:
+            created = await self.send("Target.createTarget", {"url": "about:blank"})
+            target_id = created["targetId"]
         info = await self.send("Target.getTargets")
-        pages = [t for t in info.get("targetInfos", []) if t.get("type") == "page"]
-        if not pages:
-            raise BrowserError("no browser page available")
+        if not any(
+            t.get("targetId") == target_id and t.get("type") == "page"
+            for t in info.get("targetInfos", [])
+        ):
+            raise BrowserError("owned browser tab disappeared")
         result = await self.send(
-            "Target.attachToTarget", {"targetId": pages[0]["targetId"], "flatten": True}
+            "Target.attachToTarget", {"targetId": target_id, "flatten": True}
         )
         session = result["sessionId"]
         await self.send("Page.enable", session=session)
         await self.send("Runtime.enable", session=session)
-        return session
+        return session, target_id
 
 
 @dataclass
 class OwnedSession:
     id: str
+    target_id: str | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -172,11 +180,80 @@ class BrowserGateway:
                 return {"closed": False}
             async with entry.lock:
                 async with httpx.AsyncClient(timeout=12) as client:
-                    r = await client.delete(self.base_url + "/v1/sessions/" + entry.id)
-                    if r.status_code not in (200, 204, 404):
-                        r.raise_for_status()
+                    r = await client.post(
+                        self.base_url + "/v1/sessions/" + entry.id + "/release"
+                    )
+                    r.raise_for_status()
+                    if r.json().get("status") != "released":
+                        raise BrowserError("Steel did not confirm session release")
                 self.sessions.pop(owner, None)
         return {"closed": True}
+
+    async def _snapshot(self, entry: OwnedSession) -> dict[str, Any]:
+        """Observe after an action without replaying that action on retry.
+
+        Chromium may not provide a screenshot while a navigation is in flight.
+        Recover with a new CDP connection and a fresh page attachment instead
+        of repeating a click or form submission.
+        """
+        uri = self.cdp_url + "/?sessionId=" + entry.id
+        for attempt in range(3):
+            if attempt:
+                await asyncio.sleep(1.5 * attempt)
+            try:
+                async with websockets.connect(
+                    uri, open_timeout=12, max_size=9_000_000, close_timeout=2
+                ) as ws:
+                    cdp = CDP(ws)
+                    session, _ = await cdp.attach_page(entry.target_id)
+                    page: dict[str, Any] = {}
+                    for _ in range(5):
+                        meta = await cdp.send(
+                            "Runtime.evaluate",
+                            {
+                                "expression": "({title:document.title,url:location.href,ready:document.readyState,text:(document.body?.innerText||'').slice(0,2400)})",
+                                "returnByValue": True,
+                                "awaitPromise": False,
+                            },
+                            session=session,
+                        )
+                        page = meta.get("result", {}).get("value", {})
+                        if page.get("ready") == "complete" and page.get("text"):
+                            break
+                        await asyncio.sleep(0.6)
+                    # Never report a blank, failed or out-of-policy page as a
+                    # successful navigation. This is NOT a replacement for an
+                    # actual browser egress firewall.
+                    try:
+                        check_url(str(page.get("url") or ""), self.allow_hosts)
+                    except BrowserError as exc:
+                        raise BrowserError(
+                            "browser navigation failed or left the allowed hosts"
+                        ) from exc
+                    shot = await cdp.send(
+                        "Page.captureScreenshot",
+                        {"format": "png", "captureBeyondViewport": False},
+                        session=session,
+                    )
+                    png = shot.get("data", "")
+                    if not isinstance(png, str) or len(png) > 6_000_000:
+                        raise BrowserError("screenshot unavailable or exceeds limit")
+                    raw = base64.b64decode(png, validate=True)
+                    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+                        raise BrowserError("invalid PNG from browser")
+                    return {
+                        "session_id": entry.id,
+                        "title": str(page.get("title", ""))[:300],
+                        "url": str(page.get("url", ""))[:2048],
+                        "page_text": str(page.get("text", ""))[:2400],
+                        "screenshot_base64": png,
+                    }
+            except (TimeoutError, websockets.exceptions.ConnectionClosed):
+                continue
+        raise BrowserError(
+            "browser observation timed out; the action may have completed. "
+            "Use browser.observe to check the current page before retrying the action."
+        )
 
     async def call(
         self,
@@ -206,12 +283,14 @@ class BrowserGateway:
                 uri, open_timeout=12, max_size=9_000_000, close_timeout=2
             ) as ws:
                 cdp = CDP(ws)
-                session = await cdp.attach_page()
+                session, entry.target_id = await cdp.attach_page(entry.target_id)
                 if name == "browser.open":
-                    await cdp.send(
+                    navigation = await cdp.send(
                         "Page.navigate", {"url": args["url"]}, session=session
                     )
-                    await asyncio.sleep(1.5)
+                    if navigation.get("errorText"):
+                        raise BrowserError("browser navigation failed")
+                    await asyncio.sleep(5)
                 elif name in {"browser.move", "browser.click"}:
                     x, y = args.get("x"), args.get("y")
                     if (
@@ -307,32 +386,5 @@ class BrowserGateway:
 
                 if name != "browser.observe":
                     await asyncio.sleep(0.4)
-                # Structured page data is untrusted web content, never instructions.
-                meta = await cdp.send(
-                    "Runtime.evaluate",
-                    {
-                        "expression": "({title:document.title,url:location.href,text:(document.body?.innerText||'').slice(0,2400)})",
-                        "returnByValue": True,
-                        "awaitPromise": False,
-                    },
-                    session=session,
-                )
-                page = meta.get("result", {}).get("value", {})
-                shot = await cdp.send(
-                    "Page.captureScreenshot",
-                    {"format": "png", "captureBeyondViewport": False},
-                    session=session,
-                )
-                png = shot.get("data", "")
-                if not isinstance(png, str) or len(png) > 6_000_000:
-                    raise BrowserError("screenshot unavailable or exceeds limit")
-                raw = base64.b64decode(png, validate=True)
-                if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
-                    raise BrowserError("invalid PNG from browser")
-                return {
-                    "session_id": entry.id,
-                    "title": str(page.get("title", ""))[:300],
-                    "url": str(page.get("url", ""))[:2048],
-                    "page_text": str(page.get("text", ""))[:2400],
-                    "screenshot_base64": png,
-                }
+
+            return await self._snapshot(entry)

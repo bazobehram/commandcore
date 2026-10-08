@@ -145,3 +145,26 @@ format. These do not constitute a production browser security audit.
 
 Until those gates pass, the browser preview must remain disabled on public
 CommandCore deployments.
+
+## Additional public-site visual acceptance (October 8, 2026)
+
+The disposable Steel/Chromium container was tested with a separate disposable
+Python test client, not with any existing production CommandCore service.
+
+- **GitHub public PR navigation:** opened the public PR #19 and captured its
+  actual rendered screenshot; clicked the visible *Files changed* tab by
+  coordinates; verified navigation to `/pull/19/files`; scrolled and observed.
+- **Public Selenium demo form:** opened the Selenium example form, clicked
+  the text input by coordinates, typed a non-secret test string, clicked
+  Submit, and verified the next page displayed `Received!`.
+- **Session release:** discovered that the self-hosted Steel API requires
+  `POST /v1/sessions/{id}/release`. Using DELETE led to HTTP 404 and a
+  false success report. The gateway now requires an acknowledged release.
+- **Transient navigation failure:** heavy pages occasionally delayed
+  screenshot capture; an initial form attempt returned `about:blank`.
+  Navigation and screenshot failures must be reported as errors, never
+  as successful page visits.
+
+No real account login, MFA/CAPTCHA handoff, saved browser profiles, arbitrary
+websites, concurrent owners, Windows desktop Chrome or private application
+actions have passed acceptance. These remain explicit blockers.

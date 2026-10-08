@@ -137,3 +137,44 @@ class BrowserAuthorizationTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BrowserReleaseContractTests(unittest.IsolatedAsyncioTestCase):
+    async def test_release_uses_post_endpoint_and_checks_ack(self):
+        from unittest.mock import patch
+
+        class Response:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"status": "released"}
+
+        class Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def post(self, url):
+                self.url = url
+                return Response()
+
+        client = Client()
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+        )
+        owner = ("issuer", "account", "client")
+        gateway.sessions[owner] = OwnedSession("f" * 36)
+        with patch(
+            "commandcore_server.browser_gateway.httpx.AsyncClient", return_value=client
+        ):
+            result = await gateway._release(owner)
+        self.assertTrue(result["closed"])
+        self.assertEqual(
+            client.url, "http://steel:3000/v1/sessions/" + "f" * 36 + "/release"
+        )
+        self.assertNotIn(owner, gateway.sessions)
