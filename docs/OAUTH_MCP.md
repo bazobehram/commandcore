@@ -100,7 +100,14 @@ access tokens are not this server's validation path.
 | `COMMANDCORE_OAUTH_AUTHORIZATION_SERVERS` | Provider authorization-server origin(s) |
 | `COMMANDCORE_OAUTH_ALGORITHMS` | Matching supported asymmetric algorithm allowlist |
 
-The provider must expose the authorization/token metadata used by the panel flow.
+**Current panel compatibility limit:** the browser login implementation builds
+`<issuer>/authorize` and `<issuer>/oauth/token` directly. It does not discover
+arbitrary authorization/token endpoint paths from OIDC metadata. The provider
+must support those paths and the panel's Code+PKCE/resource request, or the panel
+flow needs a separately reviewed implementation change. Do not assume every
+standards-compliant OIDC provider works with the panel merely because its JWTs
+can be validated by the MCP resource server.
+
 Use [the client guides](README.md#client-integration) for the separate MCP client's
 registration requirements; the panel's callback is not that client's callback.
 After login, verify scopes and explicit device grants with a real request. Keep

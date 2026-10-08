@@ -52,6 +52,12 @@ enroll that machine or grant access to it.
 6. **Trust material is deployment-specific.** Verification examples must use the
    operator's independently trusted public key and fingerprint. A key copied
    from another deployment is not a universal CommandCore trust anchor.
+7. **Panel OAuth is not fully provider-neutral yet.** `onboarding_routes.py`
+   constructs `<issuer>/authorize` and `<issuer>/oauth/token` directly instead
+   of using discovered authorization/token endpoints. A provider with other
+   endpoint paths can pass JWT validation yet fail browser login. Verify the
+   selected provider's actual flow. Configurable/discovered endpoints and real
+   provider acceptance need a separate authentication change and security review.
 
 ## Agent-assisted installation
 
