@@ -60,10 +60,8 @@ visible_tools = (
     if browser
     else [t for t in TOOL_DEFINITIONS if t["name"] not in BROWSER_TOOL_NAMES]
 )
-visible_core_tools = (
-    CORE_TOOL_DEFINITIONS
-    if browser
-    else [t for t in CORE_TOOL_DEFINITIONS if t["name"] not in BROWSER_TOOL_NAMES]
+visible_core_tools = CORE_TOOL_DEFINITIONS + (
+    [t for t in TOOL_DEFINITIONS if t["name"] in BROWSER_TOOL_NAMES] if browser else []
 )
 fleet = FleetRolloutService(db, agents)
 branding_icons = [

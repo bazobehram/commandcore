@@ -852,7 +852,6 @@ CORE_TOOL_NAMES = {
     "git.run",
     "transfer.upload",
     "transfer.download",
-    *BROWSER_TOOL_NAMES,
 }
 CORE_TOOL_DEFINITIONS = [
     tool for tool in TOOL_DEFINITIONS if tool["name"] in CORE_TOOL_NAMES
