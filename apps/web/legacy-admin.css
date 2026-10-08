@@ -35,4 +35,4 @@ button,input,select{font:inherit}.hidden{display:none!important}.app{max-width:1
 .legacy-inline-12{flex:1}
 .legacy-inline-13{margin-top:8px}
 
-.brand-logo{display:block;width:168px;max-width:42vw;height:auto;border-radius:10px}.brand-logo-login{width:220px;max-width:78vw;margin-bottom:18px}.brand{align-items:center}.brand .sub{margin-top:0}
+.brand-logo{display:block;width:260px;max-width:48vw;height:auto;padding:8px;background:#fff;border-radius:10px}.brand-logo-login{width:280px;max-width:100%;margin-bottom:18px}.brand{align-items:center}.brand .sub{margin-top:0}

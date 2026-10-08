@@ -102,13 +102,17 @@ def _modernize(method: str, result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _with_server_info(
-    result: dict[str, Any], server_version: str, name: str = "commandcore"
+    result: dict[str, Any],
+    server_version: str,
+    name: str = "commandcore",
+    icons: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     out = dict(result)
     meta = dict(out.get("_meta") or {})
-    meta.setdefault(
-        "io.modelcontextprotocol/serverInfo", {"name": name, "version": server_version}
-    )
+    info: dict[str, Any] = {"name": name, "version": server_version}
+    if icons:
+        info["icons"] = icons
+    meta.setdefault("io.modelcontextprotocol/serverInfo", info)
     out["_meta"] = meta
     return out
 
@@ -143,6 +147,7 @@ class MCPHandler:
         scope_challenge: Callable[[str], str] | None = None,
         definitions: list[dict[str, Any]] | None = None,
         name: str = "commandcore",
+        icons: list[dict[str, Any]] | None = None,
     ):
         self.tools = tools
         self.metrics = metrics
@@ -150,6 +155,7 @@ class MCPHandler:
         self.scope_challenge = scope_challenge
         self.definitions = TOOL_DEFINITIONS if definitions is None else definitions
         self.name = name
+        self.icons = icons
 
     async def handle(self, request: Request, principal: Principal) -> JSONResponse:
         self.metrics.inc("commandcore_mcp_requests_total")
@@ -190,6 +196,7 @@ class MCPHandler:
                     "io.modelcontextprotocol/serverInfo": {
                         "name": self.name,
                         "version": self.server_version,
+                        **({"icons": self.icons} if self.icons else {}),
                     }
                 },
                 "instructions": (
@@ -200,7 +207,10 @@ class MCPHandler:
             return _rpc_result(
                 req_id,
                 _with_server_info(
-                    _modernize(method, result), self.server_version, self.name
+                    _modernize(method, result),
+                    self.server_version,
+                    self.name,
+                    self.icons,
                 ),
             )
 
@@ -212,7 +222,15 @@ class MCPHandler:
                 {
                     "protocolVersion": selected,
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": self.name, "version": self.server_version},
+                    "serverInfo": {
+                        "name": self.name,
+                        "version": self.server_version,
+                        **(
+                            {"icons": self.icons}
+                            if self.icons and selected == "2025-11-25"
+                            else {}
+                        ),
+                    },
                     "instructions": "Use devices.select and pass selection_id to subsequent tools.",
                 },
             )
@@ -225,7 +243,10 @@ class MCPHandler:
             return _rpc_result(
                 req_id,
                 _with_server_info(
-                    _modernize(method, result), self.server_version, self.name
+                    _modernize(method, result),
+                    self.server_version,
+                    self.name,
+                    self.icons,
                 )
                 if modern
                 else result,
@@ -264,7 +285,9 @@ class MCPHandler:
                 result = _tool_result(payload, modern)
                 return _rpc_result(
                     req_id,
-                    _with_server_info(result, self.server_version, self.name)
+                    _with_server_info(
+                        result, self.server_version, self.name, self.icons
+                    )
                     if modern
                     else result,
                 )
@@ -283,7 +306,9 @@ class MCPHandler:
                     }
                 return _rpc_result(
                     req_id,
-                    _with_server_info(result, self.server_version, self.name)
+                    _with_server_info(
+                        result, self.server_version, self.name, self.icons
+                    )
                     if modern
                     else result,
                 )

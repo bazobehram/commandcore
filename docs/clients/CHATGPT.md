@@ -15,6 +15,26 @@ https://commandcore.example.com/mcp
 The deployment must expose valid OAuth protected-resource metadata and use an
 OAuth/OIDC provider compatible with the client flow.
 
+## Logo and duplicate development connections
+
+The server advertises its square PNG icon in MCP `serverInfo` for the
+2025-11-25 initialization and 2026-07-28 discovery protocols. Both `/mcp` and
+`/mcp/core` use the same icon. Older initialization versions retain their
+existing response shape. Icon URLs use the configured public base URL and a
+content version, and can be fetched without device or account access.
+
+Rendering or caching this icon is controlled by the client; an existing
+ChatGPT development connection is not guaranteed to update its directory icon.
+Refresh its tools after deploying, then verify the displayed icon. If publishing
+a plugin package, use `apps/web/commandcore-icon.png` for its `logo` and
+`composerIcon` metadata or upload it through the developer dashboard.
+
+Use one daily connection to `/mcp/core` where the daily tool surface suffices.
+Keep the full `/mcp` connection only when its additional tools are needed.
+OAuth acceptance-test connections should have an explicit test label. Remove
+them only after confirming they are no longer needed; the server cannot delete
+client-side connection records.
+
 ## Authorization
 
 Start with the smallest useful scopes:
