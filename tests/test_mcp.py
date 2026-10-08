@@ -11,6 +11,59 @@ from starlette.requests import Request
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("protocol", ["2025-11-25", "2025-06-18", MODERN_PROTOCOL])
+async def test_brand_icon_discovery_preserves_older_protocols(protocol):
+    icons = [
+        {"src": "https://control.example/commandcore-icon.png", "mimeType": "image/png"}
+    ]
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate", icons=icons
+    )
+    modern = protocol == MODERN_PROTOCOL
+    method = "server/discover" if modern else "initialize"
+    params = {"protocolVersion": protocol}
+    headers = []
+    if modern:
+        params = {
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": protocol,
+                "io.modelcontextprotocol/clientCapabilities": {},
+            }
+        }
+        headers = [
+            (b"mcp-protocol-version", protocol.encode()),
+            (b"mcp-method", method.encode()),
+        ]
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+            ).encode(),
+        }
+
+    response = await handler.handle(
+        Request(
+            {"type": "http", "method": "POST", "path": "/mcp", "headers": headers},
+            receive,
+        ),
+        Principal("owner"),
+    )
+    result = json.loads(response.body)["result"]
+    info = (
+        result["_meta"]["io.modelcontextprotocol/serverInfo"]
+        if modern
+        else result["serverInfo"]
+    )
+    assert info["name"] == "commandcore"
+    if protocol == "2025-06-18":
+        assert "icons" not in info
+    else:
+        assert info["icons"] == icons
+
+
+@pytest.mark.asyncio
 async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
     from commandcore_server.tools import CORE_TOOL_DEFINITIONS, CORE_TOOL_NAMES
 
