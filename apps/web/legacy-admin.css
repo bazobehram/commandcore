@@ -35,4 +35,4 @@ button,input,select{font:inherit}.hidden{display:none!important}.app{max-width:1
 .legacy-inline-12{flex:1}
 .legacy-inline-13{margin-top:8px}
 
-.brand-logo{display:block;width:260px;max-width:48vw;height:auto;padding:8px;background:#fff;border-radius:10px}.brand-logo-login{width:280px;max-width:100%;margin-bottom:18px}.brand{align-items:center}.brand .sub{margin-top:0}
+.brand-lockup{display:inline-flex;align-items:center;gap:10px;white-space:nowrap}.brand-lockup-login{margin-bottom:18px}.brand-logo{display:block;width:52px;height:52px;object-fit:contain;flex:none}.brand-name{font-size:25px;font-weight:750;letter-spacing:-.04em;color:#edf2f7}.brand-name span{color:#3294ff}.brand{align-items:center}.brand .sub{margin-top:0}

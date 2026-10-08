@@ -62,7 +62,8 @@ def test_branding_assets_are_public_and_versioned(server):
             assert response.content == web_asset(name).read_bytes()
         html = client.get("/").text
         assert 'href="/commandcore-icon.png?v=' in html
-        assert 'src="/commandcore-wordmark.png?v=' in html
+        assert 'src="/commandcore-icon.png?v=' in html
+        assert 'class="brand-name">Command<span>Core</span>' in html
         version = html.split("/commandcore-icon.png?v=")[1].split('"')[0]
         assert server.mcp.icons == server.core_mcp.icons
         assert server.mcp.icons[0]["src"].endswith("/commandcore-icon.png?v=" + version)

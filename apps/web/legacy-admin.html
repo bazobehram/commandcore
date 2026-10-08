@@ -11,7 +11,7 @@
 <body>
 <div id="loginShell" class="login-shell hidden">
   <div class="login">
-    <img class="brand-logo brand-logo-login" src="/commandcore-wordmark.png" alt="CommandCore" />
+    <div class="brand-lockup brand-lockup-login"><img class="brand-logo" src="/commandcore-icon.png" alt="" aria-hidden="true" /><span class="brand-name">Command<span>Core</span></span></div>
     <p>Sign in to the local control panel with the deployment bootstrap token. The token is exchanged for an HttpOnly session cookie and is not stored by this page.</p>
     <form id="loginForm">
       <div class="field"><label>Bootstrap API token</label><input id="loginToken" class="input" type="password" autocomplete="current-password" required /></div>
@@ -23,7 +23,7 @@
 
 <div id="app" class="app hidden">
   <div class="topbar">
-    <div class="brand"><img class="brand-logo" src="/commandcore-wordmark.png" alt="CommandCore" /><div id="versionLine" class="sub">CommandCore</div></div>
+    <div class="brand"><div class="brand-lockup"><img class="brand-logo" src="/commandcore-icon.png" alt="" aria-hidden="true" /><span class="brand-name">Command<span>Core</span></span></div><div id="versionLine" class="sub">CommandCore</div></div>
     <div class="top-actions"><div class="connection"><span id="serverDot" class="dot"></span><span id="serverState">Checking</span></div><button class="btn ghost small" data-action="refreshAll(true)">Refresh</button><button class="btn ghost small" data-action="logout()">Sign out</button></div>
   </div>
 
