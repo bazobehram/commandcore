@@ -168,3 +168,40 @@ Python test client, not with any existing production CommandCore service.
 No real account login, MFA/CAPTCHA handoff, saved browser profiles, arbitrary
 websites, concurrent owners, Windows desktop Chrome or private application
 actions have passed acceptance. These remain explicit blockers.
+
+## End-to-end MCP acceptance: local-only staging
+
+A second CommandCore instance with disposable local credentials and a disposable
+SQLite database was started on loopback (`127.0.0.1`). The existing production
+CommandCore deployment and its OAuth, grants, database and Agents were not changed.
+
+Using MCP JSON-RPC over real HTTP (not an in-process fake), the test completed:
+
+1. `tools/list`: confirmed all eight optional `browser.*` definitions.
+2. `browser.open`: opened a public GitHub pull request.
+3. `browser.click`: clicked the visible *Files changed* tab using a freshly
+   observed coordinate; URL changed to the corresponding `/files` route.
+4. `browser.observe`: returned the current screenshot and URL.
+5. `browser.close`: acknowledged the session release.
+
+Each observation provided a genuine `image/png` MCP content item. The image
+base64 was not duplicated into `structuredContent`.
+
+A separate Selenium public demo form test clicked and typed into two fields,
+changed a checkbox, submitted with a coordinate click, and verified the
+`Form submitted / Received!` result. No real account or credential was used.
+
+**A significant limitation of coordinate actions:** dynamic GitHub tab layouts
+shifted between runs, causing a previously valid x-coordinate to click *Checks*
+instead of *Files changed*. Agents must inspect a fresh screenshot before
+each important click and verify the resulting URL/page. Hardcoded screen
+coordinates are not reliable automation scripts.
+
+**Status of human handoff:** NOT IMPLEMENTED. Although the Steel backend has a
+debug viewer, it is not an authenticated CommandCore session-handoff UI.
+Do not expose that viewer or use sensitive accounts before ownership/CSRF,
+short-lived credentials, control arbitration and outbound network isolation
+are implemented and tested.
+
+**Status of general deployment:** still a single-operator, opt-in technical
+preview. Production and the default ChatGPT connection remain unchanged.

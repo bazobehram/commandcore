@@ -178,3 +178,45 @@ class BrowserReleaseContractTests(unittest.IsolatedAsyncioTestCase):
             client.url, "http://steel:3000/v1/sessions/" + "f" * 36 + "/release"
         )
         self.assertNotIn(owner, gateway.sessions)
+
+
+class BrowserTargetOwnershipTests(unittest.IsolatedAsyncioTestCase):
+    async def test_browser_attaches_pinned_tab_not_first_visible_tab(self):
+        from commandcore_server.browser_gateway import CDP
+
+        class CDPFixture(CDP):
+            def __init__(self):
+                self.commands = []
+
+            async def send(self, method, params=None, session=None):
+                self.commands.append((method, params or {}, session))
+                if method == "Target.getTargets":
+                    return {
+                        "targetInfos": [
+                            {
+                                "type": "page",
+                                "targetId": "unrelated",
+                                "url": "https://other.invalid/",
+                            },
+                            {
+                                "type": "page",
+                                "targetId": "owned",
+                                "url": "https://example.com/",
+                            },
+                        ]
+                    }
+                if method == "Target.attachToTarget":
+                    return {"sessionId": "owned-session"}
+                return {}
+
+        fixture = CDPFixture()
+        session, target = await fixture.attach_page("owned")
+        self.assertEqual((session, target), ("owned-session", "owned"))
+        attached = [
+            params["targetId"]
+            for method, params, _ in fixture.commands
+            if method == "Target.attachToTarget"
+        ]
+        self.assertEqual(attached, ["owned"])
+        with self.assertRaisesRegex(BrowserError, "disappeared"):
+            await fixture.attach_page("missing")
