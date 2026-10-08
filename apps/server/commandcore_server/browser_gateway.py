@@ -167,6 +167,8 @@ class BrowserGateway:
         entry = self.sessions.get(owner)
         if not entry:
             raise BrowserError("no browser session: call browser.open first")
+        if self._active_handoff(entry):
+            raise BrowserError("human handoff already active")
         origin = urlsplit(self.public_base_url)
         if origin.scheme != "https" and origin.netloc not in {
             "127.0.0.1:8787",
@@ -184,19 +186,30 @@ class BrowserGateway:
             "state": "paused_for_human",
         }
 
-    def handoff_owner(self, token: str, subject: str) -> tuple[str, str, str]:
+    def handoff_owner(
+        self, token: str, subject: str, issuer: str = ""
+    ) -> tuple[str, str, str]:
         if not isinstance(token, str) or len(token) != 43:
             raise BrowserError("handoff not found")
         for owner, entry in self.sessions.items():
-            if owner[1] == subject and self._active_handoff(entry):
+            if (
+                owner[0] == issuer
+                and owner[1] == subject
+                and self._active_handoff(entry)
+            ):
                 if secrets.compare_digest(entry.handoff_token or "", token):
                     return owner
         raise BrowserError("handoff not found or expired")
 
     async def human_call(
-        self, token: str, subject: str, name: str, args: dict[str, Any]
+        self,
+        token: str,
+        subject: str,
+        name: str,
+        args: dict[str, Any],
+        issuer: str = "",
     ) -> dict[str, Any]:
-        owner = self.handoff_owner(token, subject)
+        owner = self.handoff_owner(token, subject, issuer)
         if name not in {
             "browser.observe",
             "browser.move",
@@ -213,14 +226,22 @@ class BrowserGateway:
             name=name,
             args=args,
             human=True,
+            human_token=token,
         )
 
-    def human_resume(self, token: str, subject: str) -> dict[str, Any]:
-        owner = self.handoff_owner(token, subject)
+    async def human_resume(
+        self, token: str, subject: str, issuer: str = ""
+    ) -> dict[str, Any]:
+        owner = self.handoff_owner(token, subject, issuer)
         entry = self.sessions[owner]
-        entry.handoff_token = None
-        entry.handoff_until = 0.0
-        entry.paused_for_human = False
+        async with entry.lock:
+            if not self._active_handoff(entry) or not secrets.compare_digest(
+                entry.handoff_token or "", token
+            ):
+                raise BrowserError("handoff not found or expired")
+            entry.handoff_token = None
+            entry.handoff_until = 0.0
+            entry.paused_for_human = False
         return {"state": "resumed_for_agent"}
 
     async def _new_session(self, owner: tuple[str, str, str]) -> OwnedSession:
@@ -339,6 +360,7 @@ class BrowserGateway:
         name: str,
         args: dict[str, Any],
         human: bool = False,
+        human_token: str | None = None,
     ) -> dict[str, Any]:
         if name not in BROWSER_TOOL_NAMES:
             raise BrowserError("unknown browser tool")
@@ -360,13 +382,25 @@ class BrowserGateway:
             entry = self.sessions.get(owner)
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
-        # Expiry invalidates the control link, never restores AI authority.
-        # A fresh handoff or explicit close is required if the link expires.
-        self._active_handoff(entry)
-        if entry.paused_for_human and not human:
-            raise BrowserError("browser paused for human; wait for explicit resume")
-
         async with entry.lock:
+            # Recheck authority *inside* the lock. An agent action can be
+            # waiting behind human handoff; the previous pre-lock check
+            # let it execute after the handoff was granted.
+            # Expiry never silently unpauses an agent at a login screen.
+            live_handoff = self._active_handoff(entry)
+            if human:
+                if (
+                    not entry.paused_for_human
+                    or not live_handoff
+                    or not human_token
+                    or not secrets.compare_digest(
+                        entry.handoff_token or "", human_token
+                    )
+                ):
+                    raise BrowserError("handoff not found or expired")
+            elif entry.paused_for_human:
+                raise BrowserError("browser paused for human; wait for explicit resume")
+
             uri = self.cdp_url + "/?sessionId=" + entry.id
             async with websockets.connect(
                 uri, open_timeout=12, max_size=9_000_000, close_timeout=2

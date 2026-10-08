@@ -72,7 +72,7 @@ def install_browser_console(
 
     def authorize(token: str, principal: Principal) -> None:
         try:
-            browser.handoff_owner(token, principal.subject)
+            browser.handoff_owner(token, principal.subject, principal.issuer)
         except BrowserError as exc:
             raise HTTPException(404, "handoff not found or expired") from exc
 
@@ -134,7 +134,11 @@ def install_browser_console(
         authorize(token, principal)
         try:
             snapshot = await browser.human_call(
-                token, principal.subject, "browser.observe", {}
+                token,
+                principal.subject,
+                "browser.observe",
+                {},
+                issuer=principal.issuer,
             )
             image = base64.b64decode(snapshot["screenshot_base64"], validate=True)
         except (BrowserError, ValueError) as exc:
@@ -158,7 +162,11 @@ def install_browser_console(
         started = time.monotonic()
         try:
             result = await browser.human_call(
-                token, principal.subject, action.name, action.args
+                token,
+                principal.subject,
+                action.name,
+                action.args,
+                issuer=principal.issuer,
             )
         except BrowserError as exc:
             audit(principal, action.name, action.args, "error")
@@ -182,6 +190,11 @@ def install_browser_console(
         origin = request.headers.get("origin")
         if not origin or not same_origin(request):
             raise HTTPException(403, "same-origin browser interaction required")
-        result = browser.human_resume(token, principal.subject)
+        try:
+            result = await browser.human_resume(
+                token, principal.subject, principal.issuer
+            )
+        except BrowserError as exc:
+            raise HTTPException(409, "handoff not found or expired") from exc
         audit(principal, "browser.handoff.resume", {})
         return private(JSONResponse(result))

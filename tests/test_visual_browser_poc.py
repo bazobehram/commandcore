@@ -1,5 +1,7 @@
 """Safety and MCP serialization tests for the opt-in visual browser preview."""
 
+import asyncio
+
 import unittest
 
 from commandcore_server.browser_gateway import (
@@ -234,10 +236,12 @@ class BrowserHumanHandoffTests(unittest.IsolatedAsyncioTestCase):
         gateway.sessions[owner] = OwnedSession("a" * 36, target_id="owned-tab")
         handoff = gateway._handoff(owner)
         self.assertEqual(handoff["expires_in_seconds"], 600)
+        with self.assertRaisesRegex(BrowserError, "already active"):
+            gateway._handoff(owner)
         token = handoff["handoff_url"].rsplit("/", 1)[-1]
-        self.assertEqual(gateway.handoff_owner(token, "alice"), owner)
+        self.assertEqual(gateway.handoff_owner(token, "alice", "issuer"), owner)
         with self.assertRaises(BrowserError):
-            gateway.handoff_owner(token, "bob")
+            gateway.handoff_owner(token, "bob", "issuer")
         with self.assertRaisesRegex(BrowserError, "paused"):
             await gateway.call(
                 subject="alice",
@@ -247,11 +251,11 @@ class BrowserHumanHandoffTests(unittest.IsolatedAsyncioTestCase):
                 args={},
             )
         self.assertEqual(
-            gateway.human_resume(token, "alice"),
+            await gateway.human_resume(token, "alice", "issuer"),
             {"state": "resumed_for_agent"},
         )
         with self.assertRaises(BrowserError):
-            gateway.handoff_owner(token, "alice")
+            gateway.handoff_owner(token, "alice", "issuer")
 
     async def test_expired_handoff_does_not_authorize_human(self):
         gateway = BrowserGateway(
@@ -265,7 +269,7 @@ class BrowserHumanHandoffTests(unittest.IsolatedAsyncioTestCase):
         token = gateway._handoff(owner)["handoff_url"].rsplit("/", 1)[-1]
         gateway.sessions[owner].handoff_until = 0
         with self.assertRaises(BrowserError):
-            gateway.handoff_owner(token, "alice")
+            gateway.handoff_owner(token, "alice", "issuer")
         self.assertIsNone(gateway.sessions[owner].handoff_token)
         self.assertTrue(gateway.sessions[owner].paused_for_human)
         with self.assertRaisesRegex(BrowserError, "paused"):
@@ -288,3 +292,88 @@ class BrowserHumanHandoffTests(unittest.IsolatedAsyncioTestCase):
         gateway.sessions[owner] = OwnedSession("a" * 36)
         with self.assertRaisesRegex(BrowserError, "HTTPS"):
             gateway._handoff(owner)
+
+
+class BrowserHandoffRaceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_agent_queued_before_handoff_must_recheck_lock(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://127.0.0.1:3898",
+        )
+        owner = ("issuer", "alice", "client")
+        entry = OwnedSession("b" * 36)
+        gateway.sessions[owner] = entry
+        async with entry.lock:
+            task = asyncio.create_task(
+                gateway.call(
+                    subject="alice",
+                    issuer="issuer",
+                    client_id="client",
+                    name="browser.observe",
+                    args={},
+                )
+            )
+            await asyncio.sleep(0)
+            gateway._handoff(owner)
+            self.assertFalse(task.done())
+        with self.assertRaisesRegex(BrowserError, "paused"):
+            await task
+
+    async def test_human_queued_before_resume_must_recheck_token(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://127.0.0.1:3898",
+        )
+        owner = ("issuer", "alice", "client")
+        entry = OwnedSession("c" * 36)
+        gateway.sessions[owner] = entry
+        token = gateway._handoff(owner)["handoff_url"].rsplit("/", 1)[-1]
+        async with entry.lock:
+            task = asyncio.create_task(
+                gateway.human_call(
+                    token, "alice", "browser.observe", {}, issuer="issuer"
+                )
+            )
+            await asyncio.sleep(0)
+            entry.handoff_token = None
+            entry.paused_for_human = False
+            self.assertFalse(task.done())
+        with self.assertRaisesRegex(BrowserError, "handoff not found"):
+            await task
+
+    async def test_resume_waits_for_inflight_human_action(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://127.0.0.1:3898",
+        )
+        owner = ("issuer", "alice", "client")
+        entry = OwnedSession("d" * 36)
+        gateway.sessions[owner] = entry
+        token = gateway._handoff(owner)["handoff_url"].rsplit("/", 1)[-1]
+        async with entry.lock:
+            task = asyncio.create_task(gateway.human_resume(token, "alice", "issuer"))
+            await asyncio.sleep(0)
+            self.assertFalse(task.done())
+            self.assertTrue(entry.paused_for_human)
+        self.assertEqual((await task)["state"], "resumed_for_agent")
+        self.assertFalse(entry.paused_for_human)
+
+    async def test_handoff_subject_and_issuer_are_required(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://127.0.0.1:3898",
+        )
+        owner = ("issuer-one", "alice", "client")
+        gateway.sessions[owner] = OwnedSession("e" * 36)
+        token = gateway._handoff(owner)["handoff_url"].rsplit("/", 1)[-1]
+        with self.assertRaises(BrowserError):
+            gateway.handoff_owner(token, "alice", "different-issuer")
+        self.assertEqual(gateway.handoff_owner(token, "alice", "issuer-one"), owner)
