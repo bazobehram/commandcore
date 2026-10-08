@@ -51,6 +51,24 @@ def test_bootstrap_disabled_and_oauth_remains_available(server, monkeypatch):
     assert server._authenticate_bearer("oauth-fixture") == expected
 
 
+def test_branding_assets_are_public_and_versioned(server):
+    from commandcore_server.web_assets import web_asset
+
+    with TestClient(server.app) as client:
+        for name in ("commandcore-icon.png", "commandcore-wordmark.png"):
+            response = client.get("/" + name)
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "image/png"
+            assert response.content == web_asset(name).read_bytes()
+        html = client.get("/").text
+        assert 'href="/commandcore-icon.png?v=' in html
+        assert 'src="/commandcore-icon.png?v=' in html
+        assert 'class="brand-name">Command<span>Core</span>' in html
+        version = html.split("/commandcore-icon.png?v=")[1].split('"')[0]
+        assert server.mcp.icons == server.core_mcp.icons
+        assert server.mcp.icons[0]["src"].endswith("/commandcore-icon.png?v=" + version)
+
+
 @pytest.mark.parametrize(
     "headers,allowed",
     [

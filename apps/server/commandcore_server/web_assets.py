@@ -17,6 +17,8 @@ def web_asset(name: str) -> Path:
         "panel.css",
         "panel.js",
         "commandcore-logo.webp",
+        "commandcore-icon.png",
+        "commandcore-wordmark.png",
     }:
         raise ValueError("unknown web asset")
     source = Path(__file__).resolve().parents[2] / "web" / name
@@ -34,6 +36,8 @@ def web_page(path: Path) -> str:
         "panel.css",
         "panel.js",
         "commandcore-logo.webp",
+        "commandcore-icon.png",
+        "commandcore-wordmark.png",
         "onboarding.css",
         "onboarding.js",
         "legacy-admin.css",

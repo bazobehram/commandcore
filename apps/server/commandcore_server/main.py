@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import time
 from contextlib import asynccontextmanager
@@ -45,6 +46,17 @@ metrics = Metrics()
 agents = AgentManager(db, metrics, settings.max_job_output_bytes)
 tools = ToolService(db, agents, settings.selection_ttl_seconds)
 fleet = FleetRolloutService(db, agents)
+branding_icons = [
+    {
+        "src": settings.public_base_url.rstrip("/")
+        + "/commandcore-icon.png?v="
+        + hashlib.sha256(web_asset("commandcore-icon.png").read_bytes()).hexdigest()[
+            :16
+        ],
+        "mimeType": "image/png",
+        "sizes": ["1254x1254"],
+    }
+]
 mcp = MCPHandler(
     tools,
     metrics,
@@ -58,6 +70,7 @@ mcp = MCPHandler(
         if settings.oauth_enabled
         else None
     ),
+    icons=branding_icons,
 )
 oauth_verifier = (
     OAuthVerifier(
@@ -78,6 +91,7 @@ core_mcp = MCPHandler(
     mcp.scope_challenge,
     definitions=CORE_TOOL_DEFINITIONS,
     name="CommandCore Core",
+    icons=branding_icons,
 )
 
 
@@ -479,11 +493,13 @@ async def panel_styles(request: Request) -> Response:
 
 
 @app.get("/commandcore-logo.webp")
-async def commandcore_logo() -> Response:
-    path = web_asset("commandcore-logo.webp")
+@app.get("/commandcore-icon.png")
+@app.get("/commandcore-wordmark.png")
+async def commandcore_logo(request: Request) -> Response:
+    path = web_asset(request.url.path.lstrip("/"))
     return Response(
         path.read_bytes(),
-        media_type="image/webp",
+        media_type="image/png" if path.suffix == ".png" else "image/webp",
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
