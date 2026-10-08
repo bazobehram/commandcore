@@ -1,0 +1,13 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111b2d; color: #f5f8ff; }
+body { margin: 0; }
+main { max-width: 1280px; margin: 0 auto; padding: 1rem; }
+h1 { margin-bottom: .25rem; font-size: 1.35rem; }
+header p, .hint { color: #b5c2d8; }
+#status { padding: .75rem; border: 1px solid #32415c; border-radius: .5rem; }
+#viewport { display: block; width: 100%; height: auto; background: #fff; cursor: crosshair; border-radius: .5rem; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+button, input { padding: .6rem .75rem; border: 1px solid #64748b; border-radius: .5rem; font: inherit; }
+button { cursor: pointer; background: #21385c; color: inherit; }
+button:disabled { opacity: .45; cursor: wait; }
+input { background: #152339; color: inherit; min-width: 10rem; flex: 1; }
+#resume { background: #22523c; }

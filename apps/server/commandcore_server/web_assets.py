@@ -16,6 +16,8 @@ def web_asset(name: str) -> Path:
         "onboarding.js",
         "panel.css",
         "panel.js",
+        "browser-console.js",
+        "browser-console.css",
         "commandcore-logo.webp",
         "commandcore-icon.png",
         "commandcore-wordmark.png",

@@ -13,6 +13,8 @@ import base64
 import ipaddress
 import json
 import re
+import secrets
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
@@ -30,6 +32,7 @@ BROWSER_TOOL_NAMES = {
     "browser.keypress",
     "browser.scroll",
     "browser.close",
+    "browser.handoff",
 }
 
 
@@ -123,6 +126,9 @@ class CDP:
 class OwnedSession:
     id: str
     target_id: str | None = None
+    handoff_token: str | None = None
+    handoff_until: float = 0.0
+    paused_for_human: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -134,6 +140,7 @@ class BrowserGateway:
         cdp_url: str,
         allow_hosts: tuple[str, ...],
         max_sessions: int = 1,
+        public_base_url: str = "http://127.0.0.1:8787",
     ):
         if not base_url.startswith("http://") or not cdp_url.startswith("ws://"):
             raise ValueError("browser backend must use private HTTP/WS transport")
@@ -145,8 +152,76 @@ class BrowserGateway:
         self.cdp_url = cdp_url.rstrip("/")
         self.allow_hosts = allow_hosts
         self.max_sessions = max_sessions
+        self.public_base_url = public_base_url.rstrip("/")
         self.sessions: dict[tuple[str, str, str], OwnedSession] = {}
         self._create_lock = asyncio.Lock()
+
+    def _active_handoff(self, entry: OwnedSession) -> bool:
+        if entry.handoff_token and time.monotonic() < entry.handoff_until:
+            return True
+        entry.handoff_token = None
+        entry.handoff_until = 0.0
+        return False
+
+    def _handoff(self, owner: tuple[str, str, str]) -> dict[str, Any]:
+        entry = self.sessions.get(owner)
+        if not entry:
+            raise BrowserError("no browser session: call browser.open first")
+        origin = urlsplit(self.public_base_url)
+        if origin.scheme != "https" and origin.netloc not in {
+            "127.0.0.1:8787",
+            "127.0.0.1:3898",
+        }:
+            raise BrowserError("remote browser handoff requires verified HTTPS")
+        entry.handoff_token = secrets.token_urlsafe(32)
+        entry.handoff_until = time.monotonic() + 600
+        entry.paused_for_human = True
+        return {
+            "handoff_url": self.public_base_url
+            + "/browser/console/"
+            + entry.handoff_token,
+            "expires_in_seconds": 600,
+            "state": "paused_for_human",
+        }
+
+    def handoff_owner(self, token: str, subject: str) -> tuple[str, str, str]:
+        if not isinstance(token, str) or len(token) != 43:
+            raise BrowserError("handoff not found")
+        for owner, entry in self.sessions.items():
+            if owner[1] == subject and self._active_handoff(entry):
+                if secrets.compare_digest(entry.handoff_token or "", token):
+                    return owner
+        raise BrowserError("handoff not found or expired")
+
+    async def human_call(
+        self, token: str, subject: str, name: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        owner = self.handoff_owner(token, subject)
+        if name not in {
+            "browser.observe",
+            "browser.move",
+            "browser.click",
+            "browser.type",
+            "browser.keypress",
+            "browser.scroll",
+        }:
+            raise BrowserError("human action not permitted")
+        return await self.call(
+            subject=owner[1],
+            issuer=owner[0],
+            client_id=owner[2],
+            name=name,
+            args=args,
+            human=True,
+        )
+
+    def human_resume(self, token: str, subject: str) -> dict[str, Any]:
+        owner = self.handoff_owner(token, subject)
+        entry = self.sessions[owner]
+        entry.handoff_token = None
+        entry.handoff_until = 0.0
+        entry.paused_for_human = False
+        return {"state": "resumed_for_agent"}
 
     async def _new_session(self, owner: tuple[str, str, str]) -> OwnedSession:
         async with self._create_lock:
@@ -263,10 +338,19 @@ class BrowserGateway:
         client_id: str,
         name: str,
         args: dict[str, Any],
+        human: bool = False,
     ) -> dict[str, Any]:
         if name not in BROWSER_TOOL_NAMES:
             raise BrowserError("unknown browser tool")
         owner = (issuer, subject, client_id)
+        if name == "browser.handoff":
+            if human:
+                raise BrowserError("human cannot issue handoff")
+            entry = self.sessions.get(owner)
+            if not entry:
+                raise BrowserError("no browser session: call browser.open first")
+            async with entry.lock:
+                return self._handoff(owner)
         if name == "browser.close":
             return await self._release(owner)
         if name == "browser.open":
@@ -276,6 +360,11 @@ class BrowserGateway:
             entry = self.sessions.get(owner)
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
+        # Expiry invalidates the control link, never restores AI authority.
+        # A fresh handoff or explicit close is required if the link expires.
+        self._active_handoff(entry)
+        if entry.paused_for_human and not human:
+            raise BrowserError("browser paused for human; wait for explicit resume")
 
         async with entry.lock:
             uri = self.cdp_url + "/?sessionId=" + entry.id

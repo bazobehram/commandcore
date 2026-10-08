@@ -722,6 +722,12 @@ TOOL_DEFINITIONS.extend(
             ),
         },
         {
+            "name": "browser.handoff",
+            "title": "Pause browser for human control",
+            "description": "Pause AI browser actions and issue a 10-minute authenticated operator console link; a matching CommandCore account must sign in to use it.",
+            "inputSchema": _obj({}),
+        },
+        {
             "name": "browser.close",
             "title": "Close visual browser session",
             "description": "Release only this authenticated caller's browser session.",

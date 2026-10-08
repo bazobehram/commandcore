@@ -39,6 +39,7 @@ from .security import (
 )
 from .tools import CORE_TOOL_DEFINITIONS, TOOL_DEFINITIONS, ToolError, ToolService
 from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
+from .browser_console import install_browser_console
 
 settings = Settings()
 settings.validate()
@@ -50,6 +51,7 @@ browser = (
         base_url=settings.browser_steel_url,
         cdp_url=settings.browser_cdp_url,
         allow_hosts=settings.browser_allow_hosts,
+        public_base_url=settings.public_base_url,
     )
     if settings.browser_enabled
     else None
@@ -397,6 +399,9 @@ enrollment_service = install_routes(
     web_asset("onboarding.html"),
     agents,
 )
+
+
+install_browser_console(app, browser, require_principal, _same_origin, db)
 
 
 @app.get("/.well-known/oauth-protected-resource")

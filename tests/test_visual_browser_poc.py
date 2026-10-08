@@ -220,3 +220,71 @@ class BrowserTargetOwnershipTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(attached, ["owned"])
         with self.assertRaisesRegex(BrowserError, "disappeared"):
             await fixture.attach_page("missing")
+
+
+class BrowserHumanHandoffTests(unittest.IsolatedAsyncioTestCase):
+    async def test_handoff_pauses_agent_and_is_subject_scoped(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://127.0.0.1:3898",
+        )
+        owner = ("issuer", "alice", "client")
+        gateway.sessions[owner] = OwnedSession("a" * 36, target_id="owned-tab")
+        handoff = gateway._handoff(owner)
+        self.assertEqual(handoff["expires_in_seconds"], 600)
+        token = handoff["handoff_url"].rsplit("/", 1)[-1]
+        self.assertEqual(gateway.handoff_owner(token, "alice"), owner)
+        with self.assertRaises(BrowserError):
+            gateway.handoff_owner(token, "bob")
+        with self.assertRaisesRegex(BrowserError, "paused"):
+            await gateway.call(
+                subject="alice",
+                issuer="issuer",
+                client_id="client",
+                name="browser.observe",
+                args={},
+            )
+        self.assertEqual(
+            gateway.human_resume(token, "alice"),
+            {"state": "resumed_for_agent"},
+        )
+        with self.assertRaises(BrowserError):
+            gateway.handoff_owner(token, "alice")
+
+    async def test_expired_handoff_does_not_authorize_human(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://127.0.0.1:3898",
+        )
+        owner = ("issuer", "alice", "client")
+        gateway.sessions[owner] = OwnedSession("a" * 36)
+        token = gateway._handoff(owner)["handoff_url"].rsplit("/", 1)[-1]
+        gateway.sessions[owner].handoff_until = 0
+        with self.assertRaises(BrowserError):
+            gateway.handoff_owner(token, "alice")
+        self.assertIsNone(gateway.sessions[owner].handoff_token)
+        self.assertTrue(gateway.sessions[owner].paused_for_human)
+        with self.assertRaisesRegex(BrowserError, "paused"):
+            await gateway.call(
+                subject="alice",
+                issuer="issuer",
+                client_id="client",
+                name="browser.observe",
+                args={},
+            )
+
+    async def test_external_http_handoff_is_rejected(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+            public_base_url="http://commandcore.example.com",
+        )
+        owner = ("issuer", "alice", "client")
+        gateway.sessions[owner] = OwnedSession("a" * 36)
+        with self.assertRaisesRegex(BrowserError, "HTTPS"):
+            gateway._handoff(owner)

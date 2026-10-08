@@ -18,6 +18,8 @@ should be performed by the human operator, not circumvented by automation.
 - `browser.move`, `browser.click`: physical CDP mouse events by pixel coordinates.
 - `browser.type`, `browser.keypress`, `browser.scroll`: input events.
 - `browser.close`: release the caller's Steel session.
+- `browser.handoff`: pause the AI and issue a 10-minute authenticated
+  operator takeover link (experimental).
 - `browser.*` appears on MCP surfaces only when enabled in server settings.
 - All browser tools require the `commandcore:standard` OAuth scope; no
   device FULL_CONTROL grant or Agent control is implied.
@@ -47,9 +49,10 @@ exposed** by the example Compose file. An authenticated, short-lived handoff
 proxy and ownership lock are required before offering live viewer access.
 Do not paste a raw debug URL into ChatGPT or expose CDP port 9223.
 
-This preview does not yet implement human-handoff, encrypted persisted profiles,
-MFA flows, Windows personal Chrome extension support, cross-restart session
-recovery or per-site click approval. Do not advertise them as complete.
+This preview includes an early authenticated human-handoff console but does
+not yet have externally accepted MFA flows, encrypted persisted profiles,
+Windows personal Chrome extension support, cross-restart session recovery or
+per-site click approval. Do not advertise them as complete.
 
 ## Run in a disposable evaluation environment
 
@@ -135,8 +138,8 @@ format. These do not constitute a production browser security audit.
    with no cross-user screenshots, cookies, history, or CDP target visibility.
 3. Enforce outbound private-network deny **at the network layer**, including
    DNS rebinding, redirects, WebSockets, downloads, localhost and metadata IPs.
-4. Introduce authenticated human handoff with single-controller locking,
-   short-lived viewer tokens and an explicit resume action.
+4. Harden authenticated human handoff with real OAuth/mobile acceptance,
+   restart/reconnect behavior, rate limits, and single-controller fencing.
 5. Require site/action approval for sensitive mutation and file transfer.
 6. Run end-to-end security, OAuth, audit and reconnect tests against disposable
    accounts and public test websites.
@@ -197,11 +200,51 @@ instead of *Files changed*. Agents must inspect a fresh screenshot before
 each important click and verify the resulting URL/page. Hardcoded screen
 coordinates are not reliable automation scripts.
 
-**Status of human handoff:** NOT IMPLEMENTED. Although the Steel backend has a
-debug viewer, it is not an authenticated CommandCore session-handoff UI.
-Do not expose that viewer or use sensitive accounts before ownership/CSRF,
-short-lived credentials, control arbitration and outbound network isolation
-are implemented and tested.
+**Status of human handoff:** A short-lived authenticated console PoC now
+exists, with pause, human-only screenshot/action, same-subject cookies,
+same-origin checks and explicit resume. Do not expose Steel's raw debug viewer
+or use sensitive accounts before production authentication and outbound
+network isolation are implemented and tested.
 
 **Status of general deployment:** still a single-operator, opt-in technical
 preview. Production and the default ChatGPT connection remain unchanged.
+
+## Experimental authenticated human handoff
+
+The development branch includes a **10-minute, owner-bound human handoff**
+preview. This is not an unattended CAPTCHA bypass. The operator performs
+authentication, MFA or other account verification manually:
+
+1. An authenticated AI client opens a visual browser session.
+2. The AI calls `browser.handoff` and receives a short-lived CommandCore URL.
+3. AI browser operations pause while handoff is active.
+4. The operator opens that URL and authenticates with **the same CommandCore
+   account** via the normal panel session. Other accounts are denied.
+5. The operator sees fresh screenshots, taps coordinates to click, types text,
+   uses limited keys and scrolls.
+6. The operator explicitly selects **Resume AI control**.
+7. The handoff token becomes invalid; the original MCP client can now observe
+   and control the same tab again.
+
+The console is served by CommandCore and does **not** publish raw Steel/CDP
+debug endpoints. It uses same-origin requests, HttpOnly panel session cookies,
+CSRF checks, no-store responses, frame restrictions and redacted audit summaries.
+The AI cannot request screenshots or issue actions while human control is active.
+
+**Local staging acceptance:** MCP `browser.handoff` was followed by a denied
+AI observe call, unauthenticated HTTP 401, authenticated panel access, PNG
+screenshot, user-origin click/type, cross-origin HTTP 403, explicit resume,
+expired handoff URL and resumed MCP observe/close. Only the Selenium public
+form and disposable local credentials were used.
+
+**Not yet a production claim.** Human takeover still needs real external OAuth
+provider acceptance, production HTTPS/reverse proxy acceptance, mobile-browser
+usability testing, session restart/reconnect recovery, stronger rate limits,
+network-level browser sandbox isolation and actual operator acceptance with
+a dedicated noncritical account. No real personal login/CAPTCHA was attempted.
+
+When a handoff expires, the token becomes unusable **without automatically
+unpausing the AI**. This avoids exposing partially entered private credentials
+back to the model. The client can request another handoff token (or close the
+whole browser session); ordinary AI actions remain blocked until a human
+explicitly resumes.
