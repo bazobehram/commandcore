@@ -111,6 +111,40 @@ platform-specific administration remain experimental or incomplete. The project
 does not claim support from compilation alone; see the
 [platform matrix](docs/PLATFORM_SUPPORT.md).
 
+## Install with an AI agent
+
+CommandCore includes a root-level [AGENTS.md](AGENTS.md) with repository-specific
+instructions for coding and operations agents, plus a human-readable
+[agent-assisted installation guide](docs/AGENT_ASSISTED_INSTALL.md).
+
+A capable agent with access to the target server can inspect the machine,
+prepare the deployment, start CommandCore, configure the pieces it has authority
+to configure, and verify the result. Account-bound steps such as DNS ownership,
+OAuth provider login, MFA, or permission decisions remain with the operator.
+
+A portable starting prompt is:
+
+~~~text
+Clone https://github.com/bazobehram/commandcore.git and read AGENTS.md before
+making any changes.
+
+Install a self-hosted CommandCore server on this machine and make it usable for
+remote MCP clients. Preserve the documented security model: keep the internal
+application port private, use HTTPS/WSS for remote access, configure OAuth/OIDC
+instead of leaving public bootstrap enabled, and do not enable FULL_CONTROL
+unless I explicitly request it.
+
+Inspect the machine first. Ask me only for account-bound information you cannot
+safely infer. Verify /healthz and the MCP path, perform a read-only acceptance
+test when a device is enrolled, and finish with the exact public URL, MCP URL,
+Agent URL, OAuth status, permission ceiling, tests performed, rollback path, and
+remaining manual steps.
+~~~
+
+`AGENTS.md` is a repository convention used by many coding agents, not a part
+of the MCP protocol itself. Agents that do not load it automatically should be
+explicitly told to read it first.
+
 ## Quick start
 
 ### 1. Run CommandCore
