@@ -10,6 +10,7 @@ from .db import Database
 from .models import Principal
 from .permissions import allowed, risk_class
 from .activity import argument_summary, source
+from .live_activity import LiveActivity
 
 
 def _device_ref_schema() -> dict[str, Any]:
@@ -637,6 +638,25 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
+TOOL_DEFINITIONS.extend(
+    [
+        {
+            "name": "activity.feed",
+            "title": "Read live CommandCore activity",
+            "description": "Owner-scoped recent and running tool operations, devices, duration and status. Command text, paths and outputs never returned.",
+            "inputSchema": _obj(
+                {"limit": {"type": "integer", "minimum": 1, "maximum": 50}}
+            ),
+        },
+        {
+            "name": "activity.watch",
+            "title": "Show CommandCore activity in chat",
+            "description": "Display a read-only live activity panel for enrolled devices and remote operations in compatible MCP Apps clients.",
+            "inputSchema": _obj({}),
+        },
+    ]
+)
+
 # MCP annotations are UX/risk hints for clients, never security boundaries.
 _READ_ONLY_HINTS = {
     "auth.whoami",
@@ -659,6 +679,8 @@ _READ_ONLY_HINTS = {
     "desktop.windows",
     "screen.capture",
     "clipboard.read",
+    "activity.feed",
+    "activity.watch",
 }
 _DESTRUCTIVE_HINTS = {
     "fs.move",
@@ -727,6 +749,10 @@ for _tool in TOOL_DEFINITIONS:
         "openai/toolInvocation/invoking": f"{_tool['title']}…"[:64],
         "openai/toolInvocation/invoked": f"{_tool['title']}: complete"[:64],
     }
+    if _name == "activity.feed":
+        _tool["_meta"]["ui"] = {"visibility": ["model", "app"]}
+        _tool["_meta"]["openai/widgetAccessible"] = True
+
 
 TOOL_NAMES = {x["name"] for x in TOOL_DEFINITIONS}
 CORE_TOOL_NAMES = {
@@ -756,11 +782,19 @@ CORE_TOOL_NAMES = {
     "git.run",
     "transfer.upload",
     "transfer.download",
+    "activity.feed",
+    "activity.watch",
 }
 CORE_TOOL_DEFINITIONS = [
     tool for tool in TOOL_DEFINITIONS if tool["name"] in CORE_TOOL_NAMES
 ]
-DEVICE_TOOLS = TOOL_NAMES - {"devices.list", "devices.info", "devices.select"}
+DEVICE_TOOLS = TOOL_NAMES - {
+    "devices.list",
+    "devices.info",
+    "devices.select",
+    "activity.feed",
+    "activity.watch",
+}
 DEFAULT_TIMEOUT_MS = {
     "services.manage": 120000,
     "package.install": 3600000,
@@ -791,6 +825,7 @@ class ToolService:
         self.db = db
         self.agents = agents
         self.selection_ttl_seconds = selection_ttl_seconds
+        self.live_activity = LiveActivity()
 
     @staticmethod
     def _profile_rank(profile: str) -> int:
@@ -874,8 +909,22 @@ class ToolService:
         source_token = source.set(
             {"auth_kind": principal.auth_kind, "client_id": principal.client_id}
         )
+        live_key: str | None = None
         try:
             self._require_scope(principal, name)
+            if name == "activity.feed":
+                limit = args.get("limit", 25)
+                if type(limit) is not int or not 1 <= limit <= 50:
+                    raise ToolError("invalid_limit")
+                return self.live_activity.snapshot(
+                    principal,
+                    self.db.recent_audit(principal.subject, limit=100),
+                    self.db.list_accessible_devices(principal.subject),
+                    limit,
+                )
+            if name == "activity.watch":
+                return {"state": "monitor_ready", "mode": "read_only"}
+            live_key = self.live_activity.begin(principal, name)
             if name == "auth.whoami":
                 devices = self.db.list_accessible_devices(principal.subject)
                 rank = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
@@ -929,8 +978,10 @@ class ToolService:
                     )
                 except (KeyError, ValueError, PermissionError) as exc:
                     raise ToolError(str(exc).strip("'")) from exc
+                device_id = device["id"]
+                self.live_activity.set_device(live_key, device_id)
                 sel = self.db.create_selection(
-                    principal.subject, device["id"], self.selection_ttl_seconds
+                    principal.subject, device_id, self.selection_ttl_seconds
                 )
                 return {**sel, "device": device}
             if name == "devices.info":
@@ -950,6 +1001,7 @@ class ToolService:
                 raise ToolError("unknown_tool")
             device = self._resolve_device(principal, args)
             device_id = device["id"]
+            self.live_activity.set_device(live_key, device_id)
             if device["status"] != "online":
                 raise ToolError("device_offline")
             access_max = str(
@@ -1046,15 +1098,21 @@ class ToolService:
         finally:
             source.reset(source_token)
             duration_ms = int((time.perf_counter() - started) * 1000)
-            self.db.add_audit(
-                user_id=principal.subject,
-                client_id=principal.client_id,
-                device_id=device_id,
-                tool=name if name in TOOL_NAMES else "unknown_tool",
-                args_summary=json.dumps(argument_summary(args), separators=(",", ":")),
-                execution_id=execution_id,
-                status=status,
-                duration_ms=duration_ms,
-                exit_code=exit_code,
-                risk_class=risk_class(name),
-            )
+            try:
+                if name != "activity.feed":
+                    self.db.add_audit(
+                        user_id=principal.subject,
+                        client_id=principal.client_id,
+                        device_id=device_id,
+                        tool=name if name in TOOL_NAMES else "unknown_tool",
+                        args_summary=json.dumps(
+                            argument_summary(args), separators=(",", ":")
+                        ),
+                        execution_id=execution_id,
+                        status=status,
+                        duration_ms=duration_ms,
+                        exit_code=exit_code,
+                        risk_class=risk_class(name),
+                    )
+            finally:
+                self.live_activity.finish(live_key)

@@ -145,6 +145,14 @@ remaining manual steps.
 of the MCP protocol itself. Agents that do not load it automatically should be
 explicitly told to read it first.
 
+## Live activity viewer (preview)
+
+CommandCore includes a read-only [Live Activity](docs/LIVE_ACTIVITY.md)
+timeline for compatible MCP Apps clients. Call `activity.watch` in ChatGPT
+to request a panel showing which device/tool is running, completed or failed.
+The feed deliberately hides commands, paths, outputs and secrets. This UI is
+not a replacement for ChatGPT's native Thinking display.
+
 ## Quick start
 
 Choose two roles: the **server** hosts the panel, identity/grants, and MCP endpoint;

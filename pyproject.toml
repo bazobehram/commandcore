@@ -37,4 +37,4 @@ package-dir = {"" = "apps/server"}
 where = ["apps/server"]
 
 [tool.setuptools.data-files]
-"share/commandcore/web" = ["apps/web/index.html", "apps/web/onboarding.html", "apps/web/onboarding.css", "apps/web/onboarding.js", "apps/web/legacy-admin.html", "apps/web/legacy-admin.css", "apps/web/legacy-admin.js", "apps/web/panel.css", "apps/web/panel.js", "apps/web/commandcore-logo.webp", "apps/web/commandcore-icon.png", "apps/web/commandcore-wordmark.png"]
+"share/commandcore/web" = ["apps/web/index.html", "apps/web/onboarding.html", "apps/web/onboarding.css", "apps/web/onboarding.js", "apps/web/legacy-admin.html", "apps/web/legacy-admin.css", "apps/web/legacy-admin.js", "apps/web/panel.css", "apps/web/panel.js", "apps/web/activity-widget.html", "apps/web/commandcore-logo.webp", "apps/web/commandcore-icon.png", "apps/web/commandcore-wordmark.png"]
