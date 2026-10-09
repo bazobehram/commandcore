@@ -248,3 +248,36 @@ unpausing the AI**. This avoids exposing partially entered private credentials
 back to the model. The client can request another handoff token (or close the
 whole browser session); ordinary AI actions remain blocked until a human
 explicitly resumes.
+
+## ChatGPT inline visual monitor (MCP Apps preview)
+
+The optional `browser.watch` MCP render tool advertises an embedded
+[MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) resource,
+`ui://commandcore/browser-view-v1.html`. The server supports
+`resources/list` and `resources/read` on both MCP endpoints only when the
+browser feature is enabled. Disabled deployments never list this tool or
+publish its UI resource.
+
+After `browser.open`, the AI may call `browser.watch` to request a
+**read-only monitor** in hosts that implement MCP Apps, including compatible
+versions of ChatGPT. The widget calls `browser.observe` through the MCP Apps
+bridge; screenshot payloads remain normal MCP `image/png` content, not raw
+browser/Chrome debugging ports.
+
+- Manual **Refresh now** always available.
+- **Auto-refresh** is opt-in, one screenshot every four seconds while the
+  widget is visible, with a one-inflight-request limit.
+- **Take control** is an explicit user click that requests the existing
+  authenticated `browser.handoff` and opens a separately authenticated
+  CommandCore console. The widget never becomes a privileged Chrome console.
+- While human control is active, AI screenshot/control requests are denied.
+- Host UI resource metadata supports inline and fullscreen display.
+- If the host does not support MCP Apps, ordinary `browser.observe` still
+  returns a screenshot to the model. No UI rendering is promised.
+
+**Acceptance boundary:** MCP resource listing/read, render-tool metadata,
+widget JavaScript parsing, and MCP image-output tests are automated. Actual
+ChatGPT inline mounting, OAuth identity consistency between model-triggered
+and widget-triggered calls, fullscreen rendering and mobile behavior **must
+be verified against the connected ChatGPT app before release**. This is not a
+screen-recording service or uninterrupted video stream.

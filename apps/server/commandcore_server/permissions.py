@@ -46,6 +46,7 @@ STANDARD_TOOLS = READ_ONLY_TOOLS | {
     "browser.scroll",
     "browser.close",
     "browser.handoff",
+    "browser.watch",
 }
 # Docker daemon access is root-equivalent on typical Linux installations, so
 # Docker tools intentionally require FULL_CONTROL even when a local user happens
@@ -121,6 +122,7 @@ RISK = {
     "browser.scroll": "medium",
     "browser.close": "medium",
     "browser.handoff": "medium",
+    "browser.watch": "medium",
 }
 
 

@@ -33,6 +33,7 @@ BROWSER_TOOL_NAMES = {
     "browser.scroll",
     "browser.close",
     "browser.handoff",
+    "browser.watch",
 }
 
 
@@ -365,6 +366,17 @@ class BrowserGateway:
         if name not in BROWSER_TOOL_NAMES:
             raise BrowserError("unknown browser tool")
         owner = (issuer, subject, client_id)
+        if name == "browser.watch":
+            if human:
+                raise BrowserError("human cannot open ChatGPT viewer")
+            entry = self.sessions.get(owner)
+            if not entry:
+                raise BrowserError("no browser session: call browser.open first")
+            return {
+                "state": "viewer_ready",
+                "mode": "read_only",
+                "refresh": "manual_or_4s_opt_in",
+            }
         if name == "browser.handoff":
             if human:
                 raise BrowserError("human cannot issue handoff")

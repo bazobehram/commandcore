@@ -722,6 +722,12 @@ TOOL_DEFINITIONS.extend(
             ),
         },
         {
+            "name": "browser.watch",
+            "title": "Show browser in chat",
+            "description": "After browser.open, render a read-only interactive visual browser viewer inside ChatGPT. The user can optionally refresh screenshots, enable low-rate auto-refresh or request authenticated human control.",
+            "inputSchema": _obj({}),
+        },
+        {
             "name": "browser.handoff",
             "title": "Pause browser for human control",
             "description": "Pause AI browser actions and issue a 10-minute authenticated operator console link; a matching CommandCore account must sign in to use it.",
@@ -794,7 +800,7 @@ _OPEN_WORLD_HINTS = {
 }
 for _tool in TOOL_DEFINITIONS:
     _name = _tool["name"]
-    _read_only = _name in _READ_ONLY_HINTS
+    _read_only = _name in _READ_ONLY_HINTS or _name == "browser.watch"
     _tool["annotations"] = {
         "title": _tool.get("title", _name),
         "readOnlyHint": _read_only,

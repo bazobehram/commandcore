@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>CommandCore — Live Browser</title>
+<style>
+:root {font:14px/1.45 system-ui,-apple-system,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#101827;color:#f3f7ff}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #35405a}
+header strong{letter-spacing:.01em}
+header span{margin-left:auto;color:#9aabc5;font-size:12px}
+#host{padding:8px 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c0cde1;font-size:12px}
+#stage{background:#1b2537;min-height:180px;position:relative;display:flex;align-items:center;justify-content:center}
+#stage img{display:block;width:100%;max-height:55vh;object-fit:contain}
+#message{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:22px;text-align:center;color:#bbcae0;background:#1b2537}
+footer{display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;align-items:center}
+button{background:#263959;border:1px solid #61728f;border-radius:8px;padding:7px 11px;color:inherit;font:inherit;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+#take{background:#27513c;margin-left:auto}
+#state{font-size:12px;color:#b4c0d5;padding:0 14px 12px}
+@media(prefers-color-scheme:light){
+ body{background:#f5f8ff;color:#1b273a}
+ header{border-color:#d9e1ef}
+ header span,#host,#state{color:#596b83}
+ button{color:#1b273a;background:#e7ecf6}
+ #take{background:#d7eddf}
+}
+</style>
+</head>
+<body>
+<header><strong>CommandCore Browser</strong><span>Remote visual session</span></header>
+<div id="host">Waiting for browser…</div>
+<section id="stage" aria-label="Browser viewport">
+  <img id="screen" alt="Current remote Chromium screenshot" hidden>
+  <div id="message">Connecting to CommandCore…</div>
+</section>
+<footer>
+  <button id="refresh" type="button">Refresh now</button>
+  <button id="auto" type="button" aria-pressed="false">Auto-refresh: Off</button>
+  <button id="take" type="button">Take control</button>
+</footer>
+<div id="state" role="status" aria-live="polite">This view is read-only. The AI uses browser tools; manual control requires handoff.</div>
+<script>
+(() => {
+  "use strict";
+  const screen = document.getElementById("screen");
+  const message = document.getElementById("message");
+  const host = document.getElementById("host");
+  const state = document.getElementById("state");
+  const refreshBtn = document.getElementById("refresh");
+  const autoBtn = document.getElementById("auto");
+  const takeBtn = document.getElementById("take");
+  let busy = false, automatic = false, paused = false, timer = null, nextId = 1;
+  const pending = new Map();
+  function rpc(method, params) {
+    const id = nextId++;
+    return new Promise((resolve, reject) => {
+      pending.set(id, {resolve, reject});
+      // Do not queue tool calls without a response from the host.
+      const timeout = setTimeout(() => {
+        if(pending.has(id)) {
+          pending.delete(id);
+          reject(Error("Browser UI request timed out"));
+        }
+      }, 18000);
+      pending.get(id).timeout = timeout;
+      window.parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
+    });
+  }
+  const bridgeReady = typeof window.openai?.callTool === "function"
+    ? Promise.resolve()
+    : rpc("ui/initialize", {
+        protocolVersion:"2026-01-26",
+        appInfo:{name:"CommandCore Live Browser",version:"0.9.0"},
+        appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+      }).then(() => {
+        window.parent.postMessage(
+          {jsonrpc:"2.0",method:"ui/notifications/initialized"}, "*"
+        );
+      });
+  async function callTool(name,args={}) {
+    await bridgeReady;
+    if(typeof window.openai?.callTool === "function") {
+      return window.openai.callTool(name,args);
+    }
+    return rpc("tools/call",{name,arguments:args});
+  }
+  async function openLink(url) {
+    await bridgeReady;
+    if(typeof window.openai?.openExternal === "function")
+      return window.openai.openExternal({href:url});
+    return rpc("ui/open-link",{url});
+  }
+  function status(text) {state.textContent = text;}
+  function hide(text) {
+    screen.hidden = true;
+    screen.removeAttribute("src");
+    message.hidden = false;
+    message.textContent = text;
+  }
+  function show(data) {
+    const png = (data.content || []).find(x => x.type === "image" && x.mimeType === "image/png");
+    if(!png || !/^[A-Za-z0-9+/=]+$/.test(png.data || "")) throw Error("Screenshot not returned");
+    const page = data.structuredContent || {};
+    // Limit text and never render page HTML inside this privileged widget.
+    host.textContent = String(page.title || page.url || "Browser viewport").slice(0,240);
+    screen.src = "data:image/png;base64," + png.data;
+    screen.hidden = false;
+    message.hidden = true;
+    status("Last screenshot updated. Navigation remains controlled by the AI.");
+  }
+  async function tool(name,args={}) {
+    const response = await callTool(name,args);
+    if(response?.isError) {
+      let reason="CommandCore tool unavailable";
+      try {reason = JSON.parse(response.content?.[0]?.text || "{}").message || reason;}catch(_){}
+      throw Error(reason);
+    }
+    return response;
+  }
+  async function refresh(force=false) {
+    if(busy || (paused && !force) || document.hidden) return;
+    if(force) paused=false; // Only the server can actually resume AI control.
+    busy = true; refreshBtn.disabled = true;
+    try {
+      const result = await tool("browser.observe");
+      show(result);
+      paused = false;
+    } catch(err) {
+      if(String(err.message).includes("paused")) {paused = true; stopAuto();}
+      hide(paused ? "Human control is active. AI screenshots are paused." : "Screenshot unavailable. " + err.message);
+      status(err.message);
+    } finally {busy=false;refreshBtn.disabled=false;}
+  }
+  function stopAuto() {
+    automatic=false;
+    if(timer){clearInterval(timer);timer=null;}
+    autoBtn.textContent="Auto-refresh: Off";
+    autoBtn.setAttribute("aria-pressed","false");
+  }
+  autoBtn.addEventListener("click", () => {
+    if(automatic){stopAuto();return;}
+    if(paused){status("Close the human handoff before restarting the viewer.");return;}
+    automatic=true;
+    autoBtn.textContent="Auto-refresh: On";
+    autoBtn.setAttribute("aria-pressed","true");
+    // 4s screenshots, only while the widget is visible.
+    timer=setInterval(() => {if(!document.hidden) refresh();},4000);
+    refresh();
+  });
+  refreshBtn.addEventListener("click",()=>refresh(true));
+  takeBtn.addEventListener("click",async()=>{
+    if(busy || paused) return;
+    busy=true;takeBtn.disabled=true;
+    try {
+      const result = await tool("browser.handoff");
+      const url = result.structuredContent?.handoff_url;
+      if(typeof url !== "string" || !url.startsWith("https://")) throw Error("HTTPS handoff URL unavailable");
+      paused=true;stopAuto();hide("AI control paused. Complete your login in CommandCore's secure handoff page.");
+      status("Open the handoff link in your authenticated CommandCore panel. The AI will wait.");
+      // Only user-initiated external opening. Never embed or expose raw CDP.
+      await openLink(url);
+    } catch(err) {status("Handoff: "+err.message);}
+    finally{busy=false;takeBtn.disabled=false;}
+  });
+  window.addEventListener("message",event=>{
+    if(event.source !== window.parent) return;
+    const msg=event.data;
+    if(!msg || msg.jsonrpc!=="2.0") return;
+    if(msg.id !== undefined && pending.has(msg.id)){
+      const p=pending.get(msg.id);pending.delete(msg.id);clearTimeout(p.timeout);
+      if(msg.error)p.reject(Error(msg.error.message || "MCP UI error"));
+      else p.resolve(msg.result);
+    }
+    if(msg.method==="ui/notifications/tool-result" &&
+       msg.params?.structuredContent?.state==="viewer_ready"){
+      status("Browser ready. Press Refresh to view the current page.");
+      refresh();
+    }
+  });
+  // Wait for the official MCP Apps handshake, or an available native bridge.
+  bridgeReady.then(()=>refresh()).catch(err=>status("MCP Apps unavailable: "+err.message));
+})();
+</script>
+</body>
+</html>
