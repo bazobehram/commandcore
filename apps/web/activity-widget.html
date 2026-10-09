@@ -21,14 +21,28 @@ button{background:#2a3d5b;color:inherit;border:1px solid #617390;border-radius:8
 const by=id=>document.getElementById(id);
 let busy=false,paused=false,number=0;
 const waiting=new Map();
-function callTool(name,args){
-  if(typeof window.openai?.callTool==="function")return window.openai.callTool(name,args);
+function rpc(method,params){
   const id=++number;
   return new Promise((resolve,reject)=>{
     waiting.set(id,{resolve,reject});
-    window.parent.postMessage({jsonrpc:"2.0",id,method:"tools/call",params:{name,arguments:args}},"*");
-    setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(Error("Tool timed out"));}},15000);
+    window.parent.postMessage({jsonrpc:"2.0",id,method,params},"*");
+    setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(Error("Host did not respond"));}},15000);
   });
+}
+const bridgeReady=(typeof window.openai?.callTool==="function")
+  ? Promise.resolve()
+  : rpc("ui/initialize",{
+      protocolVersion:"2026-01-26",
+      appInfo:{name:"CommandCore Live Activity",version:"0.9.0"},
+      appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+    }).then(()=>{
+      window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*");
+    });
+async function callTool(name,args){
+  await bridgeReady;
+  if(typeof window.openai?.callTool==="function")
+    return window.openai.callTool(name,args);
+  return rpc("tools/call",{name,arguments:args});
 }
 window.addEventListener("message",e=>{
   if(e.source!==window.parent||e.data?.jsonrpc!=="2.0")return;
