@@ -21,6 +21,8 @@ READ_ONLY_TOOLS = {
     "desktop.windows",
     "screen.capture",
     "clipboard.read",
+    "activity.feed",
+    "activity.watch",
 }
 STANDARD_TOOLS = READ_ONLY_TOOLS | {
     "fs.write",
@@ -70,6 +72,8 @@ RISK = {
     "devices.list": "low",
     "devices.info": "low",
     "devices.select": "low",
+    "activity.feed": "low",
+    "activity.watch": "low",
     "fs.list": "low",
     "fs.stat": "low",
     "fs.read": "low",

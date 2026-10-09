@@ -17,6 +17,8 @@ def web_asset(name: str) -> Path:
         "panel.css",
         "panel.js",
         "browser-widget.html",
+        "activity-widget.html",
+        "commandcore-widget.html",
         "browser-console.js",
         "browser-console.css",
         "commandcore-logo.webp",

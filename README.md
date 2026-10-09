@@ -155,6 +155,25 @@ It is disabled by default, supports only one active operator, and has **not**
 passed the network-isolation and credential-safety gates for production use.
 Do not use it with logged-in personal accounts yet.
 
+## Unified CommandCore Live Views (experimental)
+
+In an MCP Apps-capable client, `commandcore.watch` opens a single dashboard
+with an Activity tab and, only when opted in, a Browser tab. The Browser tab is
+a read-only screenshot monitor with explicit authenticated handoff. Activity
+monitoring requires `commandcore:read`; browser observation/control requires
+`commandcore:standard` and an enabled self-hosted browser worker. These
+are application widgets, not modifications to ChatGPT's native Thinking pane.
+See [integration acceptance and release gates](docs/LIVE_VIEWS_INTEGRATION.md).
+
+## Live Activity viewer (experimental)
+
+The read-only [Live Activity](docs/LIVE_ACTIVITY.md) timeline displays
+owner-scoped device/tool status, time and duration through `activity.watch`.
+This hides commands, arguments, paths, files and output, and is not the
+ChatGPT native Thinking pane. Use an isolated staging CommandCore endpoint
+to evaluate the combined Browser and Activity widgets; never automatically
+deploy the public source checkout into private production.
+
 ## Quick start
 
 Choose two roles: the **server** hosts the panel, identity/grants, and MCP endpoint;
