@@ -13,6 +13,7 @@ import base64
 import ipaddress
 import json
 import re
+import socket
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -286,6 +287,45 @@ class BrowserGateway:
                 self.sessions.pop(owner, None)
         return {"closed": True}
 
+    async def _cdp_socket_uri(self, session_id: str) -> str:
+        """Reach self-hosted Steel by a private IP, not its Docker DNS alias.
+
+        Steel's CDP WebSocket proxy rejects Host headers containing service
+        names. Resolve the explicitly configured internal service to an IP;
+        reject public destinations. Re-resolve on each call after restarts.
+        """
+        u = urlsplit(self.cdp_url)
+        host = u.hostname or ""
+        if u.scheme != "ws" or not host or u.username or u.password:
+            raise BrowserError("invalid private Steel CDP URL")
+        try:
+            port = u.port or 80
+        except ValueError as exc:
+            raise BrowserError("invalid Steel CDP port") from exc
+        try:
+            addresses = [ipaddress.ip_address(host)]
+        except ValueError:
+            try:
+                resolved = await asyncio.get_running_loop().getaddrinfo(
+                    host, port, family=socket.AF_INET, type=socket.SOCK_STREAM
+                )
+            except OSError as exc:
+                raise BrowserError(
+                    "private Steel CDP address cannot be resolved"
+                ) from exc
+            addresses = [ipaddress.ip_address(row[4][0]) for row in resolved]
+        allowed_ips = [
+            ip
+            for ip in addresses
+            if (ip.is_private or ip.is_loopback)
+            and not (ip.is_multicast or ip.is_unspecified)
+        ]
+        if not allowed_ips:
+            raise BrowserError("Steel CDP endpoint must resolve to a private IP")
+        ip = allowed_ips[0]
+        literal = f"[{ip}]" if ip.version == 6 else str(ip)
+        return f"ws://{literal}:{port}/?sessionId={session_id}"
+
     async def _snapshot(self, entry: OwnedSession) -> dict[str, Any]:
         """Observe after an action without replaying that action on retry.
 
@@ -293,7 +333,7 @@ class BrowserGateway:
         Recover with a new CDP connection and a fresh page attachment instead
         of repeating a click or form submission.
         """
-        uri = self.cdp_url + "/?sessionId=" + entry.id
+        uri = await self._cdp_socket_uri(entry.id)
         for attempt in range(3):
             if attempt:
                 await asyncio.sleep(1.5 * attempt)
@@ -413,7 +453,7 @@ class BrowserGateway:
             elif entry.paused_for_human:
                 raise BrowserError("browser paused for human; wait for explicit resume")
 
-            uri = self.cdp_url + "/?sessionId=" + entry.id
+            uri = await self._cdp_socket_uri(entry.id)
             async with websockets.connect(
                 uri, open_timeout=12, max_size=9_000_000, close_timeout=2
             ) as ws:

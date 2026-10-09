@@ -18,6 +18,41 @@ from commandcore_server.permissions import allowed
 from commandcore_server.tools import TOOL_DEFINITIONS, ToolError, ToolService
 
 
+class SteelInternalAddressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_docker_service_name_resolves_to_private_ip(self):
+        from unittest.mock import patch
+        from socket import AF_INET, SOCK_STREAM
+
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+        )
+
+        async def fake_resolve(host, port, **kwargs):
+            self.assertEqual((host, port), ("steel", 3000))
+            return [(AF_INET, SOCK_STREAM, 6, "", ("172.24.0.2", 3000))]
+
+        class FakeLoop:
+            getaddrinfo = staticmethod(fake_resolve)
+
+        with patch(
+            "commandcore_server.browser_gateway.asyncio.get_running_loop",
+            return_value=FakeLoop(),
+        ):
+            uri = await gateway._cdp_socket_uri("f" * 36)
+        self.assertEqual(uri, "ws://172.24.0.2:3000/?sessionId=" + "f" * 36)
+
+    async def test_public_cdp_ip_is_rejected(self):
+        gateway = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://8.8.8.8:3000",
+            allow_hosts=("example.com",),
+        )
+        with self.assertRaisesRegex(BrowserError, "private IP"):
+            await gateway._cdp_socket_uri("f" * 36)
+
+
 class BrowserSurfaceTests(unittest.TestCase):
     def test_allowlisted_https_only(self):
         self.assertEqual(
