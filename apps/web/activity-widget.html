@@ -53,7 +53,7 @@ function render(list){
   const root=by("feed");root.replaceChildren();
   if(!list.length){const empty=document.createElement("div");empty.id="empty";empty.textContent="No recent operations";root.append(empty);return;}
   for(const x of list){
-    const item=document.createElement("article");item.className=x.status==="running"?"running":x.status==="ok"||x.status==="completed"?"ok":x.status==="error"?"error":"";
+    const item=document.createElement("article");item.className=x.status==="running"?"running":x.status==="ok"||x.status==="completed"?"ok":["error","timeout","agent_disconnected","canceled"].includes(x.status)?"error":"";
     const dot=document.createElement("span");dot.className="dot";
     const middle=document.createElement("div");middle.className="body";
     const title=document.createElement("div");title.className="title";title.textContent=String(x.tool||"operation").slice(0,72);
@@ -66,8 +66,8 @@ function render(list){
     item.append(dot,middle,duration);root.append(item);
   }
 }
-async function refresh(){
-  if(busy||paused||document.hidden)return;busy=true;
+async function refresh(force=false){
+  if(busy||(!force&&paused)||document.hidden)return;busy=true;
   try{
     const res=await callTool("activity.feed",{limit:30});
     if(res?.isError)throw Error("Access denied");
@@ -77,7 +77,7 @@ async function refresh(){
   }catch(e){by("state").textContent="Unavailable";by("updated").textContent=String(e.message).slice(0,80);}
   finally{busy=false;}
 }
-by("refresh").addEventListener("click",refresh);
+by("refresh").addEventListener("click",()=>refresh(true));
 by("pause").addEventListener("click",()=>{paused=!paused;by("pause").textContent=paused?"Resume":"Pause";by("state").textContent=paused?"Paused":"Connecting";if(!paused)refresh();});
 setInterval(refresh,3000);setTimeout(refresh,600);
 })();

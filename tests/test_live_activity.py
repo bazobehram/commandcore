@@ -189,6 +189,8 @@ class ActivityTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertIn("CommandCore", widget["text"])
         self.assertIn("activity.feed", widget["text"])
+        self.assertIn("ui/initialize", widget["text"])
+        self.assertIn("appInfo", widget["text"])
         out = await invoke("tools/call", {"name": "activity.watch", "arguments": {}})
         self.assertEqual(out["structuredContent"]["state"], "monitor_ready")
         self.assertEqual(out["_meta"]["ui"]["resourceUri"], ACTIVITY_UI_URI)
