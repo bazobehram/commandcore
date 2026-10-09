@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CommandCore Activity</title>
+<style>
+:root{color-scheme:dark;font:14px/1.4 system-ui}body{margin:0;background:#101c2d;color:#f0f5ff}
+header{padding:14px 16px;border-bottom:1px solid #41506a;display:flex;justify-content:space-between;align-items:center}
+main{max-height:400px;overflow:auto;padding:0 16px}article{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #304158}
+.dot{height:9px;width:9px;border-radius:50%;background:#93a5bd;margin-top:5px;flex:none}
+.running .dot{background:#60a5fa;animation:pulse 1s infinite}.ok .dot{background:#49b98b}.error .dot{background:#df786b}
+@keyframes pulse{50%{opacity:.2}}.body{flex:1;min-width:0}.title{font-weight:600}.meta{font-size:12px;color:#b5c5db;white-space:normal}
+time{font-size:11px;color:#c5d2e4;white-space:nowrap}footer{font-size:11px;padding:12px 16px;color:#aebbd0}
+button{background:#2a3d5b;color:inherit;border:1px solid #617390;border-radius:8px;padding:5px 9px;cursor:pointer}
+#state{font-size:11px;color:#b4c5de}#empty{padding:30px 0;color:#b4c5de;text-align:center}
+</style></head>
+<body><header><strong>CommandCore · Live Activity</strong><span id="state">Connecting…</span></header>
+<div style="padding:10px 16px;display:flex;gap:8px"><button id="refresh">Refresh</button><button id="pause">Pause</button><span id="updated" style="font-size:11px;color:#aebbd0;align-self:center">Updates every 3 seconds</span></div>
+<main id="feed"><div id="empty">Waiting for operations…</div></main>
+<footer>Only authorized device activity. Arguments, commands, file contents and output are hidden.</footer>
+<script>
+(()=>{
+"use strict";
+const by=id=>document.getElementById(id);
+let busy=false,paused=false,number=0;
+const waiting=new Map();
+function callTool(name,args){
+  if(typeof window.openai?.callTool==="function")return window.openai.callTool(name,args);
+  const id=++number;
+  return new Promise((resolve,reject)=>{
+    waiting.set(id,{resolve,reject});
+    window.parent.postMessage({jsonrpc:"2.0",id,method:"tools/call",params:{name,arguments:args}},"*");
+    setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(Error("Tool timed out"));}},15000);
+  });
+}
+window.addEventListener("message",e=>{
+  if(e.source!==window.parent||e.data?.jsonrpc!=="2.0")return;
+  const p=waiting.get(e.data.id);if(!p)return;waiting.delete(e.data.id);
+  if(e.data.error)p.reject(Error(e.data.error.message||"MCP error"));else p.resolve(e.data.result);
+});
+function render(list){
+  const root=by("feed");root.replaceChildren();
+  if(!list.length){const empty=document.createElement("div");empty.id="empty";empty.textContent="No recent operations";root.append(empty);return;}
+  for(const x of list){
+    const item=document.createElement("article");item.className=x.status==="running"?"running":x.status==="ok"||x.status==="completed"?"ok":x.status==="error"?"error":"";
+    const dot=document.createElement("span");dot.className="dot";
+    const middle=document.createElement("div");middle.className="body";
+    const title=document.createElement("div");title.className="title";title.textContent=String(x.tool||"operation").slice(0,72);
+    const meta=document.createElement("div");meta.className="meta";
+    meta.textContent=String(x.device||"Control plane").slice(0,100)+" · "+String(x.started_at||"").slice(0,19).replace("T"," ");
+    middle.append(title,meta);
+    const duration=document.createElement("time");const ms=x.duration_ms;
+    duration.textContent=(x.status==="running"?"Running":x.status==="ok"?"Done":x.status==="error"?"Failed":x.status)+
+      (Number.isFinite(ms)?" · "+(ms>=1000?(ms/1000).toFixed(1)+"s":ms+"ms"):"");
+    item.append(dot,middle,duration);root.append(item);
+  }
+}
+async function refresh(){
+  if(busy||paused||document.hidden)return;busy=true;
+  try{
+    const res=await callTool("activity.feed",{limit:30});
+    if(res?.isError)throw Error("Access denied");
+    const payload=res?.structuredContent||res?.result?.structuredContent||res;
+    if(!Array.isArray(payload?.events))throw Error("Invalid activity response");
+    render(payload.events);by("state").textContent="Live";by("updated").textContent="Updated "+new Date().toLocaleTimeString();
+  }catch(e){by("state").textContent="Unavailable";by("updated").textContent=String(e.message).slice(0,80);}
+  finally{busy=false;}
+}
+by("refresh").addEventListener("click",refresh);
+by("pause").addEventListener("click",()=>{paused=!paused;by("pause").textContent=paused?"Resume":"Pause";by("state").textContent=paused?"Paused":"Connecting";if(!paused)refresh();});
+setInterval(refresh,3000);setTimeout(refresh,600);
+})();
+</script></body></html>

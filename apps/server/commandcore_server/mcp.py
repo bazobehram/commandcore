@@ -10,6 +10,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .metrics import Metrics
 from .models import Principal
 from .tools import TOOL_DEFINITIONS, ToolError, ToolService
+from .web_assets import web_asset
+
+ACTIVITY_UI_URI = "ui://commandcore/activity-view-v1.html"
+ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
 
 MODERN_PROTOCOL = "2026-07-28"
 LEGACY_PROTOCOLS = {"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
@@ -153,7 +157,20 @@ class MCPHandler:
         self.metrics = metrics
         self.server_version = server_version
         self.scope_challenge = scope_challenge
-        self.definitions = TOOL_DEFINITIONS if definitions is None else definitions
+        raw = TOOL_DEFINITIONS if definitions is None else definitions
+        self.definitions = []
+        for tool in raw:
+            item = dict(tool)
+            if item["name"] == "activity.watch":
+                meta = dict(item.get("_meta") or {})
+                meta["ui"] = {"resourceUri": ACTIVITY_UI_URI}
+                meta["openai/outputTemplate"] = ACTIVITY_UI_URI
+                meta["openai/widgetAccessible"] = True
+                item["_meta"] = meta
+            self.definitions.append(item)
+        self.activity_widget_available = any(
+            item["name"] == "activity.watch" for item in self.definitions
+        )
         self.name = name
         self.icons = icons
 
@@ -191,7 +208,10 @@ class MCPHandler:
         if method == "server/discover":
             result = {
                 "supportedVersions": [MODERN_PROTOCOL],
-                "capabilities": {"tools": {}},
+                "capabilities": {
+                    "tools": {},
+                    **({"resources": {}} if self.activity_widget_available else {}),
+                },
                 "_meta": {
                     "io.modelcontextprotocol/serverInfo": {
                         "name": self.name,
@@ -221,7 +241,10 @@ class MCPHandler:
                 req_id,
                 {
                     "protocolVersion": selected,
-                    "capabilities": {"tools": {}},
+                    "capabilities": {
+                        "tools": {},
+                        **({"resources": {}} if self.activity_widget_available else {}),
+                    },
                     "serverInfo": {
                         "name": self.name,
                         "version": self.server_version,
@@ -237,6 +260,44 @@ class MCPHandler:
 
         if method == "notifications/initialized":
             return JSONResponse({}, status_code=202)
+
+        if method == "resources/list":
+            if not self.activity_widget_available:
+                return _rpc_error(req_id, -32601, "Resources unavailable")
+            result = {
+                "resources": [
+                    {
+                        "uri": ACTIVITY_UI_URI,
+                        "name": "CommandCore Live Activity",
+                        "mimeType": ACTIVITY_UI_MIME,
+                    }
+                ]
+            }
+            return _rpc_result(req_id, _modernize(method, result) if modern else result)
+
+        if method == "resources/read":
+            if not self.activity_widget_available:
+                return _rpc_error(req_id, -32601, "Resources unavailable")
+            if params.get("uri") != ACTIVITY_UI_URI:
+                return _rpc_error(req_id, -32002, "Unknown UI resource")
+            result = {
+                "contents": [
+                    {
+                        "uri": ACTIVITY_UI_URI,
+                        "mimeType": ACTIVITY_UI_MIME,
+                        "text": web_asset("activity-widget.html").read_text(
+                            encoding="utf-8"
+                        ),
+                        "_meta": {
+                            "ui": {
+                                "prefersBorder": True,
+                                "csp": {"connectDomains": [], "resourceDomains": []},
+                            }
+                        },
+                    }
+                ]
+            }
+            return _rpc_result(req_id, _modernize(method, result) if modern else result)
 
         if method == "tools/list":
             result = {"tools": self.definitions}
@@ -283,6 +344,11 @@ class MCPHandler:
             try:
                 payload = await self.tools.call(principal, name, args)
                 result = _tool_result(payload, modern)
+                if name == "activity.watch" and self.activity_widget_available:
+                    meta = dict(result.get("_meta") or {})
+                    meta["ui"] = {"resourceUri": ACTIVITY_UI_URI}
+                    meta["openai/outputTemplate"] = ACTIVITY_UI_URI
+                    result["_meta"] = meta
                 return _rpc_result(
                     req_id,
                     _with_server_info(
