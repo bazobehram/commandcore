@@ -10,6 +10,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .metrics import Metrics
 from .models import Principal
 from .tools import TOOL_DEFINITIONS, ToolError, ToolService
+from .web_assets import web_asset
+
+BROWSER_WIDGET_URI = "ui://commandcore/browser-view-v1.html"
+BROWSER_WIDGET_MIME = "text/html;profile=mcp-app"
 
 MODERN_PROTOCOL = "2026-07-28"
 LEGACY_PROTOCOLS = {"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
@@ -118,11 +122,16 @@ def _with_server_info(
 
 
 def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
+    meta = dict(payload)
+    screenshot = meta.pop("screenshot_base64", None)
+    content: list[dict[str, Any]] = [
+        {"type": "text", "text": json.dumps(meta, ensure_ascii=False, indent=2)}
+    ]
+    if screenshot:
+        content.append({"type": "image", "mimeType": "image/png", "data": screenshot})
     result: dict[str, Any] = {
-        "content": [
-            {"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}
-        ],
-        "structuredContent": payload,
+        "content": content,
+        "structuredContent": meta,
         "isError": False,
     }
     return _modernize("tools/call", result) if modern else result
@@ -153,7 +162,20 @@ class MCPHandler:
         self.metrics = metrics
         self.server_version = server_version
         self.scope_challenge = scope_challenge
-        self.definitions = TOOL_DEFINITIONS if definitions is None else definitions
+        raw_definitions = TOOL_DEFINITIONS if definitions is None else definitions
+        self.definitions = []
+        for source in raw_definitions:
+            entry = dict(source)
+            if entry["name"] == "browser.watch":
+                meta = dict(entry.get("_meta") or {})
+                meta["ui"] = {"resourceUri": BROWSER_WIDGET_URI}
+                meta["openai/outputTemplate"] = BROWSER_WIDGET_URI
+                meta["openai/widgetAccessible"] = True
+                entry["_meta"] = meta
+            self.definitions.append(entry)
+        self.browser_widget_available = any(
+            entry["name"] == "browser.watch" for entry in self.definitions
+        )
         self.name = name
         self.icons = icons
 
@@ -191,7 +213,10 @@ class MCPHandler:
         if method == "server/discover":
             result = {
                 "supportedVersions": [MODERN_PROTOCOL],
-                "capabilities": {"tools": {}},
+                "capabilities": {
+                    "tools": {},
+                    **({"resources": {}} if self.browser_widget_available else {}),
+                },
                 "_meta": {
                     "io.modelcontextprotocol/serverInfo": {
                         "name": self.name,
@@ -221,7 +246,10 @@ class MCPHandler:
                 req_id,
                 {
                     "protocolVersion": selected,
-                    "capabilities": {"tools": {}},
+                    "capabilities": {
+                        "tools": {},
+                        **({"resources": {}} if self.browser_widget_available else {}),
+                    },
                     "serverInfo": {
                         "name": self.name,
                         "version": self.server_version,
@@ -237,6 +265,53 @@ class MCPHandler:
 
         if method == "notifications/initialized":
             return JSONResponse({}, status_code=202)
+
+        if method == "resources/list":
+            if not self.browser_widget_available:
+                return _rpc_error(req_id, -32601, "Resources unavailable")
+            payload = {
+                "resources": [
+                    {
+                        "uri": BROWSER_WIDGET_URI,
+                        "name": "CommandCore Browser Viewer",
+                        "description": "Read-only visual browser monitor for ChatGPT",
+                        "mimeType": BROWSER_WIDGET_MIME,
+                    }
+                ]
+            }
+            return _rpc_result(
+                req_id,
+                _modernize(method, payload) if modern else payload,
+            )
+
+        if method == "resources/read":
+            if not self.browser_widget_available:
+                return _rpc_error(req_id, -32601, "Resources unavailable")
+            if params.get("uri") != BROWSER_WIDGET_URI:
+                return _rpc_error(req_id, -32002, "Unknown UI resource")
+            widget = web_asset("browser-widget.html").read_text(encoding="utf-8")
+            payload = {
+                "contents": [
+                    {
+                        "uri": BROWSER_WIDGET_URI,
+                        "mimeType": BROWSER_WIDGET_MIME,
+                        "text": widget,
+                        "_meta": {
+                            "ui": {
+                                "prefersBorder": True,
+                                "csp": {"connectDomains": [], "resourceDomains": []},
+                            },
+                            "openai/ui": {
+                                "availableDisplayModes": ["inline", "fullscreen"]
+                            },
+                        },
+                    }
+                ]
+            }
+            return _rpc_result(
+                req_id,
+                _modernize(method, payload) if modern else payload,
+            )
 
         if method == "tools/list":
             result = {"tools": self.definitions}
@@ -283,6 +358,11 @@ class MCPHandler:
             try:
                 payload = await self.tools.call(principal, name, args)
                 result = _tool_result(payload, modern)
+                if name == "browser.watch" and self.browser_widget_available:
+                    meta = dict(result.get("_meta") or {})
+                    meta["ui"] = {"resourceUri": BROWSER_WIDGET_URI}
+                    meta["openai/outputTemplate"] = BROWSER_WIDGET_URI
+                    result["_meta"] = meta
                 return _rpc_result(
                     req_id,
                     _with_server_info(

@@ -37,6 +37,16 @@ STANDARD_TOOLS = READ_ONLY_TOOLS | {
     "keyboard.type",
     "keyboard.keypress",
     "clipboard.write",
+    "browser.open",
+    "browser.observe",
+    "browser.move",
+    "browser.click",
+    "browser.type",
+    "browser.keypress",
+    "browser.scroll",
+    "browser.close",
+    "browser.handoff",
+    "browser.watch",
 }
 # Docker daemon access is root-equivalent on typical Linux installations, so
 # Docker tools intentionally require FULL_CONTROL even when a local user happens
@@ -103,6 +113,16 @@ RISK = {
     "keyboard.type": "high",
     "keyboard.keypress": "high",
     "clipboard.write": "high",
+    "browser.open": "medium",
+    "browser.observe": "medium",
+    "browser.move": "medium",
+    "browser.click": "high",
+    "browser.type": "high",
+    "browser.keypress": "high",
+    "browser.scroll": "medium",
+    "browser.close": "medium",
+    "browser.handoff": "medium",
+    "browser.watch": "medium",
 }
 
 

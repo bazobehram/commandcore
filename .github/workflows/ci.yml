@@ -55,6 +55,7 @@ jobs:
           node --check apps/web/panel.js
           node --check apps/web/legacy-admin.js
           node scripts/legacy_admin_smoke.mjs
+          node scripts/browser_widget_smoke.mjs
       - name: Agent-initiated enrollment and reconnect
         if: matrix.python-version == '3.13'
         run: PYTHONPATH=apps/server:agent python scripts/enrollment_smoke.py

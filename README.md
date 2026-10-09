@@ -145,6 +145,16 @@ remaining manual steps.
 of the MCP protocol itself. Agents that do not load it automatically should be
 explicitly told to read it first.
 
+## Experimental visual browser
+
+An optional [visual browser preview](docs/VISUAL_BROWSER_POC.md) explores
+self-hosted Chromium control by screenshot, mouse and keyboard through MCP.
+Compatible MCP Apps clients can request an inline screenshot monitor with
+`browser.watch`; browser operations remain available without the UI.
+It is disabled by default, supports only one active operator, and has **not**
+passed the network-isolation and credential-safety gates for production use.
+Do not use it with logged-in personal accounts yet.
+
 ## Quick start
 
 Choose two roles: the **server** hosts the panel, identity/grants, and MCP endpoint;
