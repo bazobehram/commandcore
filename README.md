@@ -145,6 +145,35 @@ remaining manual steps.
 of the MCP protocol itself. Agents that do not load it automatically should be
 explicitly told to read it first.
 
+## Experimental visual browser
+
+An optional [visual browser preview](docs/VISUAL_BROWSER_POC.md) explores
+self-hosted Chromium control by screenshot, mouse and keyboard through MCP.
+Compatible MCP Apps clients can request an inline screenshot monitor with
+`browser.watch`; browser operations remain available without the UI.
+It is disabled by default, supports only one active operator, and has **not**
+passed the network-isolation and credential-safety gates for production use.
+Do not use it with logged-in personal accounts yet.
+
+## Unified CommandCore Live Views (experimental)
+
+In an MCP Apps-capable client, `commandcore.watch` opens a single dashboard
+with an Activity tab and, only when opted in, a Browser tab. The Browser tab is
+a read-only screenshot monitor with explicit authenticated handoff. Activity
+monitoring requires `commandcore:read`; browser observation/control requires
+`commandcore:standard` and an enabled self-hosted browser worker. These
+are application widgets, not modifications to ChatGPT's native Thinking pane.
+See [integration acceptance and release gates](docs/LIVE_VIEWS_INTEGRATION.md).
+
+## Live Activity viewer (experimental)
+
+The read-only [Live Activity](docs/LIVE_ACTIVITY.md) timeline displays
+owner-scoped device/tool status, time and duration through `activity.watch`.
+This hides commands, arguments, paths, files and output, and is not the
+ChatGPT native Thinking pane. Use an isolated staging CommandCore endpoint
+to evaluate the combined Browser and Activity widgets; never automatically
+deploy the public source checkout into private production.
+
 ## Quick start
 
 Choose two roles: the **server** hosts the panel, identity/grants, and MCP endpoint;

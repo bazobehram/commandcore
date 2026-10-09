@@ -10,6 +10,14 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .metrics import Metrics
 from .models import Principal
 from .tools import TOOL_DEFINITIONS, ToolError, ToolService
+from .web_assets import web_asset
+
+BROWSER_WIDGET_URI = "ui://commandcore/browser-view-v1.html"
+BROWSER_WIDGET_MIME = "text/html;profile=mcp-app"
+ACTIVITY_UI_URI = "ui://commandcore/activity-view-v1.html"
+ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
+COMMANDCORE_UI_URI = "ui://commandcore/live-views-v1.html"
+COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 
 MODERN_PROTOCOL = "2026-07-28"
 LEGACY_PROTOCOLS = {"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
@@ -118,11 +126,16 @@ def _with_server_info(
 
 
 def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
+    meta = dict(payload)
+    screenshot = meta.pop("screenshot_base64", None)
+    content: list[dict[str, Any]] = [
+        {"type": "text", "text": json.dumps(meta, ensure_ascii=False, indent=2)}
+    ]
+    if screenshot:
+        content.append({"type": "image", "mimeType": "image/png", "data": screenshot})
     result: dict[str, Any] = {
-        "content": [
-            {"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}
-        ],
-        "structuredContent": payload,
+        "content": content,
+        "structuredContent": meta,
         "isError": False,
     }
     return _modernize("tools/call", result) if modern else result
@@ -153,7 +166,43 @@ class MCPHandler:
         self.metrics = metrics
         self.server_version = server_version
         self.scope_challenge = scope_challenge
-        self.definitions = TOOL_DEFINITIONS if definitions is None else definitions
+        raw_definitions = TOOL_DEFINITIONS if definitions is None else definitions
+        self.ui_specs = {
+            "browser.watch": (
+                BROWSER_WIDGET_URI,
+                BROWSER_WIDGET_MIME,
+                "browser-widget.html",
+                "CommandCore Live Browser",
+            ),
+            "activity.watch": (
+                ACTIVITY_UI_URI,
+                ACTIVITY_UI_MIME,
+                "activity-widget.html",
+                "CommandCore Live Activity",
+            ),
+            "commandcore.watch": (
+                COMMANDCORE_UI_URI,
+                COMMANDCORE_UI_MIME,
+                "commandcore-widget.html",
+                "CommandCore Live Views",
+            ),
+        }
+        self.definitions = []
+        self.ui_resources = {}
+        for source in raw_definitions:
+            entry = dict(source)
+            spec = self.ui_specs.get(entry["name"])
+            if spec:
+                uri, mime, asset, title = spec
+                meta = dict(entry.get("_meta") or {})
+                meta["ui"] = {"resourceUri": uri}
+                meta["openai/outputTemplate"] = uri
+                meta["openai/widgetAccessible"] = True
+                entry["_meta"] = meta
+                self.ui_resources[uri] = spec
+            self.definitions.append(entry)
+        self.browser_widget_available = BROWSER_WIDGET_URI in self.ui_resources
+        self.activity_widget_available = ACTIVITY_UI_URI in self.ui_resources
         self.name = name
         self.icons = icons
 
@@ -191,7 +240,10 @@ class MCPHandler:
         if method == "server/discover":
             result = {
                 "supportedVersions": [MODERN_PROTOCOL],
-                "capabilities": {"tools": {}},
+                "capabilities": {
+                    "tools": {},
+                    **({"resources": {}} if self.ui_resources else {}),
+                },
                 "_meta": {
                     "io.modelcontextprotocol/serverInfo": {
                         "name": self.name,
@@ -221,7 +273,10 @@ class MCPHandler:
                 req_id,
                 {
                     "protocolVersion": selected,
-                    "capabilities": {"tools": {}},
+                    "capabilities": {
+                        "tools": {},
+                        **({"resources": {}} if self.ui_resources else {}),
+                    },
                     "serverInfo": {
                         "name": self.name,
                         "version": self.server_version,
@@ -237,6 +292,44 @@ class MCPHandler:
 
         if method == "notifications/initialized":
             return JSONResponse({}, status_code=202)
+
+        if method == "resources/list":
+            if not self.ui_resources:
+                return _rpc_error(req_id, -32601, "Resources unavailable")
+            result = {
+                "resources": [
+                    {"uri": uri, "name": spec[3], "mimeType": spec[1]}
+                    for uri, spec in self.ui_resources.items()
+                ]
+            }
+            return _rpc_result(req_id, _modernize(method, result) if modern else result)
+
+        if method == "resources/read":
+            if not self.ui_resources:
+                return _rpc_error(req_id, -32601, "Resources unavailable")
+            spec = self.ui_resources.get(params.get("uri"))
+            if spec is None:
+                return _rpc_error(req_id, -32002, "Unknown UI resource")
+            uri, mime, asset, _title = spec
+            result = {
+                "contents": [
+                    {
+                        "uri": uri,
+                        "mimeType": mime,
+                        "text": web_asset(asset).read_text(encoding="utf-8"),
+                        "_meta": {
+                            "ui": {
+                                "prefersBorder": True,
+                                "csp": {"connectDomains": [], "resourceDomains": []},
+                            },
+                            "openai/ui": {
+                                "availableDisplayModes": ["inline", "fullscreen"]
+                            },
+                        },
+                    }
+                ]
+            }
+            return _rpc_result(req_id, _modernize(method, result) if modern else result)
 
         if method == "tools/list":
             result = {"tools": self.definitions}
@@ -283,6 +376,12 @@ class MCPHandler:
             try:
                 payload = await self.tools.call(principal, name, args)
                 result = _tool_result(payload, modern)
+                spec = self.ui_specs.get(name)
+                if spec and spec[0] in self.ui_resources:
+                    meta = dict(result.get("_meta") or {})
+                    meta["ui"] = {"resourceUri": spec[0]}
+                    meta["openai/outputTemplate"] = spec[0]
+                    result["_meta"] = meta
                 return _rpc_result(
                     req_id,
                     _with_server_info(

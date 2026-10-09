@@ -96,7 +96,8 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
     assert {
         t["name"] for t in json.loads(response.body)["result"]["tools"]
     } == CORE_TOOL_NAMES
-    assert len(CORE_TOOL_NAMES) == 26
+    assert len(CORE_TOOL_NAMES) == 29
+    assert {"activity.feed", "activity.watch"} <= CORE_TOOL_NAMES
     response = await handler.handle(
         await request_for("tools/call", {"name": "system.reboot", "arguments": {}}),
         Principal("owner"),

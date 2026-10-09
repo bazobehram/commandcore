@@ -10,6 +10,8 @@ from .db import Database
 from .models import Principal
 from .permissions import allowed, risk_class
 from .activity import argument_summary, source
+from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
+from .live_activity import LiveActivity
 
 
 def _device_ref_schema() -> dict[str, Any]:
@@ -637,6 +639,137 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
+# Optional server-local visual browser; disabled unless explicitly configured.
+# No device Agent or FULL_CONTROL permission is required for these tools.
+TOOL_DEFINITIONS.extend(
+    [
+        {
+            "name": "browser.open",
+            "title": "Open visual browser page",
+            "description": "Open an allowlisted HTTPS page in an isolated, owner-scoped browser session. Returns a screenshot and untrusted page text.",
+            "inputSchema": _obj(
+                {"url": {"type": "string", "minLength": 12, "maxLength": 2048}}, ["url"]
+            ),
+        },
+        {
+            "name": "browser.observe",
+            "title": "Observe visual browser",
+            "description": "Capture the current browser viewport and read limited visible text; webpage text is untrusted.",
+            "inputSchema": _obj({}),
+        },
+        {
+            "name": "browser.move",
+            "title": "Move browser mouse",
+            "description": "Move the browser mouse to viewport coordinates and observe the result.",
+            "inputSchema": _obj(
+                {
+                    "x": {"type": "integer", "minimum": 0, "maximum": 1280},
+                    "y": {"type": "integer", "minimum": 0, "maximum": 800},
+                },
+                ["x", "y"],
+            ),
+        },
+        {
+            "name": "browser.click",
+            "title": "Click visual browser",
+            "description": "Click a point in the browser viewport; can activate website actions.",
+            "inputSchema": _obj(
+                {
+                    "x": {"type": "integer", "minimum": 0, "maximum": 1280},
+                    "y": {"type": "integer", "minimum": 0, "maximum": 800},
+                },
+                ["x", "y"],
+            ),
+        },
+        {
+            "name": "browser.type",
+            "title": "Type in visual browser",
+            "description": "Type text into the focused web input, potentially submitting sensitive information to the current website.",
+            "inputSchema": _obj(
+                {"text": {"type": "string", "minLength": 1, "maxLength": 2000}},
+                ["text"],
+            ),
+        },
+        {
+            "name": "browser.keypress",
+            "title": "Press browser key",
+            "description": "Send a supported key (Enter, Tab, Escape, Backspace or Arrow key) to the focused page.",
+            "inputSchema": _obj(
+                {
+                    "key": {
+                        "type": "string",
+                        "enum": [
+                            "Enter",
+                            "Tab",
+                            "Escape",
+                            "Backspace",
+                            "ArrowUp",
+                            "ArrowDown",
+                            "ArrowLeft",
+                            "ArrowRight",
+                        ],
+                    }
+                },
+                ["key"],
+            ),
+        },
+        {
+            "name": "browser.scroll",
+            "title": "Scroll visual browser",
+            "description": "Scroll the browser viewport in pixels.",
+            "inputSchema": _obj(
+                {"delta_y": {"type": "integer", "minimum": -1000, "maximum": 1000}},
+                ["delta_y"],
+            ),
+        },
+        {
+            "name": "browser.watch",
+            "title": "Show browser in chat",
+            "description": "After browser.open, render a read-only interactive visual browser viewer inside ChatGPT. The user can optionally refresh screenshots, enable low-rate auto-refresh or request authenticated human control.",
+            "inputSchema": _obj({}),
+        },
+        {
+            "name": "browser.handoff",
+            "title": "Pause browser for human control",
+            "description": "Pause AI browser actions and issue a 10-minute authenticated operator console link; a matching CommandCore account must sign in to use it.",
+            "inputSchema": _obj({}),
+        },
+        {
+            "name": "browser.close",
+            "title": "Close visual browser session",
+            "description": "Release only this authenticated caller's browser session.",
+            "inputSchema": _obj({}),
+        },
+    ]
+)
+
+# Read-only owner-scoped CommandCore tool activity, not a browser screen.
+ACTIVITY_TOOL_NAMES = {"activity.feed", "activity.watch", "commandcore.watch"}
+TOOL_DEFINITIONS.extend(
+    [
+        {
+            "name": "activity.feed",
+            "title": "Read live CommandCore activity",
+            "description": "Owner-scoped running and recent operations, devices, duration and status. No command text, arguments or output.",
+            "inputSchema": _obj(
+                {"limit": {"type": "integer", "minimum": 1, "maximum": 50}}
+            ),
+        },
+        {
+            "name": "activity.watch",
+            "title": "Show CommandCore activity in chat",
+            "description": "Read-only Live Activity panel for compatible MCP Apps clients.",
+            "inputSchema": _obj({}),
+        },
+        {
+            "name": "commandcore.watch",
+            "title": "Show CommandCore Live Views",
+            "description": "Combined, read-only MCP Apps dashboard with Live Activity and optional Live Browser monitor. Browser control still requires its own OAuth scope.",
+            "inputSchema": _obj({}),
+        },
+    ]
+)
+
 # MCP annotations are UX/risk hints for clients, never security boundaries.
 _READ_ONLY_HINTS = {
     "auth.whoami",
@@ -646,6 +779,9 @@ _READ_ONLY_HINTS = {
     "fs.stat",
     "fs.read",
     "fs.search",
+    "activity.feed",
+    "activity.watch",
+    "commandcore.watch",
     "process.list",
     "process.status",
     "process.output",
@@ -680,6 +816,9 @@ _DESTRUCTIVE_HINTS = {
     "agent.update.stage",
     "agent.update.activate",
     "agent.update.rollback",
+    "browser.click",
+    "browser.type",
+    "browser.keypress",
 }
 _OPEN_WORLD_HINTS = {
     "shell.exec",
@@ -692,7 +831,7 @@ _OPEN_WORLD_HINTS = {
 }
 for _tool in TOOL_DEFINITIONS:
     _name = _tool["name"]
-    _read_only = _name in _READ_ONLY_HINTS
+    _read_only = _name in _READ_ONLY_HINTS or _name == "browser.watch"
     _tool["annotations"] = {
         "title": _tool.get("title", _name),
         "readOnlyHint": _read_only,
@@ -756,11 +895,19 @@ CORE_TOOL_NAMES = {
     "git.run",
     "transfer.upload",
     "transfer.download",
+    "activity.feed",
+    "activity.watch",
+    "commandcore.watch",
 }
 CORE_TOOL_DEFINITIONS = [
     tool for tool in TOOL_DEFINITIONS if tool["name"] in CORE_TOOL_NAMES
 ]
-DEVICE_TOOLS = TOOL_NAMES - {"devices.list", "devices.info", "devices.select"}
+DEVICE_TOOLS = (
+    TOOL_NAMES
+    - {"devices.list", "devices.info", "devices.select"}
+    - BROWSER_TOOL_NAMES
+    - ACTIVITY_TOOL_NAMES
+)
 DEFAULT_TIMEOUT_MS = {
     "services.manage": 120000,
     "package.install": 3600000,
@@ -787,10 +934,18 @@ class ToolError(Exception):
 
 
 class ToolService:
-    def __init__(self, db: Database, agents: AgentManager, selection_ttl_seconds: int):
+    def __init__(
+        self,
+        db: Database,
+        agents: AgentManager,
+        selection_ttl_seconds: int,
+        browser: BrowserGateway | None = None,
+    ):
         self.db = db
         self.agents = agents
         self.selection_ttl_seconds = selection_ttl_seconds
+        self.browser = browser
+        self.live_activity = LiveActivity()
 
     @staticmethod
     def _profile_rank(profile: str) -> int:
@@ -874,8 +1029,28 @@ class ToolService:
         source_token = source.set(
             {"auth_kind": principal.auth_kind, "client_id": principal.client_id}
         )
+        live_key: str | None = None
         try:
             self._require_scope(principal, name)
+            if name == "activity.feed":
+                limit = args.get("limit", 25)
+                if type(limit) is not int or not 1 <= limit <= 50:
+                    raise ToolError("invalid_limit")
+                return self.live_activity.snapshot(
+                    principal,
+                    self.db.recent_audit(principal.subject, limit=100),
+                    self.db.list_accessible_devices(principal.subject),
+                    limit,
+                )
+            if name == "activity.watch":
+                return {"state": "monitor_ready", "mode": "read_only"}
+            if name == "commandcore.watch":
+                return {
+                    "state": "dashboard_ready",
+                    "mode": "read_only",
+                    "browser_available": self.browser is not None,
+                }
+            live_key = self.live_activity.begin(principal, name)
             if name == "auth.whoami":
                 devices = self.db.list_accessible_devices(principal.subject)
                 rank = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
@@ -929,6 +1104,7 @@ class ToolService:
                     )
                 except (KeyError, ValueError, PermissionError) as exc:
                     raise ToolError(str(exc).strip("'")) from exc
+                self.live_activity.set_device(live_key, device["id"])
                 sel = self.db.create_selection(
                     principal.subject, device["id"], self.selection_ttl_seconds
                 )
@@ -946,10 +1122,25 @@ class ToolService:
                 device = self._resolve_device(principal, args)
                 return {"device": device}
 
+            if name in BROWSER_TOOL_NAMES:
+                if self.browser is None:
+                    raise ToolError("browser_disabled")
+                try:
+                    return await self.browser.call(
+                        subject=principal.subject,
+                        issuer=principal.issuer,
+                        client_id=principal.client_id,
+                        name=name,
+                        args=args,
+                    )
+                except BrowserError as exc:
+                    raise ToolError("browser_error", str(exc)) from exc
+
             if name not in DEVICE_TOOLS:
                 raise ToolError("unknown_tool")
             device = self._resolve_device(principal, args)
             device_id = device["id"]
+            self.live_activity.set_device(live_key, device_id)
             if device["status"] != "online":
                 raise ToolError("device_offline")
             access_max = str(
@@ -1046,15 +1237,21 @@ class ToolService:
         finally:
             source.reset(source_token)
             duration_ms = int((time.perf_counter() - started) * 1000)
-            self.db.add_audit(
-                user_id=principal.subject,
-                client_id=principal.client_id,
-                device_id=device_id,
-                tool=name if name in TOOL_NAMES else "unknown_tool",
-                args_summary=json.dumps(argument_summary(args), separators=(",", ":")),
-                execution_id=execution_id,
-                status=status,
-                duration_ms=duration_ms,
-                exit_code=exit_code,
-                risk_class=risk_class(name),
-            )
+            try:
+                if name != "activity.feed":
+                    self.db.add_audit(
+                        user_id=principal.subject,
+                        client_id=principal.client_id,
+                        device_id=device_id,
+                        tool=name if name in TOOL_NAMES else "unknown_tool",
+                        args_summary=json.dumps(
+                            argument_summary(args), separators=(",", ":")
+                        ),
+                        execution_id=execution_id,
+                        status=status,
+                        duration_ms=duration_ms,
+                        exit_code=exit_code,
+                        risk_class=risk_class(name),
+                    )
+            finally:
+                self.live_activity.finish(live_key)

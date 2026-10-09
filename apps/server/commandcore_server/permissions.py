@@ -21,6 +21,8 @@ READ_ONLY_TOOLS = {
     "desktop.windows",
     "screen.capture",
     "clipboard.read",
+    "activity.feed",
+    "activity.watch",
 }
 STANDARD_TOOLS = READ_ONLY_TOOLS | {
     "fs.write",
@@ -37,6 +39,16 @@ STANDARD_TOOLS = READ_ONLY_TOOLS | {
     "keyboard.type",
     "keyboard.keypress",
     "clipboard.write",
+    "browser.open",
+    "browser.observe",
+    "browser.move",
+    "browser.click",
+    "browser.type",
+    "browser.keypress",
+    "browser.scroll",
+    "browser.close",
+    "browser.handoff",
+    "browser.watch",
 }
 # Docker daemon access is root-equivalent on typical Linux installations, so
 # Docker tools intentionally require FULL_CONTROL even when a local user happens
@@ -60,6 +72,8 @@ RISK = {
     "devices.list": "low",
     "devices.info": "low",
     "devices.select": "low",
+    "activity.feed": "low",
+    "activity.watch": "low",
     "fs.list": "low",
     "fs.stat": "low",
     "fs.read": "low",
@@ -103,6 +117,16 @@ RISK = {
     "keyboard.type": "high",
     "keyboard.keypress": "high",
     "clipboard.write": "high",
+    "browser.open": "medium",
+    "browser.observe": "medium",
+    "browser.move": "medium",
+    "browser.click": "high",
+    "browser.type": "high",
+    "browser.keypress": "high",
+    "browser.scroll": "medium",
+    "browser.close": "medium",
+    "browser.handoff": "medium",
+    "browser.watch": "medium",
 }
 
 

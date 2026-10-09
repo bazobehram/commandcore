@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>CommandCore — Live Views</title>
+<style>
+:root{font:14px/1.45 system-ui,-apple-system,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:#111a2b;color:#f2f6ff}
+header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #39475e}
+header strong{font-weight:700}#status{margin-left:auto;color:#acbdd6;font-size:12px}
+nav{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid #39475e}
+button{font:inherit;color:inherit;background:#293d5c;border:1px solid #60748e;border-radius:8px;padding:7px 10px;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}button[aria-selected=true]{background:#3a587d}
+[hidden]{display:none!important}.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px}
+.meta{font-size:12px;color:#b4c3d7}#activity-list{max-height:370px;overflow:auto;padding:0 14px}
+article{display:flex;gap:10px;border-top:1px solid #34435a;padding:11px 0}
+.dot{width:9px;height:9px;border-radius:50%;background:#879bb6;flex-shrink:0;margin-top:5px}
+.running .dot{background:#66b2ff}.ok .dot{background:#4cc89b}.error .dot{background:#ec837b}
+.details{flex:1;min-width:0}.tool{font-weight:600}.sub{font-size:12px;color:#b4c3d7;overflow-wrap:anywhere}
+.elapsed{font-size:12px;color:#b4c3d7;white-space:nowrap}
+#browser-host{padding:0 14px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#browser-stage{min-height:180px;background:#1b273c;position:relative;display:flex;align-items:center;justify-content:center}
+#browser-screen{display:block;width:100%;max-height:52vh;object-fit:contain}
+#browser-message{padding:28px 16px;color:#bbcae0;text-align:center}
+#browser-note{padding:0 14px 12px}.footer{padding:10px 14px;font-size:11px;color:#9dafc7}
+#handoff{margin-left:auto}#activity-empty{text-align:center;padding:24px 0;color:#b3c1d5}
+@media(prefers-color-scheme:light){
+ body{background:#f5f8ff;color:#1a2a40}
+ header,nav,article{border-color:#d9e1ec}
+ button{background:#e2eaf5;color:#223550}
+ button[aria-selected=true]{background:#b9d7fb}
+ .meta,#status,.sub,.elapsed,.footer{color:#586a80}
+ #browser-stage{background:#e3ebf5}
+}
+</style>
+</head>
+<body>
+<header><strong>CommandCore · Live Views</strong><span id="status">Connecting…</span></header>
+<nav role="tablist" aria-label="Live views">
+<button id="activity-tab" role="tab" type="button" aria-selected="true">Activity</button>
+<button id="browser-tab" role="tab" type="button" aria-selected="false" hidden>Browser</button>
+</nav>
+<section id="activity-view" role="tabpanel">
+<div class="controls">
+<button id="activity-refresh" type="button">Refresh</button>
+<button id="activity-pause" type="button">Pause</button>
+<span class="meta" id="activity-status">Updates every 3 seconds while visible</span>
+</div>
+<div id="activity-list"><div id="activity-empty">Waiting for device operations…</div></div>
+<div class="footer">Device/tool, status and duration only. Commands, paths, arguments and output are never shown.</div>
+</section>
+<section id="browser-view" role="tabpanel" hidden>
+<div class="controls">
+<button id="browser-refresh" type="button">Refresh screenshot</button>
+<button id="browser-auto" type="button" aria-pressed="false">Auto: Off</button>
+<button id="handoff" type="button">Take control</button>
+</div>
+<div class="meta" id="browser-host">No browser screenshot yet</div>
+<div id="browser-stage">
+<img id="browser-screen" alt="Remote browser screenshot" hidden>
+<div id="browser-message">Open a browser session through CommandCore to view it here.</div>
+</div>
+<div class="meta" id="browser-note">Read-only preview. Human control requires an authenticated handoff.</div>
+<div class="footer">Browser screenshots are fetched only while this tab is visible; auto-refresh is opt-in.</div>
+</section>
+<script>
+(()=>{
+"use strict";
+const el=id=>document.getElementById(id);
+let seq=0,activeTab="activity",activityPaused=false,browserAuto=false;
+let browserPaused=false,activityBusy=false,browserBusy=false,browserAvailable=false;
+const pending=new Map();
+function rpc(method,params){
+  const id=++seq;
+  return new Promise((resolve,reject)=>{
+    pending.set(id,{resolve,reject});
+    const timeout=setTimeout(()=>{
+      if(pending.has(id)){pending.delete(id);reject(Error("CommandCore host timeout"));}
+    },18000);
+    pending.get(id).timeout=timeout;
+    window.parent.postMessage({jsonrpc:"2.0",id,method,params},"*");
+  });
+}
+window.addEventListener("message",event=>{
+  if(event.source!==window.parent||event.data?.jsonrpc!=="2.0")return;
+  const msg=event.data;
+  const p=pending.get(msg.id);if(!p)return;
+  pending.delete(msg.id);clearTimeout(p.timeout);
+  if(msg.error)p.reject(Error(msg.error.message||"Host rejected request"));
+  else p.resolve(msg.result);
+});
+const ready=typeof window.openai?.callTool==="function"?Promise.resolve():
+  rpc("ui/initialize",{
+    protocolVersion:"2026-01-26",
+    appInfo:{name:"CommandCore Live Views",version:"0.9.0"},
+    appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+  }).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"));
+async function tool(name,args={}){
+  await ready;
+  const response=typeof window.openai?.callTool==="function"
+    ?await window.openai.callTool(name,args)
+    :await rpc("tools/call",{name,arguments:args});
+  if(response?.isError)throw Error(
+    String(response.structuredContent?.message||response.structuredContent?.error||"CommandCore tool denied").slice(0,160)
+  );
+  return response;
+}
+async function openLink(url){
+  await ready;
+  if(typeof window.openai?.openExternal==="function")return window.openai.openExternal({href:url});
+  return rpc("ui/open-link",{url});
+}
+function renderActivity(items){
+  const root=el("activity-list");root.replaceChildren();
+  if(!items.length){const empty=document.createElement("div");empty.id="activity-empty";empty.textContent="No recent operations";root.append(empty);return;}
+  for(const item of items){
+    const row=document.createElement("article");
+    row.className=item.status==="running"?"running":
+      ["ok","completed"].includes(item.status)?"ok":
+      ["error","timeout","canceled","agent_disconnected"].includes(item.status)?"error":"";
+    const dot=document.createElement("span");dot.className="dot";
+    const info=document.createElement("div");info.className="details";
+    const title=document.createElement("div");title.className="tool";
+    title.textContent=String(item.tool||"operation").slice(0,64);
+    const sub=document.createElement("div");sub.className="sub";
+    sub.textContent=String(item.device||"Control plane").slice(0,100)+" · "+String(item.started_at||"").slice(0,19).replace("T"," ");
+    info.append(title,sub);
+    const elapsed=document.createElement("span");elapsed.className="elapsed";
+    const ms=item.duration_ms;
+    elapsed.textContent=String(item.status||"").slice(0,20)+(Number.isFinite(ms)?" · "+(ms>=1000?(ms/1000).toFixed(1)+"s":ms+"ms"):"");
+    row.append(dot,info,elapsed);root.append(row);
+  }
+}
+async function refreshActivity(force=false){
+  if(document.hidden||activeTab!=="activity"||activityBusy||(!force&&activityPaused))return;
+  activityBusy=true;
+  try{
+    const data=await tool("activity.feed",{limit:30});
+    const events=data.structuredContent?.events;
+    if(!Array.isArray(events))throw Error("Invalid activity feed");
+    renderActivity(events);
+    el("activity-status").textContent="Updated "+new Date().toLocaleTimeString();
+    el("status").textContent="Live";
+  }catch(e){el("activity-status").textContent=String(e.message).slice(0,120);el("status").textContent="Unavailable";}
+  finally{activityBusy=false;}
+}
+function showScreenshot(response){
+  const img=(response.content||[]).find(x=>x.type==="image"&&x.mimeType==="image/png");
+  if(!img||!/^[A-Za-z0-9+/=]+$/.test(img.data||""))throw Error("Missing PNG");
+  const meta=response.structuredContent||{};
+  el("browser-host").textContent=String(meta.title||meta.url||"Browser viewport").slice(0,240);
+  el("browser-screen").src="data:image/png;base64,"+img.data;
+  el("browser-screen").hidden=false;
+  el("browser-message").hidden=true;
+  el("browser-note").textContent="Screenshot updated. The AI still controls navigation.";
+}
+function hideScreenshot(message){
+  el("browser-screen").hidden=true;el("browser-screen").removeAttribute("src");
+  el("browser-message").hidden=false;el("browser-message").textContent=message;
+}
+async function refreshBrowser(force=false){
+  if(document.hidden||activeTab!=="browser"||browserBusy||(!force&&browserPaused))return;
+  if(force)browserPaused=false;
+  browserBusy=true;
+  try{
+    const image=await tool("browser.observe");
+    showScreenshot(image);browserPaused=false;el("status").textContent="Live";
+  }catch(e){
+    if(String(e.message).includes("paused")){browserPaused=true;browserAuto=false;el("browser-auto").textContent="Auto: Off";}
+    hideScreenshot("Screenshot unavailable. "+String(e.message).slice(0,120));
+    el("browser-note").textContent=String(e.message).slice(0,120);
+  }finally{browserBusy=false;}
+}
+function switchTo(which){
+  if(which==="browser"&&!browserAvailable)return;
+  activeTab=which;
+  for(const id of ["activity","browser"]){
+    el(id+"-view").hidden=id!==which;
+    el(id+"-tab").setAttribute("aria-selected",String(id===which));
+  }
+  if(which==="activity")refreshActivity(true);
+  else refreshBrowser(true);
+}
+el("activity-tab").addEventListener("click",()=>switchTo("activity"));
+el("browser-tab").addEventListener("click",()=>switchTo("browser"));
+el("activity-refresh").addEventListener("click",()=>refreshActivity(true));
+el("activity-pause").addEventListener("click",()=>{
+  activityPaused=!activityPaused;
+  el("activity-pause").textContent=activityPaused?"Resume":"Pause";
+  if(!activityPaused)refreshActivity(true);
+});
+el("browser-refresh").addEventListener("click",()=>refreshBrowser(true));
+el("browser-auto").addEventListener("click",()=>{
+  if(browserPaused){el("browser-note").textContent="Resume the human handoff in CommandCore first.";return;}
+  browserAuto=!browserAuto;
+  el("browser-auto").textContent=browserAuto?"Auto: On":"Auto: Off";
+  el("browser-auto").setAttribute("aria-pressed",String(browserAuto));
+  if(browserAuto)refreshBrowser();
+});
+el("handoff").addEventListener("click",async()=>{
+  if(browserBusy||browserPaused)return;
+  browserBusy=true;el("handoff").disabled=true;
+  try{
+    const result=await tool("browser.handoff");
+    const url=result.structuredContent?.handoff_url;
+    if(typeof url!=="string"||!url.startsWith("https://"))throw Error("HTTPS handoff URL unavailable");
+    browserPaused=true;browserAuto=false;
+    el("browser-auto").textContent="Auto: Off";
+    el("browser-auto").setAttribute("aria-pressed","false");
+    hideScreenshot("AI control paused. Use CommandCore's authenticated handoff.");
+    await openLink(url);
+  }catch(e){el("browser-note").textContent="Handoff: "+String(e.message).slice(0,120);}
+  finally{browserBusy=false;el("handoff").disabled=false;}
+});
+setInterval(()=>{if(!document.hidden&&activeTab==="activity")refreshActivity();},3000);
+setInterval(()=>{if(!document.hidden&&activeTab==="browser"&&browserAuto)refreshBrowser();},4000);
+ready.then(async()=>{
+  const response=await tool("commandcore.watch");
+  browserAvailable=response.structuredContent?.browser_available===true;
+  el("browser-tab").hidden=!browserAvailable;
+  el("status").textContent="Connected";
+  await refreshActivity(true);
+}).catch(e=>{el("status").textContent="Unavailable";el("activity-status").textContent=String(e.message).slice(0,100);});
+})();
+</script>
+</body>
+</html>
