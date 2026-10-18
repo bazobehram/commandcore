@@ -1,0 +1,817 @@
+{
+  "devices.info": {
+    "description": "Get one device. Pass device_id, selection_id, or device_ref (exact display name/hostname).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "device_ref": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Device information"
+  },
+  "devices.list": {
+    "description": "List devices authorized for the current owner, including online status, immutable ID, platform, capabilities, and permission profile.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "title": "List devices"
+  },
+  "devices.select": {
+    "description": "Resolve an exact device ID/name/hostname and mint a logical selection handle. MCP 2026 is stateless, so pass returned selection_id to later tools. Explicit device_id always overrides selection_id.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device": {
+          "description": "Immutable ID, exact display name, or exact hostname.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device"
+      ],
+      "type": "object"
+    },
+    "title": "Select device"
+  },
+  "fs.copy": {
+    "description": "Copy a file or directory on one device.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "destination"
+      ],
+      "type": "object"
+    },
+    "title": "Copy file"
+  },
+  "fs.delete": {
+    "description": "Delete a file or directory. Recursive directory deletion requires recursive=true.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "recursive": {
+          "type": "boolean"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "title": "Delete path"
+  },
+  "fs.list": {
+    "description": "List directory entries on a selected device.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 5000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "title": "List directory"
+  },
+  "fs.move": {
+    "description": "Move or rename a file or directory on one device.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "destination"
+      ],
+      "type": "object"
+    },
+    "title": "Move file"
+  },
+  "fs.patch": {
+    "description": "Apply exact search/replace patches to a UTF-8 regular file. Symlinks are refused unless follow_symlinks=true. Fails if a search block is missing or ambiguous unless replace_all=true.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "follow_symlinks": {
+          "type": "boolean"
+        },
+        "patches": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "replace": {
+                "type": "string"
+              },
+              "replace_all": {
+                "type": "boolean"
+              },
+              "search": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "search",
+              "replace"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "patches"
+      ],
+      "type": "object"
+    },
+    "title": "Patch text file"
+  },
+  "fs.read": {
+    "description": "Read a bounded portion of a text or binary file. Binary data is returned base64 when encoding=base64.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "encoding": {
+          "enum": [
+            "text",
+            "base64"
+          ],
+          "type": "string"
+        },
+        "length": {
+          "maximum": 1048576,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "title": "Read file"
+  },
+  "fs.search": {
+    "description": "Search names and optionally UTF-8 text below a root without following symlink directories. On capable Agents, exclude_dirs skips exact directory names (for example target, node_modules, .git); max_file_bytes bounds text scanning. Defaults preserve existing searches; .gitignore is not interpreted.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "boolean"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "exclude_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "max_file_bytes": {
+          "maximum": 2097152,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_results": {
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        },
+        "regex": {
+          "type": "boolean"
+        },
+        "root": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "query"
+      ],
+      "type": "object"
+    },
+    "title": "Search files"
+  },
+  "fs.stat": {
+    "description": "Return file or directory metadata.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "title": "File status"
+  },
+  "fs.write": {
+    "description": "Write or append text/base64 data using the Agent user's OS privileges. Requires STANDARD or FULL_CONTROL.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "create_parents": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "encoding": {
+          "enum": [
+            "text",
+            "base64"
+          ],
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "rewrite",
+            "append"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "data"
+      ],
+      "type": "object"
+    },
+    "title": "Write file"
+  },
+  "git.diff": {
+    "description": "Return a bounded Git diff. Supports staged and path filters.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "max_bytes": {
+          "maximum": 1048576,
+          "minimum": 1024,
+          "type": "integer"
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "staged": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "title": "Git diff"
+  },
+  "git.log": {
+    "description": "Return recent Git commits as structured records.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "title": "Git log"
+  },
+  "git.run": {
+    "description": "Run a Git subcommand using argv (no shell interpolation). Requires STANDARD or FULL_CONTROL.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "maximum": 600000,
+          "minimum": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repo",
+        "args"
+      ],
+      "type": "object"
+    },
+    "title": "Run Git"
+  },
+  "git.status": {
+    "description": "Return porcelain Git status for a repository without invoking a shell.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "title": "Git status"
+  },
+  "process.list": {
+    "description": "List OS processes visible to the Agent user. filter is a case-insensitive literal substring, never regex. On capable Linux Agents, contains_any is OR over literals; pid, parent_pid, uid and Linux single-letter state narrow with AND. CPU time is cumulative seconds, RSS is resident host memory, not GPU memory.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "contains_any": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "filter": {
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 2000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "parent_pid": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pid": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "R",
+            "S",
+            "D",
+            "Z",
+            "T",
+            "t",
+            "I"
+          ],
+          "type": "string"
+        },
+        "uid": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "List processes"
+  },
+  "process.output": {
+    "description": "Read captured stdout/stderr for a process started by CommandCore. Existing external OS processes generally do not expose historical stdout and return output_unavailable. New native Linux captures expose per-stream retained/observed bytes, truncated, complete and last_output_at. Legacy truncation is unknown; incomplete capture cannot prove complete output.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 1048576,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "process_id": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id"
+      ],
+      "type": "object"
+    },
+    "title": "Process output"
+  },
+  "process.start": {
+    "description": "Start a shell command and return a process_id. Native Linux Rust Agents retain bounded job output and reconcile jobs across transport and Agent restarts. Legacy Agents retain output while running. Host reboot ends jobs; it does not automatically resume them.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "title": "Start managed process"
+  },
+  "process.status": {
+    "description": "Inspect a CommandCore-managed process_id or an OS pid.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "pid": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "process_id": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Process status"
+  },
+  "process.stop": {
+    "description": "Terminate a CommandCore-managed process; may also signal an OS pid when permitted.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "force": {
+          "type": "boolean"
+        },
+        "pid": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "process_id": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Stop process"
+  },
+  "shell.exec": {
+    "description": "Execute a command through the device's default shell. This is intentionally powerful and requires STANDARD/FULL_CONTROL. Output is bounded and audited; secrets should not be passed in command text.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "maximum": 3600000,
+          "minimum": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "title": "Execute shell command"
+  },
+  "system.info": {
+    "description": "Return hostname, OS, architecture, Python/Agent versions, boot time and hardware summary.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "System information"
+  },
+  "system.metrics": {
+    "description": "Return current CPU, memory, disk and load metrics. Capable Linux Agents also return health with contextual pressure conditions, Linux PSI, and optional accelerator utilization/memory plus compute PIDs. Unsupported metrics are explicit; unified/GPU memory can overlap host RAM. No automatic cleanup or termination.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "System metrics"
+  },
+  "transfer.download": {
+    "description": "Download a bounded file as base64. For large files a future streaming transfer capability will replace this Phase 1 mechanism.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "title": "Download file"
+  },
+  "transfer.upload": {
+    "description": "Upload base64 data to a file on the selected device. Phase 1 payloads are bounded by server configuration.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "data_base64": {
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "data_base64"
+      ],
+      "type": "object"
+    },
+    "title": "Upload file"
+  }
+}
