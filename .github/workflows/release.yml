@@ -1,0 +1,59 @@
+name: CommandCore Release Candidate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commandcore-release
+  cancel-in-progress: false
+
+jobs:
+  release-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements-dev.txt
+      - name: MCP contract compatibility
+        run: python scripts/mcp_release_gate.py
+      - name: Python tests
+        run: make test
+      - name: Package exact verified Git commit
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          git archive --format=zip --prefix=commandcore-release/ HEAD > "$RUNNER_TEMP/commandcore-release.zip"
+          python scripts/release_check.py "$RUNNER_TEMP/commandcore-release.zip"
+          (cd "$RUNNER_TEMP" && sha256sum commandcore-release.zip > commandcore-release.sha256)
+          printf 'git_sha=%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/release-manifest.txt"
+          printf 'mcp_contract_sha256=%s\n' "$(sha256sum docs/mcp-tool-contract.json | cut -d ' ' -f 1)" >> "$RUNNER_TEMP/release-manifest.txt"
+      - name: Verify packaged artifact before upload
+        run: |
+          python scripts/verify_release_artifact.py \
+            --archive "$RUNNER_TEMP/commandcore-release.zip" \
+            --checksum "$RUNNER_TEMP/commandcore-release.sha256" \
+            --manifest "$RUNNER_TEMP/release-manifest.txt" \
+            --expected-git-sha "$GITHUB_SHA"
+      - name: Publish candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: commandcore-release-candidate
+          path: |
+            ${{ runner.temp }}/commandcore-release.zip
+            ${{ runner.temp }}/commandcore-release.sha256
+            ${{ runner.temp }}/release-manifest.txt
+          retention-days: 14
+
+  # Deliberately no production deploy job until a trusted runner,
+  # verified live compose topology and protected environment are installed.
