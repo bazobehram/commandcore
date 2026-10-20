@@ -1,0 +1,67 @@
+name: Publish verified native Agent
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Actions run ID containing the externally signed release bundle
+        required: true
+        type: string
+      version:
+        description: Version in signed manifest (e.g. 0.9.0-rc8)
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: agent-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography
+      - name: Retrieve externally signed release bundle
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          name: native-agent-signed-release
+          path: signed-release
+          github-token: ${{ github.token }}
+      - name: Verify signed release before publication
+        env:
+          RELEASE_PUBLIC_KEY: ${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          test -n "$RELEASE_PUBLIC_KEY"
+          python scripts/verify_native_agent_release.py signed-release \
+            --public-key-b64 "$RELEASE_PUBLIC_KEY" \
+            --version "$RELEASE_VERSION" --repo "$REPOSITORY" \
+            --architecture "$(python -c 'import json; m=json.load(open("signed-release/manifest.signed.json")); print(m["artifacts"][0]["architecture"])')"
+      - name: Publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="agent-v${RELEASE_VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite"
+            exit 1
+          fi
+          mapfile -t ASSETS < <(python - <<'PYASSETS'
+          import json
+          from pathlib import Path
+          root=Path('signed-release')
+          manifest=json.loads((root/'manifest.signed.json').read_text())
+          for item in manifest['artifacts']:
+              print(root/item['filename'])
+          print(root/'manifest.signed.json')
+          PYASSETS
+          )
+          gh release create "$TAG" "${ASSETS[@]}" \
+            --title "CommandCore Agent ${RELEASE_VERSION}" \
+            --notes "Signed native Linux agent prerelease." --prerelease
