@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
 import time
+from typing import Any
 
 from .agent_gateway import AgentManager
 from .db import Database, local_max_profile

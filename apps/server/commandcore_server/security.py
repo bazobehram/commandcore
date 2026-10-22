@@ -29,7 +29,7 @@ CONTENT_KEYS = {"data", "data_base64", "command", "patches", "env"}
 
 def _content_summary(key: str, value: Any) -> Any:
     if key == "env" and isinstance(value, dict):
-        return {"redacted": True, "keys": sorted(str(k) for k in value.keys())[:50]}
+        return {"redacted": True, "keys": sorted(str(k) for k in value)[:50]}
     if key == "patches" and isinstance(value, list):
         return {"redacted": True, "count": len(value)}
     if isinstance(value, str):
@@ -60,7 +60,7 @@ def verify_device_signature(
         signature = base64.b64decode(signature_b64, validate=True)
         Ed25519PublicKey.from_public_bytes(public_bytes).verify(signature, message)
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
         return False
 
 
@@ -116,7 +116,7 @@ def verify_panel_session(*, secret: str, token: str) -> str | None:
             return None
         subject = payload.get("sub")
         return str(subject) if subject else None
-    except Exception:
+    except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
         return None
 
 

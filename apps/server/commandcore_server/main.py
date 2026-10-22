@@ -23,8 +23,14 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .agent_gateway import AgentManager
-from .web_assets import web_asset, web_page
-from .auth import ALL_SCOPES, ADMIN_SCOPE, OAuthSettings, OAuthVerifier, scope_allows
+from .auth import ADMIN_SCOPE, ALL_SCOPES, OAuthSettings, OAuthVerifier, scope_allows
+from .browser_console import install_browser_console
+from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
+from .browser_viewer import install_browser_viewer
+from .browser_worker_attestation import WorkerAttestationVerifier
+from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
+from .browser_worker_binding import BrowserWorkerBinding
+from .browser_worker_pool import OwnerBrowserWorkerPool
 from .config import Settings
 from .db import Database
 from .fleet import FleetRolloutService
@@ -37,14 +43,84 @@ from .security import (
     issue_panel_session,
     panel_session_claims,
 )
-from .tools import CORE_TOOL_DEFINITIONS, ToolError, ToolService
+from .tools import CORE_TOOL_DEFINITIONS, TOOL_DEFINITIONS, ToolError, ToolService
+from .web_assets import web_asset, web_page
 
 settings = Settings()
 settings.validate()
 db = Database(settings.db_path)
 metrics = Metrics()
 agents = AgentManager(db, metrics, settings.max_job_output_bytes)
-tools = ToolService(db, agents, settings.selection_ttl_seconds)
+browser = (
+    OwnerBrowserWorkerPool.from_manifest(
+        settings.browser_worker_manifest,
+        settings.browser_worker_binding_key,
+        settings.browser_allow_hosts,
+        settings.public_base_url,
+        attestation=(
+            (
+                Ed25519WorkerAttestationVerifier(
+                    settings.browser_attestation_path,
+                    settings.browser_attestation_public_key,
+                )
+                if settings.browser_attestation_public_key
+                else WorkerAttestationVerifier(
+                    settings.browser_attestation_path,
+                    settings.browser_attestation_key,
+                )
+            )
+            if settings.oauth_enabled
+            else None
+        ),
+    )
+    if settings.browser_enabled and settings.browser_worker_manifest
+    else (
+        BrowserGateway(
+            base_url=settings.browser_steel_url,
+            cdp_url=settings.browser_cdp_url,
+            allow_hosts=settings.browser_allow_hosts,
+            public_base_url=settings.public_base_url,
+            egress_proxy_url=settings.browser_egress_proxy_url,
+            worker_binding=(
+                BrowserWorkerBinding(
+                    settings.browser_worker_binding_path,
+                    settings.browser_worker_id,
+                    settings.browser_worker_binding_key,
+                    require_claimed=settings.oauth_enabled,
+                )
+                if settings.browser_worker_binding_path
+                else None
+            ),
+        )
+        if settings.browser_enabled
+        else None
+    )
+)
+tools = ToolService(
+    db,
+    agents,
+    settings.selection_ttl_seconds,
+    browser=browser,
+    public_base_url=settings.public_base_url,
+)
+visible_tools = (
+    TOOL_DEFINITIONS
+    if browser
+    else [t for t in TOOL_DEFINITIONS if t["name"] not in BROWSER_TOOL_NAMES]
+)
+visible_core_tools = CORE_TOOL_DEFINITIONS + (
+    [
+        {
+            **t,
+            "description": "CommandCore canonical endpoint /mcp/core. "
+            + t["description"],
+        }
+        for t in TOOL_DEFINITIONS
+        if t["name"] in BROWSER_TOOL_NAMES
+    ]
+    if browser
+    else []
+)
 fleet = FleetRolloutService(db, agents)
 branding_icons = [
     {
@@ -70,6 +146,7 @@ mcp = MCPHandler(
         if settings.oauth_enabled
         else None
     ),
+    definitions=visible_tools,
     icons=branding_icons,
 )
 oauth_verifier = (
@@ -89,7 +166,7 @@ core_mcp = MCPHandler(
     metrics,
     __version__,
     mcp.scope_challenge,
-    definitions=CORE_TOOL_DEFINITIONS,
+    definitions=visible_core_tools,
     name="CommandCore Core",
     icons=branding_icons,
 )
@@ -212,7 +289,7 @@ def _authenticate_bearer(
     if oauth_verifier is not None:
         try:
             return oauth_verifier.verify(token)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
             return None
     return None
 
@@ -262,9 +339,9 @@ def require_principal(
         headers={
             "WWW-Authenticate": _www_authenticate(
                 error="invalid_token" if invalid_token else None,
-                error_description="The access token is invalid or expired"
-                if invalid_token
-                else None,
+                error_description=(
+                    "The access token is invalid or expired" if invalid_token else None
+                ),
             )
         },
     )
@@ -378,6 +455,10 @@ enrollment_service = install_routes(
     web_asset("onboarding.html"),
     agents,
 )
+
+
+install_browser_console(app, browser, require_principal, _same_origin, db)
+install_browser_viewer(app, browser, require_principal, _same_origin, db)
 
 
 @app.get("/.well-known/oauth-protected-resource")
@@ -1122,9 +1203,11 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
             headers={
                 "WWW-Authenticate": _www_authenticate(
                     error="invalid_token" if token is not None else None,
-                    error_description="The access token is invalid or expired"
-                    if token is not None
-                    else None,
+                    error_description=(
+                        "The access token is invalid or expired"
+                        if token is not None
+                        else None
+                    ),
                 )
             },
         )
@@ -1134,14 +1217,103 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
 
 @app.get("/api/devices/{device_id}/activity")
 async def device_activity(
-    device_id: str, principal: Principal = Depends(require_principal)
+    device_id: str,
+    details: bool = False,
+    principal: Principal = Depends(require_principal),
 ):
     _accessible_device(principal, device_id, allow_revoked=False)
     if not scope_allows(
         principal.scopes, "commandcore:read"
     ) and principal.auth_kind not in {"bootstrap-bearer", "panel-cookie"}:
         raise HTTPException(403, "read scope required")
-    return {"events": db.list_activity(device_id)}
+    if details:
+        _require_activity_details(principal)
+        return _account_activity_response(principal, device_id=device_id, details=True)
+    return JSONResponse(
+        {"events": db.list_activity(device_id, owner_id=principal.subject)},
+        headers={"Cache-Control": "no-store", "Vary": "Cookie, Authorization"},
+    )
+
+
+@app.get("/api/activity")
+async def account_activity(
+    details: bool = False, principal: Principal = Depends(require_principal)
+):
+    if not scope_allows(
+        principal.scopes, "commandcore:read"
+    ) and principal.auth_kind not in {"bootstrap-bearer", "panel-cookie"}:
+        raise HTTPException(403, "read scope required")
+    if details:
+        _require_activity_details(principal)
+    return _account_activity_response(principal, details=details)
+
+
+def _require_activity_details(principal: Principal) -> None:
+    if not (
+        principal.auth_kind == "oauth2-panel"
+        and principal.issuer
+        and scope_allows(principal.scopes, "commandcore:standard")
+    ):
+        raise HTTPException(
+            403, "Activity details require verified STANDARD panel identity"
+        )
+
+
+def _account_activity_response(
+    principal: Principal, *, device_id: str | None = None, details: bool = False
+):
+    devices = [
+        d
+        for d in db.list_accessible_devices(principal.subject)
+        if not d.get("revoked_at") and (device_id is None or d["id"] == device_id)
+    ]
+    feed = tools.live_activity.snapshot(
+        principal,
+        db.recent_audit(principal.subject, limit=100),
+        devices,
+        50,
+        stable_summary=True,
+        panel_details=details,
+        device_filter=device_id,
+    )
+    durable = {}
+    for device in devices:
+        for event in db.list_activity(
+            device["id"], limit=50, owner_id=principal.subject
+        ):
+            durable[event["execution_id"]] = event
+    for row in feed["events"]:
+        event = durable.pop(row.get("execution_id"), None)
+        if event is None:
+            for execution_id, candidate in list(durable.items()):
+                if candidate.get("source", {}).get("operation_id") == row["id"]:
+                    event = durable.pop(execution_id)
+                    break
+        if event is not None:
+            # Keep the live operation key stable through completion.
+            row.update(
+                {k: v for k, v in event.items() if k not in {"id", "started_at"}}
+            )
+    for event in durable.values():
+        event = dict(event)
+        event["id"] = event["execution_id"]
+        feed["events"].append(event)
+    from datetime import datetime
+
+    def epoch(row):
+        value = row.get("started_at")
+        if isinstance(value, (float, int)):
+            return value
+        try:
+            return datetime.fromisoformat(str(value)).timestamp()
+        except (ValueError, TypeError):
+            return 0
+
+    feed["events"].sort(key=epoch, reverse=True)
+    feed["events"] = feed["events"][:100]
+    return JSONResponse(
+        feed, headers={"Cache-Control": "no-store", "Vary": "Cookie, Authorization"}
+    )
 
 
 @app.post("/recovery/mcp", include_in_schema=False)
