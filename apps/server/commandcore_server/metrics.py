@@ -25,7 +25,6 @@ class Metrics:
                 for name, value in sorted(self._counters.items())
             ]
         lines.append(
-            "# TYPE commandcore_agents_online gauge\ncommandcore_agents_online %d"
-            % online_agents
+            f"# TYPE commandcore_agents_online gauge\ncommandcore_agents_online {online_agents}"
         )
         return "\n".join(lines) + "\n"

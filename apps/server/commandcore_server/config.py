@@ -88,7 +88,87 @@ class Settings:
         "COMMANDCORE_AGENT_UPDATE_MANIFEST_URL", ""
     ).strip()
 
+    browser_enabled: bool = _bool("COMMANDCORE_BROWSER_ENABLED", False)
+    browser_steel_url: str = os.getenv(
+        "COMMANDCORE_BROWSER_STEEL_URL", "http://steel:3000"
+    ).strip()
+    browser_cdp_url: str = os.getenv(
+        "COMMANDCORE_BROWSER_CDP_URL", "ws://steel:3000"
+    ).strip()
+    browser_egress_proxy_url: str = os.getenv(
+        "COMMANDCORE_BROWSER_EGRESS_PROXY_URL", "http://browser-boundary:8080"
+    ).strip()
+    browser_attestation_path: str = os.getenv(
+        "COMMANDCORE_BROWSER_ATTESTATION_PATH", ""
+    ).strip()
+    browser_attestation_key: str = os.getenv("COMMANDCORE_BROWSER_ATTESTATION_KEY", "")
+    # Production option: verification-only Ed25519 public key. The signing
+    # seed must stay in the separate Docker-privileged operator service.
+    browser_attestation_public_key: str = os.getenv(
+        "COMMANDCORE_BROWSER_ATTESTATION_PUBLIC_KEY", ""
+    ).strip()
+    browser_worker_manifest: str = os.getenv(
+        "COMMANDCORE_BROWSER_WORKER_MANIFEST", ""
+    ).strip()
+    browser_worker_binding_path: str = os.getenv(
+        "COMMANDCORE_BROWSER_WORKER_BINDING_PATH", ""
+    ).strip()
+    browser_worker_id: str = os.getenv("COMMANDCORE_BROWSER_WORKER_ID", "").strip()
+    browser_worker_binding_key: str = os.getenv(
+        "COMMANDCORE_BROWSER_WORKER_BINDING_KEY", ""
+    )
+    browser_allow_hosts: tuple[str, ...] = tuple(
+        host.strip().lower()
+        for host in os.getenv("COMMANDCORE_BROWSER_ALLOW_HOSTS", "").split(",")
+        if host.strip()
+    )
+
     def validate(self) -> None:
+        if self.browser_enabled and self.oauth_enabled:
+            if (
+                not self.browser_worker_manifest
+                or not self.browser_attestation_path
+                or not (
+                    self.browser_attestation_public_key
+                    or len(self.browser_attestation_key) >= 32
+                )
+            ):
+                raise RuntimeError(
+                    "OAuth Browser requires a pre-provisioned multi-worker"
+                    " manifest and short-lived physical attestation"
+                )
+            if self.browser_attestation_public_key and self.browser_attestation_key:
+                raise RuntimeError(
+                    "Choose Ed25519 PUBLIC verification OR legacy HMAC key"
+                )
+            if self.browser_attestation_public_key:
+                from .browser_worker_attestation_ed25519 import _decode_key
+
+                _decode_key(self.browser_attestation_public_key)
+            if len(self.browser_worker_binding_key) < 32 or (
+                not self.browser_worker_manifest
+                and (not self.browser_worker_binding_path or not self.browser_worker_id)
+            ):
+                raise RuntimeError(
+                    "OAuth Browser requires a pre-provisioned persistent worker"
+                    " manifest or binding path, stable worker ID and binding key"
+                )
+            if self.browser_worker_manifest and (
+                self.browser_worker_binding_path or self.browser_worker_id
+            ):
+                raise RuntimeError(
+                    "Use worker manifest OR single worker settings, not both"
+                )
+        if self.browser_enabled and not self.browser_allow_hosts:
+            raise RuntimeError(
+                "Browser enabled but COMMANDCORE_BROWSER_ALLOW_HOSTS is empty"
+            )
+        if self.browser_enabled and (
+            not self.browser_steel_url.startswith("http://")
+            or not self.browser_cdp_url.startswith("ws://")
+            or not self.browser_egress_proxy_url.startswith("http://")
+        ):
+            raise RuntimeError("Browser backend and egress proxy must use private URLs")
         if len(self.api_token) < 32:
             raise RuntimeError(
                 "COMMANDCORE_API_TOKEN is required and must be at least 32 characters"
