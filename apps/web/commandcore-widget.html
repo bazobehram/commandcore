@@ -587,7 +587,7 @@ body[data-cc-activity-stale=true] #feed{opacity:.6}
 <section id="browser-stage" aria-label="Browser viewport"><img id="browser-screen" alt="Current remote Chromium screenshot" hidden>
 <div id="browser-message">Ask ChatGPT to open a website to begin.</div><div id="cc-browser-loading" hidden aria-hidden="true"><span class="cc-loading-screen"></span><span class="cc-loading-screen shorter"></span><span class="cc-loading-screen small"></span></div><div id="browser-pointer" hidden aria-hidden="true"></div></section>
 <div class="controls browser-toolbar"><button id="browser-refresh" type="button">Refresh now</button>
-<button id="browser-auto" type="button" aria-pressed="true">Pause live view</button><button id="browser-monitor" type="button" disabled>Open separate monitor ↗</button><button id="browser-take" type="button">Take control</button><button id="browser-continue" type="button" hidden>Continue in ChatGPT →</button></div>
+<button id="browser-auto" type="button" aria-pressed="true">Pause live view</button><button id="browser-stop" type="button" disabled title="Close only this conversation’s Browser. This does not stop the ChatGPT response.">Stop Browser</button><button id="browser-monitor" type="button" disabled>Open separate monitor ↗</button><button id="browser-take" type="button">Take control</button><button id="browser-continue" type="button" hidden>Continue in ChatGPT →</button></div>
 <div id="browser-state" role="status" aria-live="polite">Connecting to your owner-bound Browser…</div>
 <div id="browser-trail" aria-label="Recent AI browser actions"></div>
 </section><div id="cc-release-footer" aria-label="CommandCore UI version">UI 0.12.0 · build 1</div><script id="workspace-runtime">(()=>{"use strict";
@@ -678,6 +678,11 @@ const by=id=>document.getElementById(id);
 let busy=false,paused=false,number=0,sessionRef="",sessionAvailable=false,refreshPending=false;
 let previousActivityIds=null,lastHiddenActivityPoll=0,lastFailureAt=0,attributionBlocked=false,lastRenewedRef=null;
 const scopeKey=()=>JSON.stringify([scopeEl.value,deviceEl.value,sessionRef]);
+function setActivityState(label,className){
+ window.__ccActivityBadge={label,className};
+ if(!by("activity-pane").hidden){by("state").textContent=label;by("state").className=className;}
+ window.dispatchEvent(new Event("commandcore:activity-state"));
+}
 let deviceChoices=[],scopeTouched=false;
 const scopeEl=by("activity-scope"),deviceEl=by("activity-device");
 function initScope(fromHost){
@@ -730,6 +735,7 @@ deviceEl.addEventListener("change",()=>{rowCache.clear();refresh(true);});
 const waiting=new Map(),expanded=new Set(),collapsedRunning=new Set();
 const rowCache=new Map();
 window.addEventListener("commandcore:viewer-changed",()=>{
+ setActivityState("Connecting","cc-badge-unavailable");
  previousActivityIds=null;rowCache.clear();expanded.clear();collapsedRunning.clear();
  by("feed").replaceChildren(text("div","Connecting to this conversation…","empty"));
  by("metric-device").textContent="—";by("metric-count").textContent="—";
@@ -747,23 +753,41 @@ function rpc(method,params){
 }
 window.addEventListener("message",e=>{
  if(e.source!==window.parent||e.data?.jsonrpc!=="2.0")return;
+ if(typeof e.data.method==="string"||(!("result" in e.data)&&!("error" in e.data)))return;
  const p=waiting.get(e.data.id);if(!p)return;
  waiting.delete(e.data.id);clearTimeout(p.timer);
- if(e.data.error)p.reject(Error(e.data.error.message||"MCP error"));
+ if(e.data.error)p.reject(Object.assign(Error(e.data.error.message||"MCP error"),{code:e.data.error.code}));
  else p.resolve(e.data.result);
 });
-const bridgeReady=(typeof window.openai?.callTool==="function")
- ?Promise.resolve()
- :rpc("ui/initialize",{
-  protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
-  appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
- }).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"));
+let bridgeMode="mcp";
+const bridgeReady=rpc("ui/initialize",{
+ protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
+ appCapabilities:{}
+}).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized",params:{}},"*")).catch(error=>{
+ // A native alias does not establish MCP Apps readiness. Only an explicit
+ // unsupported-method response permits the legacy native bridge fallback.
+ if(error.code===-32601&&typeof window.openai?.callTool==="function"){bridgeMode="native";return;}
+ throw error;
+});
 window.__ccBridgeReady=bridgeReady;window.__ccCallTool=callTool;window.__ccAcceptViewer=initScope;
 async function callTool(name,args){
- await bridgeReady;
- return typeof window.openai?.callTool==="function"
-  ?window.openai.callTool(name,args)
-  :rpc("tools/call",{name,arguments:args});
+ // Some hosts leave callTool pending when a mounted card loses its bridge.
+ // Bound both initialization and the request so viewers can leave loading,
+ // unlock their controls and offer recovery. Never retry a mutation here.
+ let deadline,expired=false;
+ const hostTimeout=()=>Object.assign(Error("CommandCore connection timed out. Refresh to reconnect."),{code:"host_timeout"});
+ try{
+  return await Promise.race([
+   (async()=>{
+    await bridgeReady;
+    if(expired)throw hostTimeout();
+    return bridgeMode==="native"
+     ?window.openai.callTool(name,args)
+     :rpc("tools/call",{name,arguments:args});
+   })(),
+   new Promise((_,reject)=>{deadline=setTimeout(()=>{expired=true;reject(hostTimeout());},15000);})
+  ]);
+ }finally{clearTimeout(deadline);}
 }
 const statusText=x=>({
  running:"Running",started:"Started",ok:"Completed",completed:"Completed",
@@ -972,8 +996,7 @@ async function refresh(force=false){
   previousActivityIds=currentIds;
   document.body.dataset.ccActivityStale="false";attributionBlocked=false;by("activity-reconnect").hidden=true;
   if(!activityHidden || !by("activity-pane").hidden)render(payload.events);
-  by("state").textContent=paused?"Paused":"Live";
-  by("state").className=paused?"cc-badge-running":"cc-badge-live";
+  setActivityState(paused?"Paused":"Live",paused?"cc-badge-running":"cc-badge-live");
   by("updated").textContent="Updated "+new Date().toLocaleTimeString();
   by("scope-hint").textContent=view==="conversation"?"This conversation · attributed MCP operations":view==="device"?"Filtered to selected authorized device":"All authorized account activity";
  }catch(e){
@@ -988,8 +1011,7 @@ async function refresh(force=false){
   }
   if(by("metric-running")?.textContent==="Connecting…")by("metric-running").textContent="Unavailable";
   document.body.dataset.ccActivityStale="true";
-  by("state").textContent="Unavailable";
-  by("state").className="cc-badge-unavailable";
+  setActivityState("Unavailable","cc-badge-unavailable");
   by("updated").textContent=attributionBlocked?"Conversation verification unavailable · no other conversation was loaded.":by("feed").querySelector("article")?"Connection lost · previous snapshot. Refresh to reconnect.":"Not connected · no activity snapshot loaded.";
  }finally{busy=false;if(refreshPending){refreshPending=false;refresh(true);}}
 }
@@ -1053,8 +1075,7 @@ by("refresh").addEventListener("click",reconnect);
 by("pause").addEventListener("click",()=>{
  paused=!paused;
  by("pause").textContent=paused?"Resume":"Pause";
- by("state").textContent=paused?"Paused":"Connecting";
- by("state").className="cc-badge-running";
+ setActivityState(paused?"Paused":"Connecting","cc-badge-running");
  if(!paused)refresh(true);
 });
 window.addEventListener("commandcore:activity-active",()=>{if(!deviceChoices.length)loadDevices();refresh(true);});
@@ -1101,6 +1122,8 @@ setTimeout(refresh,450);
   }
   const refreshBtn = document.getElementById("browser-refresh");
   const autoBtn = document.getElementById("browser-auto");
+  const stopBtn = document.getElementById("browser-stop");
+  let stopSession="",closing=false;
   const takeBtn = document.getElementById("browser-take");
   const monitorBtn = document.getElementById("browser-monitor");
   const continueBtn = document.getElementById("browser-continue");
@@ -1135,6 +1158,7 @@ setTimeout(refresh,450);
   let browserSequenceInitialized=false,lastHiddenBrowserPoll=0,viewerGeneration=0;
   window.addEventListener("commandcore:viewer-changed",()=>{
     viewerGeneration++;sequence=-1;cursor=null;recentActions=[];trailSignature="";
+    stopSession="";closing=false;stopBtn.disabled=true;stopBtn.textContent="Stop Browser";
     browserSequenceInitialized=false;browserEmpty=false;browserUnavailable=false;
     paused=false;firstFramePending=false;recoveryState("agent");monitorUrl=null;monitorBtn.disabled=true;
     continueBtn.hidden=true;takeBtn.disabled=true;trail.replaceChildren();
@@ -1165,18 +1189,14 @@ setTimeout(refresh,450);
     : rpc("ui/initialize", {
         protocolVersion:"2026-01-26",
         appInfo:{name:"CommandCore Live Browser",version:"0.9.0"},
-        appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+        appCapabilities:{}
       }).then(() => {
         window.parent.postMessage(
           {jsonrpc:"2.0",method:"ui/notifications/initialized"}, "*"
         );
       });
   async function callTool(name,args={}) {
-    await bridgeReady;
-    if(typeof window.openai?.callTool === "function") {
-      return window.openai.callTool(name,args);
-    }
-    return rpc("tools/call",{name,arguments:args});
+    return window.__ccCallTool(name,args);
   }
   async function openLink(url) {
     await bridgeReady;
@@ -1254,6 +1274,9 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
   window.addEventListener("resize", updatePointer);
   function show(data) {
     const page = data.structuredContent || {};
+    stopSession=typeof page.session_id==="string"&&page.session_id.length<=128?page.session_id:"";
+    stopBtn.disabled=closing||!stopSession||page.state!=="agent";
+    stopBtn.title=page.state==="awaiting_human"?"Resume AI control in the private window before stopping this Browser.":"Close only this conversation’s Browser. This does not stop the ChatGPT response.";
     setMonitorLink(data);
     if(typeof page.session_id==="string"&&page.session_id){
       window.dispatchEvent(new CustomEvent("commandcore:browser-session",{detail:{session_id:page.session_id}}));
@@ -1355,7 +1378,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
     return response;
   }
   async function refresh(force=false) {
-    if(busy||document.hidden||document.body.dataset.ccOperationCompact==="true"||window.__ccWorkspaceSuspended||document.body.dataset.ccMinimized==="true")return;
+    if(busy||closing||document.hidden||document.body.dataset.ccOperationCompact==="true"||window.__ccWorkspaceSuspended||document.body.dataset.ccMinimized==="true")return;
     const browserHidden=document.getElementById("browser-pane").hidden;
     if(browserHidden && !force && Date.now()-lastHiddenBrowserPoll<3500)return;
     if(browserHidden)lastHiddenBrowserPoll=Date.now();
@@ -1390,6 +1413,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
         document.getElementById("browser-control").textContent="No session";
         host.textContent="No active browser session";
         document.getElementById("browser-url").textContent="—";
+        stopSession="";stopBtn.disabled=true;
         takeBtn.disabled=true;continueBtn.hidden=true;
         trail.replaceChildren();
         hide("Ask ChatGPT to open a website to begin a new browser session.");
@@ -1397,14 +1421,43 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
         return;
       }
       browserEmpty=false;browserUnavailable=true;firstFramePending=false;lastUnavailablePoll=Date.now();
+      stopSession="";stopBtn.disabled=true;
       recoveryState("unavailable");
       if(/another conversation owns|browser_conversation_in_use/i.test(String(err?.message||""))){recoveryTitle.textContent="Browser active in another conversation";recoveryDesc.textContent=safeError(err);}
       document.getElementById("browser-session").textContent="Unavailable";
       host.textContent="Browser status unavailable";
       document.getElementById("browser-url").textContent="—";
       hide(safeError(err));status(safeError(err));takeBtn.disabled=true;document.getElementById("browser-control").textContent="Unavailable";
-    } finally {busy=false;refreshBtn.disabled=false;if(handoffPending){handoffPending=false;requestHandoff();}}
+    } finally {busy=false;refreshBtn.disabled=closing;if(handoffPending){handoffPending=false;requestHandoff();}}
   }
+  stopBtn.addEventListener("click",async()=>{
+    if(closing||stopBtn.disabled||!stopSession)return;
+    const expected=stopSession,current=++viewerGeneration;
+    closing=true;handoffPending=false;stopBtn.disabled=true;stopBtn.textContent="Stopping…";refreshBtn.disabled=true;takeBtn.disabled=true;
+    document.getElementById("browser-control").textContent="Stopping";
+    hide("Stopping this conversation’s Browser…");status("Stop requested · waiting for server confirmation");
+    try{
+      const result=await tool("browser.close",{session_ref:window.__ccBrowserViewerRef||"",expected_session_id:expected});
+      if(current!==viewerGeneration)return;
+      const payload=result?.structuredContent||result?.result?.structuredContent||result;
+      if(typeof payload?.closed!=="boolean")throw Error("Browser stop was not confirmed");
+      stopSession="";sequence=-1;cursor=null;browserEmpty=true;browserUnavailable=false;lastEmptyPoll=Date.now();
+      host.textContent=payload.closed?"Browser stopped":"No active browser session";
+      document.getElementById("browser-url").textContent="—";
+      document.getElementById("browser-control").textContent=payload.closed?"Stopped":"No session";
+      continueBtn.hidden=true;trail.replaceChildren();
+      hide(payload.closed?"This Browser is closed. Ask ChatGPT to open a website to start again.":"No Browser was closed. This session was already absent.");
+      status(payload.closed?"Browser stopped · server confirmed closure":"No active Browser · no closure performed");
+    }catch(_){
+      if(current!==viewerGeneration)return;
+      stopSession="";browserUnavailable=true;lastUnavailablePoll=Date.now();
+      recoveryState("unavailable");host.textContent="Browser stop unconfirmed";
+      document.getElementById("browser-control").textContent="Unverified";
+      status("Stop could not be confirmed. Refresh to check the session before trying again. No automatic retry was sent.");
+    }finally{
+      if(current===viewerGeneration){closing=false;stopBtn.disabled=true;stopBtn.textContent="Stop Browser";refreshBtn.disabled=false;}
+    }
+  });
   function stopAuto() {
     automatic=false;
     autoBtn.textContent="Resume live view";
@@ -1419,6 +1472,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
   refreshBtn.addEventListener("click",()=>refresh(true));
   setInterval(()=>{if(automatic&&!document.hidden)refresh();},1200);
   async function requestHandoff(){
+    if(closing)return;
     browserEmpty=false;
     // Keep the read-only viewer synchronized while private human control is active.
     // The server suppresses all human frames, but the viewer can detect Resume.
@@ -1448,7 +1502,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
     if(event.source !== window.parent) return;
     const msg=event.data;
     if(!msg || msg.jsonrpc!=="2.0") return;
-    if(msg.id !== undefined && pending.has(msg.id)){
+    if(msg.id !== undefined && typeof msg.method!=="string" && ("result" in msg||"error" in msg) && pending.has(msg.id)){
       const p=pending.get(msg.id);pending.delete(msg.id);clearTimeout(p.timeout);
       if(msg.error)p.reject(Error(msg.error.message || "MCP UI error"));
       else p.resolve(msg.result);
@@ -1492,9 +1546,10 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
    subtitle.textContent="Live execution workspace";
    const name=metric?.textContent||"";
    device.textContent=name&&name!=="Control plane" ? name : "Device: —";
-   if(badge.textContent.trim()==="Unavailable"){badge.className="cc-badge-unavailable";}
-   else if(active?.classList.contains("active")){badge.textContent="● Running";badge.className="cc-badge-running";}
-   else if(badge.textContent==="Live"||badge.textContent==="Connecting"||badge.textContent==="● Running"){badge.textContent="● Live";badge.className="cc-badge-live";}
+   const activityState=window.__ccActivityBadge||{label:"Connecting",className:"cc-badge-unavailable"};
+   const running=activityState.label==="Live"&&active?.classList.contains("active");
+   badge.textContent=running?"● Running":activityState.label==="Live"?"● Live":activityState.label;
+   badge.className=running?"cc-badge-running":activityState.className;
   }
  }
  const browserFlow=document.createElement("section");
@@ -1512,17 +1567,19 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
    const human=mode.includes("human");
    const working=mode.includes("working");
    const stateMessage=(by("browser-state")?.textContent||"").toLowerCase();
-   const noSession=!human&&(/session ended safely|no browser session|session invalidated|worker restarted/.test(stateMessage));
-   const unavailable=mode.includes("unavailable")||mode.includes("connecting")||noSession;
+   const stopped=mode==="stopped",stopping=mode==="stopping";
+   const noSession=!human&&(mode==="no session"||/session ended safely|no browser session|no active browser|session invalidated|worker restarted/.test(stateMessage));
+   const unknown=mode.includes("unavailable")||mode.includes("unverified");
+   const unavailable=unknown||mode.includes("connecting")||noSession||stopped;
    browserFlow.dataset.ccEmpty=noSession?"true":"false";
    if(noSession){
     by("cc-control-title").textContent="No active browser session";
     by("cc-control-text").textContent="Ask ChatGPT to open a website using CommandCore Browser.";
    }
    const actionFailure=/failed|timed out|timeout|error/i.test((by("browser-state")?.textContent||""));
-   badge.textContent=human?"● Your action needed":noSession?"○ No session":mode.includes("unavailable")?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
+   badge.textContent=human?"● Your action needed":stopping?"◌ Stopping":stopped?"○ Stopped":noSession?"○ No session":unknown?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
    badge.className=human?"cc-badge-action":unavailable?"cc-badge-unavailable":"cc-badge-live";
-   by("cc-control-title").textContent=human?"Private human control":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
+   by("cc-control-title").textContent=human?"Private human control":stopping?"Stopping Browser":stopped?"Browser stopped":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
    by("cc-control-text").textContent=human?"AI frames and input are disabled by the browser server until you resume through the authenticated handoff.":noSession?"No session is running. Ask ChatGPT to open a website with CommandCore Browser. No recovery or login action is needed.":(by("browser-state")?.textContent||"Waiting for browser").slice(0,230);
    const sessionText=by("browser-session")?.textContent||"";
    const sessionKnown=human||(!unavailable&&!sessionText.startsWith("No active")&&sessionText!=="Unavailable");
@@ -1540,6 +1597,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
  if(control)new MutationObserver(updateBrowser).observe(control,observed);
  if(by("browser-state"))new MutationObserver(updateBrowser).observe(by("browser-state"),observed);
  if(by("browser-host"))new MutationObserver(updateBrowser).observe(by("browser-host"),observed);
+ window.addEventListener("commandcore:activity-state",updateActivity);
  window.addEventListener("commandcore:activity-active",()=>queueMicrotask(updateActivity));
  window.addEventListener("commandcore:browser-active",()=>queueMicrotask(updateBrowser));
  updateActivity();

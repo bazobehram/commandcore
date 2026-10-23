@@ -70,7 +70,8 @@ jobs:
           bash scripts/package.sh /tmp/commandcore-ci.zip
 
   browser-ui:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 ships dependency maps for Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -106,7 +107,7 @@ jobs:
           PYTHONPATH: apps/server:agent
 
   rust-agent-parity:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -141,7 +142,8 @@ jobs:
         env:
           COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
           PYTHONPATH: apps/server:agent
-        run: sudo -E "$(which python)" scripts/rust_full_control_smoke.py
+        # Pass only the fixture inputs explicitly; newer sudo may ignore -E.
+        run: sudo env "COMMANDCORE_RUST_AGENT_BIN=$COMMANDCORE_RUST_AGENT_BIN" "PYTHONPATH=$PYTHONPATH" "$(which python)" scripts/rust_full_control_smoke.py
       - name: Native enrollment
         env:
           COMMANDCORE_ENROLLMENT_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
