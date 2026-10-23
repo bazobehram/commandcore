@@ -60,7 +60,7 @@ jobs:
           set -euo pipefail
           [[ "${{ steps.build.outputs.digest }}" =~ ^sha256:[0-9a-f]{64}$ ]]
           printf "image=ghcr.io/%s@%s\n" "${GITHUB_REPOSITORY,,}" "${{ steps.build.outputs.digest }}" > "$RUNNER_TEMP/commandcore-image.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: commandcore-image-digest
           path: ${{ runner.temp }}/commandcore-image.txt
