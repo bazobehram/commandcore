@@ -753,17 +753,22 @@ function rpc(method,params){
 }
 window.addEventListener("message",e=>{
  if(e.source!==window.parent||e.data?.jsonrpc!=="2.0")return;
+ if(typeof e.data.method==="string"||(!("result" in e.data)&&!("error" in e.data)))return;
  const p=waiting.get(e.data.id);if(!p)return;
  waiting.delete(e.data.id);clearTimeout(p.timer);
- if(e.data.error)p.reject(Error(e.data.error.message||"MCP error"));
+ if(e.data.error)p.reject(Object.assign(Error(e.data.error.message||"MCP error"),{code:e.data.error.code}));
  else p.resolve(e.data.result);
 });
-const bridgeReady=(typeof window.openai?.callTool==="function")
- ?Promise.resolve()
- :rpc("ui/initialize",{
-  protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
-  appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
- }).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"));
+let bridgeMode="mcp";
+const bridgeReady=rpc("ui/initialize",{
+ protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
+ appCapabilities:{}
+}).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized",params:{}},"*")).catch(error=>{
+ // A native alias does not establish MCP Apps readiness. Only an explicit
+ // unsupported-method response permits the legacy native bridge fallback.
+ if(error.code===-32601&&typeof window.openai?.callTool==="function"){bridgeMode="native";return;}
+ throw error;
+});
 window.__ccBridgeReady=bridgeReady;window.__ccCallTool=callTool;window.__ccAcceptViewer=initScope;
 async function callTool(name,args){
  // Some hosts leave callTool pending when a mounted card loses its bridge.
@@ -776,7 +781,7 @@ async function callTool(name,args){
    (async()=>{
     await bridgeReady;
     if(expired)throw hostTimeout();
-    return typeof window.openai?.callTool==="function"
+    return bridgeMode==="native"
      ?window.openai.callTool(name,args)
      :rpc("tools/call",{name,arguments:args});
    })(),
@@ -1184,7 +1189,7 @@ setTimeout(refresh,450);
     : rpc("ui/initialize", {
         protocolVersion:"2026-01-26",
         appInfo:{name:"CommandCore Live Browser",version:"0.9.0"},
-        appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+        appCapabilities:{}
       }).then(() => {
         window.parent.postMessage(
           {jsonrpc:"2.0",method:"ui/notifications/initialized"}, "*"
@@ -1497,7 +1502,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
     if(event.source !== window.parent) return;
     const msg=event.data;
     if(!msg || msg.jsonrpc!=="2.0") return;
-    if(msg.id !== undefined && pending.has(msg.id)){
+    if(msg.id !== undefined && typeof msg.method!=="string" && ("result" in msg||"error" in msg) && pending.has(msg.id)){
       const p=pending.get(msg.id);pending.delete(msg.id);clearTimeout(p.timeout);
       if(msg.error)p.reject(Error(msg.error.message || "MCP UI error"));
       else p.resolve(msg.result);

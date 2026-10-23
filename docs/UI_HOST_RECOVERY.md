@@ -40,3 +40,15 @@ Activity and Browser own separate header states. Background Activity refreshes
 cannot label an absent, private, stopping, stopped or unverified Browser as Live.
 Changing tabs restores the selected view's current status. Changing viewer
 identity clears the previous Activity status while attribution is rechecked.
+
+
+## MCP Apps initialization (candidate b20)
+
+The widget always performs `ui/initialize`, awaits its response, and sends
+`ui/notifications/initialized` before issuing `tools/call`. The presence of
+`window.openai.callTool` is not proof that this handshake has occurred. Standard
+bridge calls are primary. Only an explicit unsupported-method response allows
+fallback to the existing native alias; a timeout never selects another transport
+or repeats an action. Request correlation and parent-window checks still apply.
+This follows the [official MCP UI quickstart](https://developers.openai.com/plugins/build/app-quickstart).
+The first-load failure must still be rechecked in ChatGPT before claiming it fixed.
