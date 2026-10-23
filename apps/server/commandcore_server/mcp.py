@@ -31,8 +31,9 @@ ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
 COMMANDCORE_UI_URI = WORKSPACE_UI_URI
 COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
-TASK_UI_URI = "ui://commandcore/task-0.12.0-b15.html"
+TASK_UI_URI = "ui://commandcore/task-0.12.0-b16.html"
 TASK_UI_URIS = {
+    "ui://commandcore/task-0.12.0-b15.html",
     "ui://commandcore/task-0.12.0-b14.html",
     "ui://commandcore/task-0.12.0-b13.html",
     "ui://commandcore/task-0.12.0-b12.html",
@@ -493,6 +494,23 @@ class UITaskLedger:
     def __init__(self, path=None):
         import os
         from pathlib import Path
+        import sqlite3
+        import threading
+
+        # Native Windows server hosting is not a Browser persistence target.
+        # Keep auxiliary summaries only in memory, never in an unprotected file.
+        self._memory_db = None
+        self._memory_lock = threading.RLock()
+        if os.name != "posix" or path == ":memory:":
+            self.path = None
+            self._memory_db = sqlite3.connect(":memory:", check_same_thread=False)
+        else:
+            self._initialize_file(path)
+        self._initialize_schema()
+
+    def _initialize_file(self, path):
+        import os
+        from pathlib import Path
 
         self.path = Path(
             path
@@ -511,6 +529,8 @@ class UITaskLedger:
         except FileExistsError:
             if self.path.stat().st_mode & 0o077:
                 raise RuntimeError("UI task database must be private")
+
+    def _initialize_schema(self):
         with self.connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -543,7 +563,7 @@ class UITaskLedger:
         import secrets
         import stat
 
-        if not hasattr(live, "_session_key"):
+        if self._memory_db is not None or not hasattr(live, "_session_key"):
             return
         path = self.path.with_name(self.path.name + ".session-key")
         try:
@@ -594,8 +614,22 @@ class UITaskLedger:
         import sqlite3
         from urllib.parse import quote
 
-        db = sqlite3.connect(
-            "file:" + quote(str(self.path), safe="/") + "?mode=rw", uri=True, timeout=2
+        with (
+            self._memory_lock
+            if self._memory_db is not None
+            else contextlib.nullcontext()
+        ):
+            yield from self._connection_scope(sqlite3, quote)
+
+    def _connection_scope(self, sqlite3, quote):
+        db = (
+            self._memory_db
+            if self._memory_db is not None
+            else sqlite3.connect(
+                "file:" + quote(str(self.path), safe="/") + "?mode=rw",
+                uri=True,
+                timeout=2,
+            )
         )
         db.row_factory = sqlite3.Row
         try:
@@ -605,7 +639,8 @@ class UITaskLedger:
             db.rollback()
             raise
         finally:
-            db.close()
+            if self._memory_db is None:
+                db.close()
 
     @staticmethod
     def owner(principal):
@@ -822,7 +857,7 @@ def _task_html(html: str) -> str:
     html = html.replace(
         'appCapabilities:{availableDisplayModes:["inline","fullscreen"]}',
         'appCapabilities:{availableDisplayModes:["inline"]}',
-    ).replace("UI 0.12.0 · build 1", "UI 0.12.0 · build 15")
+    ).replace("UI 0.12.0 · build 1", "UI 0.12.0 · build 16")
     html = html.replace(
         "bounds.left-area.left+(bounds.width-width)/2+cursor.x*scale",
         "bounds.left-area.left+stage.scrollLeft+(bounds.width-width)/2+cursor.x*scale",
@@ -1323,7 +1358,7 @@ class MCPHandler:
                 } and isinstance(payload, dict):
                     spec = self.ui_specs.get(name)
                     payload = dict(payload)
-                    payload["ui_build"] = "0.12.0+b15"
+                    payload["ui_build"] = "0.12.0+b16"
                     payload["ui_resource_uri"] = spec[0] if spec else None
                 result = _tool_result(payload, modern)
                 spec = self.ui_specs.get(name)
@@ -1729,7 +1764,7 @@ class MCPHandler:
                         } and isinstance(payload, dict):
                             spec = self.ui_specs.get(name)
                             payload = dict(payload)
-                            payload["ui_build"] = "0.12.0+b15"
+                            payload["ui_build"] = "0.12.0+b16"
                             payload["ui_resource_uri"] = spec[0] if spec else None
                         result = _tool_result(payload, modern)
                         spec = self.ui_specs.get(name)

@@ -63,7 +63,9 @@ The adjacent `.session-key` is a random private conversation-tag key. Back up
 and restore the database and key together, using a consistent SQLite backup
 while quiescent. Preserve owner-only permissions. Never put either in source,
 release archives or diagnostic output. Viewers and live screenshots are not
-persisted. Losing the key cannot be repaired by rebinding old task IDs.
+persisted. Native Windows server test/runtime keeps task summaries in memory only;
+there is no durable card history or supported native Browser worker deployment.
+Losing the key cannot be repaired by rebinding old task IDs.
 
 Before changing a service, close its test Browser sessions, retain the previous
 image and exact source hashes, and back up state. Apply via an independent

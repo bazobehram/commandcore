@@ -1,6 +1,6 @@
 # Changelog
 
-## Browser UI 0.12.0 build 15
+## Browser UI 0.12.0 build 16
 
 - One compact task card per workflow, inline live previews, natural height,
   responsive Browser controls, zoom, freshness, and readable operation status.
@@ -9,6 +9,8 @@
 - Quiet completed/saved cards with bounded display state; explicit live recovery.
 - Private-control console assets included in wheels; legacy resources share the
   reviewed unified widget. Private conversation keys excluded from releases.
+- Memory-only auxiliary task history on non-POSIX server runtimes, preserving
+  Windows Agent acceptance without storing private tags in files with unverified ACLs.
 - Offline adversarial network/proof tests and Chromium UI regression CI.
 
 This is a Browser/server source candidate. Agent package versions and platform

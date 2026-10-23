@@ -26,7 +26,9 @@ stale/tampered/foreign worker proofs, private frame withholding, changed links,
 conversation isolation, restart identity, and key-file type/mode/link checks.
 The key reader uses nonblocking open so a substituted FIFO cannot hang startup.
 Task-key validation depends on POSIX filesystem protection in the Linux server
-deployment; native Windows server hosting is not a supported Browser target.
+deployment. On non-POSIX platforms the task ledger is memory-only, so a Windows
+Agent test server can run without placing task identity in files with unverified
+ACLs. Native Windows hosting is not a supported Browser worker target.
 
 Residual release gates: independent security review of deployment topology,
 full CI matrix on the candidate commit, and native platform lifecycle evidence
