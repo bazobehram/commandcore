@@ -14,7 +14,7 @@ path = "src/main.rs"
 anyhow = "1"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+ed25519-dalek = { version = "3", features = ["rand_core"] }
 futures-util = "0.3"
 hex = "0.4"
 hmac = "0.12"
