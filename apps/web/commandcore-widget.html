@@ -760,10 +760,23 @@ const bridgeReady=(typeof window.openai?.callTool==="function")
  }).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"));
 window.__ccBridgeReady=bridgeReady;window.__ccCallTool=callTool;window.__ccAcceptViewer=initScope;
 async function callTool(name,args){
- await bridgeReady;
- return typeof window.openai?.callTool==="function"
-  ?window.openai.callTool(name,args)
-  :rpc("tools/call",{name,arguments:args});
+ // Some hosts leave callTool pending when a mounted card loses its bridge.
+ // Bound both initialization and the request so viewers can leave loading,
+ // unlock their controls and offer recovery. Never retry a mutation here.
+ let deadline,expired=false;
+ const hostTimeout=()=>Object.assign(Error("CommandCore connection timed out. Refresh to reconnect."),{code:"host_timeout"});
+ try{
+  return await Promise.race([
+   (async()=>{
+    await bridgeReady;
+    if(expired)throw hostTimeout();
+    return typeof window.openai?.callTool==="function"
+     ?window.openai.callTool(name,args)
+     :rpc("tools/call",{name,arguments:args});
+   })(),
+   new Promise((_,reject)=>{deadline=setTimeout(()=>{expired=true;reject(hostTimeout());},15000);})
+  ]);
+ }finally{clearTimeout(deadline);}
 }
 const statusText=x=>({
  running:"Running",started:"Started",ok:"Completed",completed:"Completed",
@@ -1172,11 +1185,7 @@ setTimeout(refresh,450);
         );
       });
   async function callTool(name,args={}) {
-    await bridgeReady;
-    if(typeof window.openai?.callTool === "function") {
-      return window.openai.callTool(name,args);
-    }
-    return rpc("tools/call",{name,arguments:args});
+    return window.__ccCallTool(name,args);
   }
   async function openLink(url) {
     await bridgeReady;
