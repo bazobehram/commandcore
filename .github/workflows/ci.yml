@@ -70,7 +70,7 @@ jobs:
           bash scripts/package.sh /tmp/commandcore-ci.zip
 
   browser-ui:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -194,6 +194,8 @@ jobs:
       - name: Locked server container build
         run: docker build --tag commandcore-ci:locked .
       - name: Rust dependency audit
+        env:
+          RUSTUP_TOOLCHAIN: stable
         run: |
           cargo install cargo-audit --locked
           cargo audit --file agent/rust/Cargo.lock
