@@ -493,7 +493,6 @@ from datetime import UTC
 class UITaskLedger:
     def __init__(self, path=None):
         import os
-        from pathlib import Path
         import sqlite3
         import threading
 
