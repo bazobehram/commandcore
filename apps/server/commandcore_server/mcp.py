@@ -31,8 +31,9 @@ ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
 COMMANDCORE_UI_URI = WORKSPACE_UI_URI
 COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
-TASK_UI_URI = "ui://commandcore/task-0.12.0-b16.html"
+TASK_UI_URI = "ui://commandcore/task-0.12.0-b17.html"
 TASK_UI_URIS = {
+    "ui://commandcore/task-0.12.0-b16.html",
     "ui://commandcore/task-0.12.0-b15.html",
     "ui://commandcore/task-0.12.0-b14.html",
     "ui://commandcore/task-0.12.0-b13.html",
@@ -856,7 +857,7 @@ def _task_html(html: str) -> str:
     html = html.replace(
         'appCapabilities:{availableDisplayModes:["inline","fullscreen"]}',
         'appCapabilities:{availableDisplayModes:["inline"]}',
-    ).replace("UI 0.12.0 · build 1", "UI 0.12.0 · build 16")
+    ).replace("UI 0.12.0 · build 1", "UI 0.12.0 · build 17")
     html = html.replace(
         "bounds.left-area.left+(bounds.width-width)/2+cursor.x*scale",
         "bounds.left-area.left+stage.scrollLeft+(bounds.width-width)/2+cursor.x*scale",
@@ -1357,7 +1358,7 @@ class MCPHandler:
                 } and isinstance(payload, dict):
                     spec = self.ui_specs.get(name)
                     payload = dict(payload)
-                    payload["ui_build"] = "0.12.0+b16"
+                    payload["ui_build"] = "0.12.0+b17"
                     payload["ui_resource_uri"] = spec[0] if spec else None
                 result = _tool_result(payload, modern)
                 spec = self.ui_specs.get(name)
@@ -1763,7 +1764,7 @@ class MCPHandler:
                         } and isinstance(payload, dict):
                             spec = self.ui_specs.get(name)
                             payload = dict(payload)
-                            payload["ui_build"] = "0.12.0+b16"
+                            payload["ui_build"] = "0.12.0+b17"
                             payload["ui_resource_uri"] = spec[0] if spec else None
                         result = _tool_result(payload, modern)
                         spec = self.ui_specs.get(name)

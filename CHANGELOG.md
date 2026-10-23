@@ -1,16 +1,21 @@
 # Changelog
 
-## Browser UI 0.12.0 build 16
+## Browser UI 0.12.0 build 17
 
 - One compact task card per workflow, inline live previews, natural height,
   responsive Browser controls, zoom, freshness, and readable operation status.
 - Public search, page-scoped expiring link references, and GET-only Back/Forward.
+  Ordinary result links with tracking handlers stay discoverable; following their
+  validated address never executes those handlers.
 - Durable conversation tags across service restarts; ephemeral viewer capabilities.
 - Quiet completed/saved cards with bounded display state; explicit live recovery.
 - Private-control console assets included in wheels; legacy resources share the
   reviewed unified widget. Private conversation keys excluded from releases.
 - Memory-only auxiliary task history on non-POSIX server runtimes, preserving
   Windows Agent acceptance without storing private tags in files with unverified ACLs.
+- Rust TLS locks updated to rustls-webpki 0.103.16 and webpki-roots 1.0.10
+  for RUSTSEC-2026-0382 and RUSTSEC-2026-0381. Installed native Agents still
+  require a separately verified signed update.
 - Offline adversarial network/proof tests and Chromium UI regression CI.
 
 This is a Browser/server source candidate. Agent package versions and platform

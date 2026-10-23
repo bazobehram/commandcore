@@ -10,6 +10,8 @@ of the Browser UI build.
 Ask the AI to research a topic, inspect documentation, compare public product
 pages, or follow a search result. A workflow opens one compact CommandCore card.
 The card shows current activity and an inline page preview while browsing.
+Task counts include tracked execution and Browser steps; discovery, viewer
+polling, and task-close calls do not increase that count.
 Expand it for Browser controls, Back/Forward, fit/zoom, preview pause/refresh,
 recent navigation, or private control. Preview pause only pauses preview updates.
 

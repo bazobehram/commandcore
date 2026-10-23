@@ -136,7 +136,6 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
             "document.elementFromPoint",
             '[aria-hidden="true"]',
             "form,button",
-            "[onclick]",
             "hasAttribute('download')",
         ]:
             self.assertIn(text, expression)

@@ -868,13 +868,16 @@ class BrowserGateway:
 
     async def _visible_links(self, entry: OwnedSession) -> dict[str, Any]:
         entry.link_targets.clear()
+        # GET navigation below never dispatches page click/mouse handlers.
+        # Search engines attach tracking handlers to normal result links;
+        # their presence is not a reason to hide an otherwise safe address.
         expression = r"""(() => {
           const links = [], all = document.querySelectorAll('a[href]');
           for (let position=0; position<all.length && links.length<45; position++) {
             const a=all[position], r=a.getBoundingClientRect(), s=getComputedStyle(a);
             if (!r.width || !r.height || r.bottom<=0 || r.right<=0 || r.left>=innerWidth || r.top>=innerHeight
                 || s.visibility==='hidden' || s.display==='none' || a.hasAttribute('download')
-                || a.closest('[aria-hidden="true"],form,button,[role=button],[onclick],[onmousedown],[onpointerdown]')) continue;
+                || a.closest('[aria-hidden="true"],form,button,[role=button]')) continue;
             const x=Math.max(0,Math.min(innerWidth-1,(Math.max(0,r.left)+Math.min(innerWidth,r.right))/2));
             const y=Math.max(0,Math.min(innerHeight-1,(Math.max(0,r.top)+Math.min(innerHeight,r.bottom))/2));
             const top=document.elementFromPoint(x,y); if (!top || !a.contains(top)) continue;
@@ -1337,7 +1340,7 @@ class BrowserGateway:
                   const top=document.elementFromPoint(x,y);
                   const valid=!!r.width && !!r.height && r.bottom>0 && r.right>0 && r.left<innerWidth && r.top<innerHeight
                     && s.visibility!=='hidden' && s.display!=='none' && !a.hasAttribute('download')
-                    && !a.closest('[aria-hidden="true"],form,button,[role=button],[onclick],[onmousedown],[onpointerdown]') && !!top && a.contains(top);
+                    && !a.closest('[aria-hidden="true"],form,button,[role=button]') && !!top && a.contains(top);
                   return {valid,url:location.href,href:a.href,label:(a.getAttribute('aria-label')||a.innerText||'').replace(/\\s+/g,' ').trim().slice(0,90)};
                 })()""".replace("POSITION", str(item["position"]))
                 response = await cdp.send(
