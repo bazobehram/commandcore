@@ -41,6 +41,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),path
  assert(await p.locator('#browser-zoom').isDisabled());assert.equal(await p.locator('#browser-screen').getAttribute('src'),null);assert.match(await p.locator('#browser-freshness').innerText(),/Private control · preview hidden/);
  await p.evaluate(()=>{window.human=false;window.empty=true});await p.locator('#browser-refresh').press('Enter');await p.waitForFunction(()=>document.getElementById('browser-host').textContent==='No active browser session');
  assert(await p.locator('#browser-zoom').isDisabled());assert.equal(await p.locator('#browser-screen').getAttribute('src'),null);
+ await p.waitForTimeout(4300);assert.equal(await p.locator('#state').innerText(),'○ No session','Activity polling cannot label an absent Browser live');
  assert.equal(errors.length,0,errors.join('\n'));await p.close();
  }
  await browser.close();console.log('PASS Browser UX: toolbar placement, helper, freshness, zoom/pan pointer, no page overflow, pause/manual refresh, private shield and absent-session cleanup at 320/390/940');

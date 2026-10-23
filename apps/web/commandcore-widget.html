@@ -678,6 +678,11 @@ const by=id=>document.getElementById(id);
 let busy=false,paused=false,number=0,sessionRef="",sessionAvailable=false,refreshPending=false;
 let previousActivityIds=null,lastHiddenActivityPoll=0,lastFailureAt=0,attributionBlocked=false,lastRenewedRef=null;
 const scopeKey=()=>JSON.stringify([scopeEl.value,deviceEl.value,sessionRef]);
+function setActivityState(label,className){
+ window.__ccActivityBadge={label,className};
+ if(!by("activity-pane").hidden){by("state").textContent=label;by("state").className=className;}
+ window.dispatchEvent(new Event("commandcore:activity-state"));
+}
 let deviceChoices=[],scopeTouched=false;
 const scopeEl=by("activity-scope"),deviceEl=by("activity-device");
 function initScope(fromHost){
@@ -730,6 +735,7 @@ deviceEl.addEventListener("change",()=>{rowCache.clear();refresh(true);});
 const waiting=new Map(),expanded=new Set(),collapsedRunning=new Set();
 const rowCache=new Map();
 window.addEventListener("commandcore:viewer-changed",()=>{
+ setActivityState("Connecting","cc-badge-unavailable");
  previousActivityIds=null;rowCache.clear();expanded.clear();collapsedRunning.clear();
  by("feed").replaceChildren(text("div","Connecting to this conversation…","empty"));
  by("metric-device").textContent="—";by("metric-count").textContent="—";
@@ -985,8 +991,7 @@ async function refresh(force=false){
   previousActivityIds=currentIds;
   document.body.dataset.ccActivityStale="false";attributionBlocked=false;by("activity-reconnect").hidden=true;
   if(!activityHidden || !by("activity-pane").hidden)render(payload.events);
-  by("state").textContent=paused?"Paused":"Live";
-  by("state").className=paused?"cc-badge-running":"cc-badge-live";
+  setActivityState(paused?"Paused":"Live",paused?"cc-badge-running":"cc-badge-live");
   by("updated").textContent="Updated "+new Date().toLocaleTimeString();
   by("scope-hint").textContent=view==="conversation"?"This conversation · attributed MCP operations":view==="device"?"Filtered to selected authorized device":"All authorized account activity";
  }catch(e){
@@ -1001,8 +1006,7 @@ async function refresh(force=false){
   }
   if(by("metric-running")?.textContent==="Connecting…")by("metric-running").textContent="Unavailable";
   document.body.dataset.ccActivityStale="true";
-  by("state").textContent="Unavailable";
-  by("state").className="cc-badge-unavailable";
+  setActivityState("Unavailable","cc-badge-unavailable");
   by("updated").textContent=attributionBlocked?"Conversation verification unavailable · no other conversation was loaded.":by("feed").querySelector("article")?"Connection lost · previous snapshot. Refresh to reconnect.":"Not connected · no activity snapshot loaded.";
  }finally{busy=false;if(refreshPending){refreshPending=false;refresh(true);}}
 }
@@ -1066,8 +1070,7 @@ by("refresh").addEventListener("click",reconnect);
 by("pause").addEventListener("click",()=>{
  paused=!paused;
  by("pause").textContent=paused?"Resume":"Pause";
- by("state").textContent=paused?"Paused":"Connecting";
- by("state").className="cc-badge-running";
+ setActivityState(paused?"Paused":"Connecting","cc-badge-running");
  if(!paused)refresh(true);
 });
 window.addEventListener("commandcore:activity-active",()=>{if(!deviceChoices.length)loadDevices();refresh(true);});
@@ -1426,6 +1429,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
     if(closing||stopBtn.disabled||!stopSession)return;
     const expected=stopSession,current=++viewerGeneration;
     closing=true;handoffPending=false;stopBtn.disabled=true;stopBtn.textContent="Stopping…";refreshBtn.disabled=true;takeBtn.disabled=true;
+    document.getElementById("browser-control").textContent="Stopping";
     hide("Stopping this conversation’s Browser…");status("Stop requested · waiting for server confirmation");
     try{
       const result=await tool("browser.close",{session_ref:window.__ccBrowserViewerRef||"",expected_session_id:expected});
@@ -1537,9 +1541,10 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
    subtitle.textContent="Live execution workspace";
    const name=metric?.textContent||"";
    device.textContent=name&&name!=="Control plane" ? name : "Device: —";
-   if(badge.textContent.trim()==="Unavailable"){badge.className="cc-badge-unavailable";}
-   else if(active?.classList.contains("active")){badge.textContent="● Running";badge.className="cc-badge-running";}
-   else if(badge.textContent==="Live"||badge.textContent==="Connecting"||badge.textContent==="● Running"){badge.textContent="● Live";badge.className="cc-badge-live";}
+   const activityState=window.__ccActivityBadge||{label:"Connecting",className:"cc-badge-unavailable"};
+   const running=activityState.label==="Live"&&active?.classList.contains("active");
+   badge.textContent=running?"● Running":activityState.label==="Live"?"● Live":activityState.label;
+   badge.className=running?"cc-badge-running":activityState.className;
   }
  }
  const browserFlow=document.createElement("section");
@@ -1557,17 +1562,19 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
    const human=mode.includes("human");
    const working=mode.includes("working");
    const stateMessage=(by("browser-state")?.textContent||"").toLowerCase();
-   const noSession=!human&&(/session ended safely|no browser session|session invalidated|worker restarted/.test(stateMessage));
-   const unavailable=mode.includes("unavailable")||mode.includes("connecting")||noSession;
+   const stopped=mode==="stopped",stopping=mode==="stopping";
+   const noSession=!human&&(mode==="no session"||/session ended safely|no browser session|no active browser|session invalidated|worker restarted/.test(stateMessage));
+   const unknown=mode.includes("unavailable")||mode.includes("unverified");
+   const unavailable=unknown||mode.includes("connecting")||noSession||stopped;
    browserFlow.dataset.ccEmpty=noSession?"true":"false";
    if(noSession){
     by("cc-control-title").textContent="No active browser session";
     by("cc-control-text").textContent="Ask ChatGPT to open a website using CommandCore Browser.";
    }
    const actionFailure=/failed|timed out|timeout|error/i.test((by("browser-state")?.textContent||""));
-   badge.textContent=human?"● Your action needed":noSession?"○ No session":mode.includes("unavailable")?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
+   badge.textContent=human?"● Your action needed":stopping?"◌ Stopping":stopped?"○ Stopped":noSession?"○ No session":unknown?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
    badge.className=human?"cc-badge-action":unavailable?"cc-badge-unavailable":"cc-badge-live";
-   by("cc-control-title").textContent=human?"Private human control":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
+   by("cc-control-title").textContent=human?"Private human control":stopping?"Stopping Browser":stopped?"Browser stopped":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
    by("cc-control-text").textContent=human?"AI frames and input are disabled by the browser server until you resume through the authenticated handoff.":noSession?"No session is running. Ask ChatGPT to open a website with CommandCore Browser. No recovery or login action is needed.":(by("browser-state")?.textContent||"Waiting for browser").slice(0,230);
    const sessionText=by("browser-session")?.textContent||"";
    const sessionKnown=human||(!unavailable&&!sessionText.startsWith("No active")&&sessionText!=="Unavailable");
@@ -1585,6 +1592,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
  if(control)new MutationObserver(updateBrowser).observe(control,observed);
  if(by("browser-state"))new MutationObserver(updateBrowser).observe(by("browser-state"),observed);
  if(by("browser-host"))new MutationObserver(updateBrowser).observe(by("browser-host"),observed);
+ window.addEventListener("commandcore:activity-state",updateActivity);
  window.addEventListener("commandcore:activity-active",()=>queueMicrotask(updateActivity));
  window.addEventListener("commandcore:browser-active",()=>queueMicrotask(updateBrowser));
  updateActivity();

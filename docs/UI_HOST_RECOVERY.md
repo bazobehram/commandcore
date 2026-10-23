@@ -34,3 +34,9 @@ read-only refresh; it never repeats the close automatically. Stop does not undo
 website actions. Candidate b19 uses a new task resource identity while retaining
 b18 aliases for saved conversations. It requires deployment and actual host
 acceptance before a production success claim.
+
+
+Activity and Browser own separate header states. Background Activity refreshes
+cannot label an absent, private, stopping, stopped or unverified Browser as Live.
+Changing tabs restores the selected view's current status. Changing viewer
+identity clears the previous Activity status while attribution is rechecked.
