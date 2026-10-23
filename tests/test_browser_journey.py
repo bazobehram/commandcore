@@ -384,6 +384,7 @@ class ToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
             "browser.follow",
             "browser.back",
             "browser.forward",
+            "browser.close",
         ]:
             self.assertEqual(
                 definitions[name]["securitySchemes"],
@@ -413,6 +414,24 @@ class ToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     )
             call.assert_not_awaited()
 
+    async def test_close_viewer_is_owner_and_conversation_scoped(self):
+        viewer = self.s.live_activity.issue_viewer(self.p, "chat-A")["session_ref"]
+        args = {"session_ref": viewer, "expected_session_id": "a" * 36}
+        with patch.object(
+            self.g, "call", new=AsyncMock(return_value={"closed": True})
+        ) as call:
+            for bad in [dict(args, session_ref="invalid"), args]:
+                with self.assertRaises(ToolError):
+                    await self.s.call(
+                        self.p, "browser.close", bad, host_session="chat-B"
+                    )
+            call.assert_not_awaited()
+            result = await self.s.call(self.p, "browser.close", args, host_session=None)
+            self.assertTrue(result["closed"])
+            self.assertEqual(
+                call.await_args.kwargs["args"], {"expected_session_id": "a" * 36}
+            )
+
     async def test_same_conversation_delegates_to_gateway_and_private_pause_still_blocks(
         self,
     ):
@@ -432,6 +451,7 @@ class ToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
             "browser.follow",
             "browser.back",
             "browser.forward",
+            "browser.close",
         ]:
             with self.assertRaisesRegex(ToolError, "paused for human"):
                 await self.s.call(self.p, name, {}, host_session="chat-A")

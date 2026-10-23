@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from commandcore_server.browser_gateway import (
     BrowserError,
@@ -45,6 +46,59 @@ class BrowserLiveFrameTests(unittest.IsolatedAsyncioTestCase):
             name,
             {"x": x, "y": y},
             human=False,
+        )
+
+    async def test_stop_rejects_replacement_and_preserves_private_control(self):
+        with patch("commandcore_server.browser_gateway.httpx.AsyncClient") as client:
+            with self.assertRaisesRegex(BrowserError, "session changed"):
+                await self.send("browser.close", {"expected_session_id": "b" * 36})
+            self.entry.paused_for_human = True
+            with self.assertRaisesRegex(BrowserError, "cannot close"):
+                await self.send("browser.close", {"expected_session_id": self.entry.id})
+            client.assert_not_called()
+        self.assertIs(self.gateway.sessions[self.owner], self.entry)
+
+    async def test_stop_rechecks_expected_id_after_waiting_for_action_lock(self):
+        await self.entry.lock.acquire()
+        stopping = asyncio.create_task(
+            self.send("browser.close", {"expected_session_id": self.entry.id})
+        )
+        with patch("commandcore_server.browser_gateway.httpx.AsyncClient") as client:
+            await asyncio.sleep(0)
+            self.entry.id = "b" * 36
+            self.entry.lock.release()
+            with self.assertRaisesRegex(BrowserError, "session changed"):
+                await stopping
+            client.assert_not_called()
+        self.assertIs(self.gateway.sessions[self.owner], self.entry)
+
+    async def test_stop_requires_server_release_confirmation(self):
+        response = MagicMock()
+        response.json.return_value = {"status": "pending"}
+        http = MagicMock()
+        http.post = AsyncMock(return_value=response)
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=http)
+        context.__aexit__ = AsyncMock(return_value=False)
+        with patch(
+            "commandcore_server.browser_gateway.httpx.AsyncClient", return_value=context
+        ):
+            with self.assertRaisesRegex(BrowserError, "did not confirm"):
+                await self.send("browser.close", {"expected_session_id": self.entry.id})
+            self.assertIn(self.owner, self.gateway.sessions)
+            response.json.return_value = {"status": "released"}
+            self.assertEqual(
+                await self.send(
+                    "browser.close", {"expected_session_id": self.entry.id}
+                ),
+                {"closed": True},
+            )
+            self.assertNotIn(self.owner, self.gateway.sessions)
+        self.assertTrue(
+            all(
+                c.args[0].endswith("/" + self.entry.id + "/release")
+                for c in http.post.await_args_list
+            )
         )
 
     async def test_owner_frame_sequence_deduplicates_png_without_cdp(self):

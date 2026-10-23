@@ -910,8 +910,17 @@ TOOL_DEFINITIONS.extend(
         {
             "name": "browser.close",
             "title": "Close visual browser session",
-            "description": "Release only this authenticated caller's browser session.",
-            "inputSchema": _obj({}),
+            "description": "Release only this authenticated caller's Browser in this verified conversation. The embedded Stop control supplies a viewer reference and expected session ID so an old card cannot close a replacement Browser. Private human control must be resumed before closing.",
+            "inputSchema": _obj(
+                {
+                    "session_ref": {"type": "string", "maxLength": 128},
+                    "expected_session_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                }
+            ),
         },
     ]
 )
