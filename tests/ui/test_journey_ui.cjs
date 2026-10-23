@@ -1,3 +1,4 @@
+const {fixtureURL}=require('./fixtures.cjs');
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),path=require('path');
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),args:['--no-sandbox']});
@@ -26,7 +27,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),path
     throw Error(name);
    }};
   });
-  await p.goto('file://'+path.join(process.env.COMMANDCORE_UI_FIXTURES,'task-rendered.html'));await p.locator('#cc-task-expand').click();await p.locator('#browser-screen').waitFor({state:'visible'});
+  await p.goto(await fixtureURL());await p.locator('#cc-task-expand').click();await p.locator('#browser-screen').waitFor({state:'visible'});
   await p.waitForFunction(()=>!document.getElementById('cc-browser-back').disabled);
   assert.equal(await p.locator('#cc-task-title').innerText(),'Opening a page link');
   assert.equal(await p.locator('#cc-browser-forward').isDisabled(),true);

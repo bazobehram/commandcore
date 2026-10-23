@@ -1,3 +1,4 @@
+const {fixtureURL}=require('./fixtures.cjs');
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),path=require('path');
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),args:['--no-sandbox']});const p=await browser.newPage();
@@ -6,7 +7,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),path
   if(n==='commandcore.viewer'){window.renewals++;window.expired=false;window.ref='renewed-'+window.renewals;return {structuredContent:{session_available:true,session_ref:window.ref}};}
   if(n==='devices.list')return {structuredContent:{devices:[]}};throw Error(n);
  }}});
- await p.goto('file://'+path.join(process.env.COMMANDCORE_UI_FIXTURES,'task-rendered.html'));await p.waitForFunction(()=>window.renewals===1&&document.getElementById('cc-task-summary').textContent.includes('4 calls'));
+ await p.goto(await fixtureURL());await p.waitForFunction(()=>window.renewals===1&&document.getElementById('cc-task-summary').textContent.includes('4 calls'));
  await p.evaluate(()=>window.expired=true);await p.waitForFunction(()=>window.renewals===2);await p.waitForTimeout(100);assert(!/expired|unavailable/.test(await p.locator('#cc-task-summary').innerText()),'second expiry also recovers');
  await p.evaluate(()=>window.foreign=true);await p.waitForFunction(()=>document.getElementById('cc-task-summary').textContent.includes('Saved task'));
  assert(await p.locator('#cc-task-retry').isHidden());assert.equal(await p.evaluate(()=>window.renewals),2,'foreign/legacy task must not renew into another task');

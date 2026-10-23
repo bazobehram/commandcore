@@ -28,6 +28,52 @@ from .browser_egress import POLICY_VERSION, _public_dns_name
 from .browser_session_store import BrowserSessionStore, SessionStoreError
 from .browser_worker_binding import BrowserWorkerBinding, WorkerOwnershipError
 
+# Shared read-only hit testing for link discovery and later revalidation.
+# Check real rendered pieces: a search result's bounding-box centre can be
+# covered by a sibling citation while its heading is plainly visible.
+_LINK_VISIBLE_SCRIPT = r"""
+  const linkVisible = a => {
+    const s=getComputedStyle(a);
+    if(s.visibility==='hidden'||s.display==='none'||a.hasAttribute('download')
+      ||a.closest('[aria-hidden="true"],form,button,[role=button]'))return false;
+    const pieces=[a,...Array.from(a.querySelectorAll('h1,h2,h3,span,img')).slice(0,8)];
+    const rects=pieces.flatMap(e=>Array.from(e.getClientRects())).slice(0,24);
+    return rects.some(r=>{
+      const left=Math.max(0,r.left),right=Math.min(innerWidth,r.right);
+      const top=Math.max(0,r.top),bottom=Math.min(innerHeight,r.bottom);
+      if(right-left<1||bottom-top<1)return false;
+      return [0.2,0.5,0.8].some(f=>{
+        const hit=document.elementFromPoint((left+right)/2,top+(bottom-top)*f);
+        return !!hit&&a.contains(hit);
+      });
+    });
+  };
+"""
+LINK_LIST_SCRIPT = (
+    "(() => {"
+    + _LINK_VISIBLE_SCRIPT
+    + r"""
+  const links=[],all=document.querySelectorAll('a[href]');
+  for(let position=0;position<all.length&&links.length<45;position++){
+    const a=all[position];if(!linkVisible(a))continue;
+    const label=(a.getAttribute('aria-label')||a.innerText||'').replace(/\s+/g,' ').trim().slice(0,90);
+    if(label)links.push({position,href:a.href,label});
+  }
+  return {url:location.href,links};
+})()"""
+)
+LINK_FOLLOW_SCRIPT = (
+    "(() => {"
+    + _LINK_VISIBLE_SCRIPT
+    + r"""
+  const a=document.querySelectorAll('a[href]')[POSITION];
+  if(!a)return {valid:false};
+  return {valid:linkVisible(a),url:location.href,href:a.href,
+    label:(a.getAttribute('aria-label')||a.innerText||'').replace(/\s+/g,' ').trim().slice(0,90)};
+})()"""
+)
+
+
 BROWSER_TOOL_NAMES = {
     "browser.links",
     "browser.follow",
@@ -871,21 +917,7 @@ class BrowserGateway:
         # GET navigation below never dispatches page click/mouse handlers.
         # Search engines attach tracking handlers to normal result links;
         # their presence is not a reason to hide an otherwise safe address.
-        expression = r"""(() => {
-          const links = [], all = document.querySelectorAll('a[href]');
-          for (let position=0; position<all.length && links.length<45; position++) {
-            const a=all[position], r=a.getBoundingClientRect(), s=getComputedStyle(a);
-            if (!r.width || !r.height || r.bottom<=0 || r.right<=0 || r.left>=innerWidth || r.top>=innerHeight
-                || s.visibility==='hidden' || s.display==='none' || a.hasAttribute('download')
-                || a.closest('[aria-hidden="true"],form,button,[role=button]')) continue;
-            const x=Math.max(0,Math.min(innerWidth-1,(Math.max(0,r.left)+Math.min(innerWidth,r.right))/2));
-            const y=Math.max(0,Math.min(innerHeight-1,(Math.max(0,r.top)+Math.min(innerHeight,r.bottom))/2));
-            const top=document.elementFromPoint(x,y); if (!top || !a.contains(top)) continue;
-            const label=(a.getAttribute('aria-label')||a.innerText||'').replace(/\s+/g,' ').trim().slice(0,90);
-            if(label) links.push({position,href:a.href,label});
-          }
-          return {url:location.href,links};
-        })()"""
+        expression = LINK_LIST_SCRIPT
         uri = await self._cdp_socket_uri(entry.id)
         async with websockets.connect(
             uri, open_timeout=12, max_size=9_000_000, close_timeout=2
@@ -1331,18 +1363,9 @@ class BrowserGateway:
                     )
                 # Re-read a fixed DOM position under the owner lock. Do not click
                 # the page, execute site handlers, or accept caller JavaScript.
-                expression = """(() => {
-                  const a=document.querySelectorAll('a[href]')[POSITION];
-                  if(!a) return {valid:false};
-                  const r=a.getBoundingClientRect(),s=getComputedStyle(a);
-                  const x=Math.max(0,Math.min(innerWidth-1,(Math.max(0,r.left)+Math.min(innerWidth,r.right))/2));
-                  const y=Math.max(0,Math.min(innerHeight-1,(Math.max(0,r.top)+Math.min(innerHeight,r.bottom))/2));
-                  const top=document.elementFromPoint(x,y);
-                  const valid=!!r.width && !!r.height && r.bottom>0 && r.right>0 && r.left<innerWidth && r.top<innerHeight
-                    && s.visibility!=='hidden' && s.display!=='none' && !a.hasAttribute('download')
-                    && !a.closest('[aria-hidden="true"],form,button,[role=button]') && !!top && a.contains(top);
-                  return {valid,url:location.href,href:a.href,label:(a.getAttribute('aria-label')||a.innerText||'').replace(/\\s+/g,' ').trim().slice(0,90)};
-                })()""".replace("POSITION", str(item["position"]))
+                expression = LINK_FOLLOW_SCRIPT.replace(
+                    "POSITION", str(item["position"])
+                )
                 response = await cdp.send(
                     "Runtime.evaluate",
                     {

@@ -99,6 +99,47 @@ def stop_process(p: subprocess.Popen):
         p.wait(timeout=5)
 
 
+def verify_streaming(base: str, token: str, selection_id: str):
+    """A real HTTP SSE request crosses the Agent transport, without UI mounts."""
+    request_id = 800
+    body = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": "tools/call",
+        "params": {
+            "name": "system.metrics",
+            "arguments": {"selection_id": selection_id},
+            "_meta": {**meta(), "progressToken": "stream-fixture"},
+        },
+    }
+    messages = []
+    with httpx.stream(
+        "POST",
+        base + "/mcp",
+        json=body,
+        timeout=40,
+        headers={
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2026-07-28",
+            "Mcp-Method": "tools/call",
+            "Mcp-Name": "system.metrics",
+        },
+    ) as response:
+        response.raise_for_status()
+        assert response.headers["content-type"].startswith("text/event-stream")
+        for line in response.iter_lines():
+            if line.startswith("data: "):
+                messages.append(json.loads(line[6:]))
+    progress = [m for m in messages if m.get("method") == "notifications/progress"]
+    assert [m["params"]["progress"] for m in progress] == [0, 1], messages
+    assert all(m["params"]["progressToken"] == "stream-fixture" for m in progress)
+    assert messages[-1]["id"] == request_id
+    result = messages[-1]["result"]
+    assert result["isError"] is False
+    assert not result.get("_meta", {}).get("ui", {}).get("resourceUri")
+
+
 def main() -> int:
     port = free_port()
     base = f"http://{HOST}:{port}"
@@ -233,6 +274,7 @@ def main() -> int:
                 4,
             )
             selection_id = selected["structuredContent"]["selection_id"]
+            verify_streaming(base, token, selection_id)
 
             executed = mcp(
                 base,

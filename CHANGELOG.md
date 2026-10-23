@@ -1,12 +1,13 @@
 # Changelog
 
-## Browser UI 0.12.0 build 17
+## Browser UI 0.12.0 build 18
 
 - One compact task card per workflow, inline live previews, natural height,
   responsive Browser controls, zoom, freshness, and readable operation status.
 - Public search, page-scoped expiring link references, and GET-only Back/Forward.
   Ordinary result links with tracking handlers stay discoverable; following their
-  validated address never executes those handlers.
+  validated address never executes those handlers. Shared hit testing recognizes
+  visible portions of overlapping search results and display:contents layouts.
 - Durable conversation tags across service restarts; ephemeral viewer capabilities.
 - Quiet completed/saved cards with bounded display state; explicit live recovery.
 - Private-control console assets included in wheels; legacy resources share the

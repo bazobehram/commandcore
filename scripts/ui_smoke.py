@@ -6,7 +6,6 @@ No signed-in browser or production service is used by these fixtures.
 """
 
 import asyncio
-import ast
 import json
 import os
 from pathlib import Path
@@ -46,33 +45,13 @@ async def render(directory):
         auth_kind="oauth2",
         scopes=(READ_SCOPE, STANDARD_SCOPE),
     )
-    module = ast.parse(Path(browser_gateway.__file__).read_text())
-    links_function = next(
-        node
-        for node in ast.walk(module)
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_visible_links"
-    )
-    links = next(
-        node.value.value
-        for node in ast.walk(links_function)
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "expression"
-            for target in node.targets
-        )
-    )
-    follow = next(
-        node.func.value.value
-        for node in ast.walk(module)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "replace"
-        and isinstance(node.func.value, ast.Constant)
-        and isinstance(node.func.value.value, str)
-        and "[POSITION]" in node.func.value.value
-    )
     (directory / "link-scripts.json").write_text(
-        json.dumps({"links": links, "follow": follow})
+        json.dumps(
+            {
+                "links": browser_gateway.LINK_LIST_SCRIPT,
+                "follow": browser_gateway.LINK_FOLLOW_SCRIPT,
+            }
+        )
     )
     response = await handler.handle(Request(), principal)
     resource = json.loads(response.body)["result"]["contents"][0]

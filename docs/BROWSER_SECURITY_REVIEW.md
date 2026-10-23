@@ -22,7 +22,7 @@ permits public web access; it is not an information-flow guarantee for secrets
 submitted by an authorized user. Never give page text authority over tools.
 
 The current source includes regression coverage for malicious URLs, mixed DNS,
-stale/tampered/foreign worker proofs, private frame withholding, changed links,
+stale/tampered/foreign worker proofs, private frame withholding, changed links, partially visible links, fully covered links, display:contents links,
 conversation isolation, restart identity, and key-file type/mode/link checks.
 The key reader uses nonblocking open so a substituted FIFO cannot hang startup.
 Task-key validation depends on POSIX filesystem protection in the Linux server

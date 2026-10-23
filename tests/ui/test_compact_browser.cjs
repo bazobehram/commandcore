@@ -1,3 +1,4 @@
+const {fixtureURL}=require('./fixtures.cjs');
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('fs'),path=require('path');
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),args:['--no-sandbox']});let results=[];
@@ -20,7 +21,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
     throw Error('unexpected '+n);
    }};
   });
-  await p.goto('file://'+path.join(process.env.COMMANDCORE_UI_FIXTURES,'task-rendered.html'));await p.waitForFunction(()=>window.frameRequests.length>0);
+  await p.goto(await fixtureURL());await p.waitForFunction(()=>window.frameRequests.length>0);
   await p.evaluate(()=>window.phase='public');await p.locator('#cc-task-preview').waitFor({state:'visible',timeout:5000});
   assert.equal(await p.locator('body').getAttribute('data-cc-task-compact'),'true','preview requires no expansion');
   assert.match(await p.locator('#cc-task-caption').innerText(),/Live preview/);

@@ -1,3 +1,4 @@
+const {fixtureURL}=require('./fixtures.cjs');
 const {chromium}=require('playwright'),assert=require('node:assert/strict'),path=require('path');
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),args:['--no-sandbox']});
@@ -19,7 +20,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),path
    throw Error(n);
   }};
  });
- await p.goto('file://'+path.join(process.env.COMMANDCORE_UI_FIXTURES,'task-rendered.html'));
+ await p.goto(await fixtureURL());
  await p.locator('#cc-task-expand').press('Enter');await p.locator('#browser-screen').waitFor({state:'visible'});await p.waitForFunction(()=>document.getElementById('browser-screen').naturalWidth===1280);
  assert(await p.evaluate(()=>document.getElementById('browser-refresh').parentElement.compareDocumentPosition(document.getElementById('browser-stage'))&Node.DOCUMENT_POSITION_FOLLOWING));
  assert.match(await p.locator('#browser-help').innerText(),/Ask ChatGPT to search or browse/);

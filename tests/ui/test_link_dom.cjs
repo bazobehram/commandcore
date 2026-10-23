@@ -18,5 +18,10 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
  const covered=await p.evaluate(scripts.follow.replace('POSITION','7'));assert.equal(covered.valid,false);
  const tracked=await p.evaluate(scripts.follow.replace('POSITION','4'));assert(tracked.valid,'tracking handlers must not hide ordinary address navigation');
  assert.equal(await p.evaluate(()=>window.trackerFired),undefined,'inspection and address validation do not dispatch page handlers');
+ await p.setContent(`<a id="partial" href="https://example.com/result" style="display:block;width:200px;height:80px"><span style="display:block;padding-top:55px">Result heading</span></a><a style="display:contents" href="https://example.com/contents"><h3>Contents result</h3></a>`);
+ await p.evaluate(()=>{const a=document.getElementById('partial'),r=a.getBoundingClientRect(),cover=document.createElement('div');Object.assign(cover.style,{position:'absolute',left:r.left+'px',top:r.top+'px',width:r.width+'px',height:'50px',zIndex:20});document.body.append(cover);const top=document.elementFromPoint((r.left+r.right)/2,(r.top+r.bottom)/2);if(a.contains(top))throw Error('Fixture must cover bounding-box centre');});
+ const pieces=await p.evaluate(scripts.links);assert.deepEqual(pieces.links.map(x=>x.label),['Result heading','Contents result']);
+ assert((await p.evaluate(scripts.follow.replace('POSITION','0'))).valid,'partly visible result revalidates');
+ assert((await p.evaluate(scripts.follow.replace('POSITION','1'))).valid,'display:contents link revalidates');
  await b.close();console.log('PASS actual DOM link extraction/revalidation: whitespace, visibility, occlusion, form/button/download filtering; tracked links allowed without executing handlers; no input values');
 })().catch(e=>{console.error(e);process.exit(1)});
