@@ -236,12 +236,6 @@ def main():
             httpx.post(
                 base + f"/api/devices/{did}/approve", headers=auth, timeout=5
             ).raise_for_status()
-            httpx.post(
-                base + f"/api/devices/{did}/permissions",
-                headers=auth,
-                json={"profile": "FULL_CONTROL"},
-                timeout=5,
-            ).raise_for_status()
             agent = subprocess.Popen(
                 [*setpriv, str(BIN), "run", "--state", str(state)],
                 cwd=ROOT,
@@ -252,6 +246,12 @@ def main():
             )
             dev = wait_online(base, token, did)
             assert dev["capabilities"]["privileged_helper"] is True, dev
+            httpx.post(
+                base + f"/api/devices/{did}/permissions",
+                headers=auth,
+                json={"profile": "FULL_CONTROL"},
+                timeout=5,
+            ).raise_for_status()
             sid = mcp(base, token, "devices.select", {"device": did}, 1)["selection_id"]
             who = mcp(
                 base, token, "shell.exec", {"selection_id": sid, "command": "id -u"}, 2
