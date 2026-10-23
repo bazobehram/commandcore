@@ -30,7 +30,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict');
  assert.notEqual(await p.locator('#browser-host').innerText(),'Late stale page','late host response cannot overwrite recovery');
  await p.locator('#browser-tab').press('Enter');
  await p.locator('#browser-refresh').press('Enter');
- await p.waitForFunction(()=>document.getElementById('browser-host').textContent==='No active browser session');
+ await p.waitForFunction(()=>document.getElementById('browser-host').textContent==='No active browser session'&&!document.getElementById('browser-refresh').disabled,null,{timeout:15000});
  assert(await p.locator('#browser-refresh').isEnabled(),'explicit retry recovers');
  assert(await p.evaluate(()=>window.calls.every(x=>['devices.list','activity.feed','browser.frame'].includes(x.name))),'recovery performs no mutation or scope broadening');
  assert.equal(errors.length,0,errors.join('\n'));
