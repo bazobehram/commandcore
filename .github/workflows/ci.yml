@@ -7,12 +7,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: commandcore-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   python:
     runs-on: ubuntu-latest
-    env:
-      # CI smoke servers cannot use the container-only /data mount.
-      COMMANDCORE_UI_TASK_DB: /tmp/commandcore-ci-ui-tasks.sqlite3
     strategy:
       fail-fast: false
       matrix:
@@ -86,9 +87,6 @@ jobs:
 
   linux-full-control:
     runs-on: ubuntu-latest
-    env:
-      # CI smoke servers cannot use the container-only /data mount.
-      COMMANDCORE_UI_TASK_DB: /tmp/commandcore-ci-ui-tasks.sqlite3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -109,9 +107,6 @@ jobs:
 
   rust-agent-parity:
     runs-on: ubuntu-latest
-    env:
-      # CI smoke servers cannot use the container-only /data mount.
-      COMMANDCORE_UI_TASK_DB: /tmp/commandcore-ci-ui-tasks.sqlite3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
