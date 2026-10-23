@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import hmac
+import json
 import secrets
 import time
 import uuid
@@ -24,6 +24,7 @@ class PendingJob:
     execution_id: str
     device_id: str
     future: asyncio.Future[JobResult]
+    connection: Any = None
     stdout_parts: list[str] = field(default_factory=list)
     stderr_parts: list[str] = field(default_factory=list)
     output_bytes: int = 0
@@ -105,13 +106,33 @@ class AgentManager:
                 risk_class="high",
             )
 
+    def _fail_connection_jobs(self, conn: AgentConnection, reason: str) -> None:
+        # Replaced sockets cannot deliver accepted results. End only calls sent
+        # through that socket; a late old disconnect must not fail new calls.
+        for job in list(self.jobs.values()):
+            if job.connection is conn and not job.future.done():
+                job.future.set_result(
+                    JobResult(
+                        execution_id=job.execution_id,
+                        status="agent_disconnected",
+                        result=None,
+                        exit_code=None,
+                        stdout="".join(job.stdout_parts),
+                        stderr="".join(job.stderr_parts),
+                        error=reason,
+                    )
+                )
+
     async def disconnect_device(self, device_id: str) -> None:
         async with self._lock:
             conn = self.connections.pop(device_id, None)
         if conn:
+            self._fail_connection_jobs(
+                conn, "agent connection closed; command outcome is unverified"
+            )
             try:
                 await conn.websocket.close(code=4001)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
                 pass
         async with self._lock:
             if device_id not in self.connections:
@@ -144,7 +165,7 @@ class AgentManager:
         )
         try:
             hello = await asyncio.wait_for(websocket.receive_json(), timeout=10)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
             await websocket.close(code=4408)
             return
         if hello.get("type") != "hello" or hello.get("device_id") != device_id:
@@ -161,14 +182,6 @@ class AgentManager:
             return
 
         conn = AgentConnection(device_id=device_id, websocket=websocket)
-        async with self._lock:
-            old = self.connections.get(device_id)
-            self.connections[device_id] = conn
-        if old:
-            try:
-                await old.websocket.close(code=4002)
-            except Exception:
-                pass
 
         client = websocket.client
         hello_capabilities = hello.get("capabilities") or {}
@@ -209,19 +222,47 @@ class AgentManager:
         self._apply_runtime_capabilities(device_id, hello_capabilities)
         self.metrics.inc("commandcore_agent_connections_total")
         rotation_nonce = secrets.token_urlsafe(32)
-        await websocket.send_json(
-            {
-                "type": "hello.ack",
-                "device_id": device_id,
-                "key_generation": int(row.get("key_generation") or 1),
-                "key_rotation_nonce": rotation_nonce,
-            }
-        )
-        await self._lifecycle(device_id, "connected")
-        if recovery_event:
-            await self._lifecycle(device_id, recovery_event)
+        try:
+            await asyncio.wait_for(
+                self._send_connection_json(
+                    conn,
+                    {
+                        "type": "hello.ack",
+                        "device_id": device_id,
+                        "key_generation": int(row.get("key_generation") or 1),
+                        "key_rotation_nonce": rotation_nonce,
+                    },
+                ),
+                timeout=15,
+            )
+        except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
+            async with self._lock:
+                if device_id not in self.connections:
+                    self.db.mark_offline(device_id)
+            try:
+                await asyncio.wait_for(websocket.close(code=4408), timeout=5)
+            except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+                pass
+            return
+        # A connection is dispatchable only after hello.ack is on the wire.
+        # Otherwise job.request can arrive while the agent still awaits ack,
+        # causing a lost call/reconnect instead of an execution result.
+        async with self._lock:
+            old = self.connections.get(device_id)
+            self.connections[device_id] = conn
+        if old:
+            self._fail_connection_jobs(
+                old, "agent connection replaced; command outcome is unverified"
+            )
+            try:
+                await asyncio.wait_for(old.websocket.close(code=4002), timeout=5)
+            except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+                pass
 
         try:
+            await self._lifecycle(device_id, "connected")
+            if recovery_event:
+                await self._lifecycle(device_id, recovery_event)
             while True:
                 msg = await websocket.receive_json()
                 # A replaced socket may finish receiving after the new hello.
@@ -255,28 +296,16 @@ class AgentManager:
                     continue
         except WebSocketDisconnect:
             pass
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
             pass
         finally:
+            self._fail_connection_jobs(conn, "agent disconnected while job was running")
             async with self._lock:
                 current = self.connections.get(device_id)
                 if current is conn:
                     self.connections.pop(device_id, None)
                     self.db.mark_offline(device_id)
                     await self._lifecycle(device_id, "disconnected")
-                    for execution_id, job in list(self.jobs.items()):
-                        if job.device_id == device_id and not job.future.done():
-                            job.future.set_result(
-                                JobResult(
-                                    execution_id=execution_id,
-                                    status="agent_disconnected",
-                                    result=None,
-                                    exit_code=None,
-                                    stdout="".join(job.stdout_parts),
-                                    stderr="".join(job.stderr_parts),
-                                    error="agent disconnected while job was running",
-                                )
-                            )
 
     async def _send_connection_json(
         self, conn: AgentConnection, payload: dict[str, Any]
@@ -337,7 +366,7 @@ class AgentManager:
             prepared = self.db.prepare_device_key_rotation(
                 device_id, str(row["public_key_b64"]), new_public_key, ttl_seconds=300
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - return a key-rotation error instead of crashing
             await self._send_connection_json(
                 conn,
                 {
@@ -411,7 +440,7 @@ class AgentManager:
             generation = self.db.confirm_device_key_rotation(
                 device_id, rotation_id, new_public_key
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - return a key-rotation error instead of crashing
             await self._send_connection_json(
                 conn,
                 {
@@ -504,7 +533,10 @@ class AgentManager:
         execution_id = str(uuid.uuid4())
         loop = asyncio.get_running_loop()
         pending = PendingJob(
-            execution_id=execution_id, device_id=device_id, future=loop.create_future()
+            execution_id=execution_id,
+            device_id=device_id,
+            future=loop.create_future(),
+            connection=conn,
         )
         self.jobs[execution_id] = pending
         self.db.create_job(execution_id, owner_id, device_id, tool)
@@ -539,8 +571,15 @@ class AgentManager:
         try:
             try:
                 async with conn.send_lock:
-                    await conn.websocket.send_json(payload)
-            except Exception:
+                    async with self._lock:
+                        if self.connections.get(device_id) is not conn:
+                            raise RuntimeError(
+                                "agent connection replaced before dispatch"
+                            )
+                    await asyncio.wait_for(
+                        conn.websocket.send_json(payload), timeout=15
+                    )
+            except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
                 # The connection can disappear after lookup but before the frame
                 # is written. Convert that transport race into the same durable
                 # job result used when a running Agent disconnects, instead of
@@ -563,13 +602,16 @@ class AgentManager:
                 result = await asyncio.wait_for(
                     pending.future, timeout=max(1.0, timeout_ms / 1000 + 5.0)
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 try:
                     async with conn.send_lock:
-                        await conn.websocket.send_json(
-                            {"type": "job.cancel", "execution_id": execution_id}
+                        await asyncio.wait_for(
+                            conn.websocket.send_json(
+                                {"type": "job.cancel", "execution_id": execution_id}
+                            ),
+                            timeout=5,
                         )
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
                     pass
                 result = JobResult(
                     execution_id=execution_id,

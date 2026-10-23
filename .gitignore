@@ -49,3 +49,5 @@ htmlcov/
 *.key
 *.p12
 *.pfx
+
+*.session-key

@@ -24,7 +24,7 @@ FORBIDDEN_NAMES = {
     "helper.key",
     "commandcore.sqlite3",
 }
-FORBIDDEN_SUFFIXES = {".pyc", ".pyo", ".sqlite3", ".db"}
+FORBIDDEN_SUFFIXES = {".session-key", ".pyc", ".pyo", ".sqlite3", ".db"}
 SECRET_PATTERNS = (
     (
         re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),

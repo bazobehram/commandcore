@@ -32,7 +32,16 @@ FORBIDDEN = {
     "enrollment.pending.json",
     "helper.key",
 }
-FORBIDDEN_SUFFIXES = {".sqlite3", ".db", ".log", ".key", ".p12", ".pfx", ".kdbx"}
+FORBIDDEN_SUFFIXES = {
+    ".session-key",
+    ".sqlite3",
+    ".db",
+    ".log",
+    ".key",
+    ".p12",
+    ".pfx",
+    ".kdbx",
+}
 
 
 def git(*args):

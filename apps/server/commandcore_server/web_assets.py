@@ -16,11 +16,19 @@ def web_asset(name: str) -> Path:
         "onboarding.js",
         "panel.css",
         "panel.js",
+        "browser-widget.html",
+        "activity-widget.html",
+        "commandcore-widget.html",
+        "browser-console.js",
+        "browser-console.css",
         "commandcore-logo.webp",
         "commandcore-icon.png",
         "commandcore-wordmark.png",
     }:
         raise ValueError("unknown web asset")
+    # Historical resource URIs share the reviewed unified widget.
+    if name in {"activity-widget.html", "browser-widget.html"}:
+        name = "commandcore-widget.html"
     source = Path(__file__).resolve().parents[2] / "web" / name
     return (
         source

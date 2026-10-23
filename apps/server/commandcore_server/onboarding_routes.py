@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import secrets
 import time
+from html import escape
 from typing import Literal
 from urllib.parse import urlencode
 
@@ -17,6 +19,43 @@ from .auth import STANDARD_SCOPE, scope_allows
 from .enrollment import EnrollmentService
 from .security import issue_panel_session, token_hash
 from .web_assets import web_page
+
+
+def _panel_return_path(destination: str | None, handoff_token: str) -> str:
+    """Never redirect OAuth callbacks to external or untrusted URL destinations."""
+    if destination == "browser" and re.fullmatch(r"[A-Za-z0-9_-]{43}", handoff_token):
+        return "/browser/console/" + handoff_token
+    if destination == "enroll":
+        return "/enroll/"
+    return "/"
+
+
+def _browser_login_landing(path: str) -> HTMLResponse:
+    """Finish the cross-site OAuth navigation before using the Strict cookie.
+
+    The next user-initiated same-origin navigation still requires the verified
+    panel session and owner-bound handoff. No script, cookie-policy relaxation,
+    third-party redirect or credentials are exposed to the page.
+    """
+    if not re.fullmatch(r"/browser/console/[A-Za-z0-9_-]{43}", path):
+        raise ValueError("invalid private console destination")
+    return HTMLResponse(
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta name="referrer" content="no-referrer">'
+        "<title>CommandCore — Private browser control</title>"
+        '<link rel="stylesheet" href="/onboarding.css"></head><body><main>'
+        "<h1>CommandCore</h1><h2>Signed in</h2>"
+        "<p>Continue to your private browser console. AI control stays paused "
+        "until you explicitly resume it.</p>"
+        '<a class="button" href="' + escape(path, quote=True) + '">'
+        "Continue to private Browser</a></main></body></html>",
+        headers={
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "Content-Security-Policy": "default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+        },
+    )
 
 
 class AgentBegin(BaseModel):
@@ -233,9 +272,13 @@ def install_routes(
         )
         response.set_cookie(
             "commandcore_login_destination",
-            "enroll"
-            if request.query_params.get("return_to") == "enroll"
-            else "devices",
+            (
+                "enroll"
+                if request.query_params.get("return_to") == "enroll"
+                else "browser"
+                if request.query_params.get("return_to") == "browser"
+                else "devices"
+            ),
             httponly=True,
             secure=settings.panel_cookie_secure,
             samesite="lax",
@@ -291,11 +334,13 @@ def install_routes(
             principal = verifier.verify(token)
         except (httpx.HTTPError, jwt.PyJWTError, KeyError, ValueError):
             raise HTTPException(400, "OAuth login failed") from None
-        response = RedirectResponse(
-            "/enroll/"
-            if request.cookies.get("commandcore_login_destination") == "enroll"
-            else "/",
-            303,
+        destination = request.cookies.get("commandcore_login_destination")
+        handoff = request.cookies.get("commandcore_browser_handoff_destination", "")
+        return_path = _panel_return_path(destination, handoff)
+        response = (
+            _browser_login_landing(return_path)
+            if destination == "browser" and return_path != "/"
+            else RedirectResponse(return_path, 303)
         )
         session = issue_panel_session(
             secret=settings.session_secret,
@@ -318,6 +363,8 @@ def install_routes(
         )
         response.delete_cookie("commandcore_login_state", path="/auth")
         response.delete_cookie("commandcore_login_destination", path="/auth")
+        response.delete_cookie("commandcore_browser_handoff_destination", path="/auth")
+        response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
         return response
 

@@ -5,12 +5,12 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .security import new_token, token_hash
 from .migrations import migrate
+from .security import new_token, token_hash
 
 PROFILE_RANK = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
 
@@ -27,7 +27,7 @@ def local_max_profile(capabilities: dict[str, Any]) -> str:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class Database:
@@ -63,12 +63,23 @@ class Database:
             )
             self.conn.commit()
 
-    def list_activity(self, device_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    def list_activity(
+        self, device_id: str, limit: int = 100, *, owner_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        # Device access is not ownership of another user's execution history.
+        # Unattributed legacy/connection events fail closed in account views.
+        query = "SELECT a.event_json FROM activity_events a"
+        params: list[Any] = [device_id]
+        if owner_id is not None:
+            query += " JOIN jobs j ON j.execution_id=a.execution_id"
+        query += " WHERE a.device_id=?"
+        if owner_id is not None:
+            query += " AND j.owner_id=? AND j.device_id=a.device_id"
+            params.append(owner_id)
+        query += " ORDER BY a.started_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 250)))
         with self.lock:
-            rows = self.conn.execute(
-                "SELECT event_json FROM activity_events WHERE device_id=? ORDER BY started_at DESC LIMIT ?",
-                (device_id, max(1, min(limit, 250))),
-            ).fetchall()
+            rows = self.conn.execute(query, params).fetchall()
         return [json.loads(row[0]) for row in rows]
 
     def create_enrollment_token(
@@ -776,9 +787,9 @@ class Database:
         duration_ms: int,
         exit_code: int | None,
         risk_class: str,
-    ) -> None:
+    ) -> int:
         with self.lock:
-            self.conn.execute(
+            cursor = self.conn.execute(
                 """INSERT INTO audit_events(timestamp,user_id,client_id,device_id,tool,args_summary,
                 execution_id,status,duration_ms,exit_code,risk_class) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                 (
@@ -796,6 +807,7 @@ class Database:
                 ),
             )
             self.conn.commit()
+            return int(cursor.lastrowid)
 
     def list_jobs(
         self,
