@@ -95,8 +95,12 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
     )
     assert {
         t["name"] for t in json.loads(response.body)["result"]["tools"]
-    } == CORE_TOOL_NAMES
-    assert len(CORE_TOOL_NAMES) == 26
+    } == CORE_TOOL_NAMES | {
+        "commandcore.viewer",
+        "commandcore.finish",
+        "commandcore.workspace",
+    }
+    assert len(CORE_TOOL_NAMES) == 48
     response = await handler.handle(
         await request_for("tools/call", {"name": "system.reboot", "arguments": {}}),
         Principal("owner"),
@@ -109,6 +113,11 @@ async def test_supported_progress_uses_standard_sse_and_final_rpc_result():
     from commandcore_server.activity import notify
 
     class Tools:
+        live_activity = SimpleNamespace(
+            issue_viewer=lambda principal, session: {"fixture": True},
+            session_tag=lambda session: None,
+        )
+
         async def call(self, principal, name, args):
             await notify(
                 {"tool": name, "execution_id": "execution", "status": "running"}

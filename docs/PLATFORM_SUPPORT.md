@@ -12,7 +12,7 @@ Support claims require runtime acceptance, not compilation alone.
 | Windows Rust Agent/helper | Preview / incomplete | Do not advertise FULL_CONTROL until real privileged-helper acceptance passes |
 | macOS Agent | Planned | No supported release |
 | Interactive desktop control | Experimental | Requires a real interactive user session; disabled by default |
-| Browser automation | Not implemented | No supported backend |
+| Managed Browser | Linux deployment candidate | Provisioned isolated workers; public research and private human control; see [Browser guide](BROWSER.md) |
 
 ## Capability advertisement
 

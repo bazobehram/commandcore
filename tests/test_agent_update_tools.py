@@ -1,9 +1,17 @@
 import asyncio
 from pathlib import Path
 
+import pytest
+
 
 from commandcore_agent.executor import Executor
 from commandcore_agent import executor as executor_module
+
+
+@pytest.fixture(autouse=True)
+def isolated_update_policy(monkeypatch, tmp_path):
+    """Never read an installed device trust policy during unit tests."""
+    monkeypatch.setenv("COMMANDCORE_AGENT_POLICY", str(tmp_path / "absent-policy.json"))
 
 
 async def _sink(stream, data):

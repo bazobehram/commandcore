@@ -98,4 +98,4 @@ Audit records include authenticated user, client ID, resolved device, tool, reda
 - The external OAuth authorization server is part of the authentication trust boundary.
 - Fleet rollout is operator-driven; automatic scheduling/ring controllers and signed fleet policy are not implemented.
 - Hardware-backed device keys/attestation are not implemented.
-- Browser automation is not implemented. Interactive desktop control is experimental and requires a dedicated prompt-injection/data-exfiltration boundary before stable support.
+- Managed Browser uses isolated owner-bound workers, a deny-private HTTPS proxy, short-lived worker proofs, and verified conversation viewers. Site content remains untrusted. Consequential website actions require private human control; see [Browser security review](BROWSER_SECURITY_REVIEW.md). Interactive desktop control remains experimental.

@@ -1,4 +1,256 @@
 {
+  "agents.approval.inbox": {
+    "description": "Read-only owner-scoped proposals awaiting authenticated user review. No message content, no approval, and no desktop input. This tool cannot authorize delivery.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "maximum": 30,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Pending collaboration approvals"
+  },
+  "agents.deliver": {
+    "description": "Requires FULL_CONTROL; opens a native approval dialog on the device. If declined or unattended no message is sent. If approved revalidates window/process identity and attempts one submission. Does not claim an AI reply.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "draft_id": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "draft_id"
+      ],
+      "type": "object"
+    },
+    "title": "Request approval for draft delivery"
+  },
+  "agents.observe": {
+    "description": "Read-only screenshot and xdotool-root window geometry for an existing X11 window; no conversation identity is inferred and no GUI input occurs.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "expected_title": {
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "window_id"
+      ],
+      "type": "object"
+    },
+    "title": "Observe existing agent window"
+  },
+  "agents.prepare": {
+    "description": "Save a private ten-minute one-use draft bound to the exact window title. input_x and input_y are absolute xdotool-root coordinates from agents.observe window_geometry, NOT wmctrl positions. No GUI input or submission occurs. Local human approval and FULL_CONTROL remain required for delivery.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "expected_title": {
+          "type": "string"
+        },
+        "input_x": {
+          "description": "X coordinate in xdotool-root absolute screen coordinates",
+          "type": "integer"
+        },
+        "input_y": {
+          "description": "Y coordinate in xdotool-root absolute screen coordinates",
+          "type": "integer"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "send_key": {
+          "enum": [
+            "Return",
+            "ctrl+Return"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "window_id",
+        "expected_title",
+        "text",
+        "input_x",
+        "input_y"
+      ],
+      "type": "object"
+    },
+    "title": "Prepare private draft only"
+  },
+  "agents.sessions": {
+    "description": "Read-only inventory of running AI applications and graphical windows; session and conversation identity is not inferred from a process.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Discover existing agent sessions"
+  },
+  "auth.whoami": {
+    "description": "Show only the verified identity, issuer, OAuth scopes and effective device grants. Never returns credentials.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "title": "My identity and access"
+  },
+  "clipboard.read": {
+    "description": "Read text from the interactive user's clipboard.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Read clipboard"
+  },
+  "clipboard.write": {
+    "description": "Replace the interactive user's clipboard text. Requires STANDARD/FULL_CONTROL.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Write clipboard"
+  },
+  "desktop.focus": {
+    "description": "Activate an existing X11 window using its discovered window ID.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "window_id"
+      ],
+      "type": "object"
+    },
+    "title": "Focus desktop window"
+  },
+  "desktop.pause": {
+    "description": "Block further remote GUI input until the local user resumes via the CommandCore desktop control on the device.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Yield desktop to human"
+  },
+  "desktop.windows": {
+    "description": "List visible top-level desktop windows when the device has an interactive GUI session.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "List desktop windows"
+  },
   "devices.info": {
     "description": "Get one device. Pass device_id, selection_id, or device_ref (exact display name/hostname).",
     "inputSchema": {
@@ -47,6 +299,28 @@
       "type": "object"
     },
     "title": "Select device"
+  },
+  "docker.ps": {
+    "description": "List Docker containers. Docker daemon access is treated as FULL_CONTROL because it is root-equivalent on typical Linux hosts.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "type": "boolean"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "List containers"
   },
   "fs.copy": {
     "description": "Copy a file or directory on one device.",
@@ -504,6 +778,204 @@
     },
     "title": "Git status"
   },
+  "keyboard.keypress": {
+    "description": "Send a key or key chord to the focused desktop application.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    },
+    "title": "Press keys"
+  },
+  "keyboard.type": {
+    "description": "Type text into the focused desktop application. Requires STANDARD/FULL_CONTROL.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "title": "Type text"
+  },
+  "mouse.click": {
+    "description": "Move the pointer to absolute screen coordinates and click. Requires STANDARD/FULL_CONTROL and an interactive desktop session.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "button": {
+          "enum": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "double": {
+          "type": "boolean"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "title": "Click desktop"
+  },
+  "mouse.drag": {
+    "description": "Drag between two bounded X11 screen coordinates.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "button": {
+          "enum": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "type": "string"
+        },
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "from_x": {
+          "type": "integer"
+        },
+        "from_y": {
+          "type": "integer"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "to_x": {
+          "type": "integer"
+        },
+        "to_y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_x",
+        "from_y",
+        "to_x",
+        "to_y"
+      ],
+      "type": "object"
+    },
+    "title": "Drag desktop pointer"
+  },
+  "mouse.move": {
+    "description": "Move the native X11 mouse pointer without clicking.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "title": "Move desktop pointer"
+  },
+  "mouse.scroll": {
+    "description": "Scroll in the active X11 application.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        },
+        "steps": {
+          "maximum": 30,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "direction"
+      ],
+      "type": "object"
+    },
+    "title": "Scroll desktop"
+  },
   "process.list": {
     "description": "List OS processes visible to the Agent user. filter is a case-insensitive literal substring, never regex. On capable Linux Agents, contains_any is OR over literals; pid, parent_pid, uid and Linux single-letter state narrow with AND. CPU time is cumulative seconds, RSS is resident host memory, not GPU memory.",
     "inputSchema": {
@@ -682,6 +1154,25 @@
       "type": "object"
     },
     "title": "Stop process"
+  },
+  "screen.capture": {
+    "description": "Capture the current interactive desktop as PNG/base64. Requires an active desktop session on the target device.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+          "type": "string"
+        },
+        "selection_id": {
+          "description": "Selection handle returned by devices.select.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Capture screen"
   },
   "shell.exec": {
     "description": "Execute a command through the device's default shell. This is intentionally powerful and requires STANDARD/FULL_CONTROL. Output is bounded and audited; secrets should not be passed in command text.",

@@ -10,6 +10,9 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-latest
+    env:
+      # CI smoke servers cannot use the container-only /data mount.
+      COMMANDCORE_UI_TASK_DB: /tmp/commandcore-ci-ui-tasks.sqlite3
     strategy:
       fail-fast: false
       matrix:
@@ -65,8 +68,27 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.invalid commit -m 'ci snapshot' --allow-empty
           bash scripts/package.sh /tmp/commandcore-ci.zip
 
+  browser-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements-dev.txt
+      - run: npm ci --prefix tests/ui
+      - run: npx --prefix tests/ui playwright install --with-deps chromium
+      - name: Inline and expanded Browser regressions
+        run: PYTHONPATH=apps/server python scripts/ui_smoke.py
+
   linux-full-control:
     runs-on: ubuntu-latest
+    env:
+      # CI smoke servers cannot use the container-only /data mount.
+      COMMANDCORE_UI_TASK_DB: /tmp/commandcore-ci-ui-tasks.sqlite3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -87,6 +109,9 @@ jobs:
 
   rust-agent-parity:
     runs-on: ubuntu-latest
+    env:
+      # CI smoke servers cannot use the container-only /data mount.
+      COMMANDCORE_UI_TASK_DB: /tmp/commandcore-ci-ui-tasks.sqlite3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

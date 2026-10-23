@@ -1,5 +1,21 @@
 # Changelog
 
+## Browser UI 0.12.0 build 15
+
+- One compact task card per workflow, inline live previews, natural height,
+  responsive Browser controls, zoom, freshness, and readable operation status.
+- Public search, page-scoped expiring link references, and GET-only Back/Forward.
+- Durable conversation tags across service restarts; ephemeral viewer capabilities.
+- Quiet completed/saved cards with bounded display state; explicit live recovery.
+- Private-control console assets included in wheels; legacy resources share the
+  reviewed unified widget. Private conversation keys excluded from releases.
+- Offline adversarial network/proof tests and Chromium UI regression CI.
+
+This is a Browser/server source candidate. Agent package versions and platform
+support levels remain independent. See docs/BROWSER.md for supported flows and
+remaining release gates.
+
+
 All notable public CommandCore changes are recorded here.
 
 The project is preparing its first clean public release from the 0.9

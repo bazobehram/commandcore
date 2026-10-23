@@ -106,8 +106,10 @@ The current Linux implementation covers:
 - fleet/canary rollout primitives;
 - optional privilege-separated Linux FULL_CONTROL.
 
-Interactive screen, mouse, keyboard, clipboard, browser automation, and some
-platform-specific administration remain experimental or incomplete. The project
+The optional managed Browser supports public web search, page inspection,
+scoped links, navigation history, and private human control. See the
+[Browser guide](docs/BROWSER.md) for its deployment boundary and limits.
+Interactive desktop control and some platform administration remain experimental. The project
 does not claim support from compilation alone; see the
 [platform matrix](docs/PLATFORM_SUPPORT.md).
 

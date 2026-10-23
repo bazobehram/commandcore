@@ -52,3 +52,12 @@ def test_release_check_rejects_dotenv_variant(tmp_path):
     result = run_check(archive)
     assert result.returncode == 1
     assert "forbidden dotenv secret filename" in result.stderr
+
+
+def test_release_check_rejects_task_conversation_key(tmp_path):
+    archive = tmp_path / "task-key.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("commandcore/data/ui-tasks.sqlite3.session-key", b"x" * 32)
+    result = run_check(archive)
+    assert result.returncode == 1
+    assert "forbidden generated/state suffix" in result.stderr
