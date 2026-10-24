@@ -103,7 +103,7 @@ function detail(d){$('detailTitle').textContent=d.display_name;const caps=d.capa
 const permissionForm=document.createElement('form');
 permissionForm.innerHTML='<h3>Device permission</h3><label>Server permission<select name="profile"><option>READ_ONLY</option><option>STANDARD</option><option>FULL_CONTROL</option></select></label><button type="submit">Update device permission</button>';
 permissionForm.elements.profile.value=d.permission_profile;
-permissionForm.onsubmit=async e=>{e.preventDefault();const next=permissionForm.elements.profile.value;if(next===d.permission_profile)return;try{await api('/api/devices/'+encodeURIComponent(d.id)+'/permissions','POST',{profile:next});$('detail').close();await refresh()}catch(err){error(err)}};
+permissionForm.onsubmit=async e=>{e.preventDefault();const next=permissionForm.elements.profile.value;if(next===d.permission_profile)return;try{await api('/api/managed-devices/'+encodeURIComponent(d.id)+'/permissions','POST',{profile:next});$('detail').close();await refresh()}catch(err){error(err)}};
 section.prepend(permissionForm);
 addDeviceDiagnostics(section,d);$('detailBody').append(section)}startLiveActivity(d);$('detail').showModal()}
 function addDeviceDiagnostics(section,device){

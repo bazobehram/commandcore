@@ -98,6 +98,10 @@ class ManagedRename(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
 
 
+class ManagedPermission(BaseModel):
+    profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"]
+
+
 class ManagedGrant(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
     profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"] = "READ_ONLY"
@@ -427,6 +431,37 @@ def install_routes(
                 principal.subject, "enrollment.device.rename", device_id, device_id
             )
         return {"ok": True}
+
+    @app.post("/api/managed-devices/{device_id}/permissions")
+    async def permission_managed(
+        device_id: str,
+        body: ManagedPermission,
+        request: Request,
+        principal=authenticated,
+    ):
+        mutation(request, principal)
+        device = manager(principal, device_id)
+        if not device or device["revoked_at"]:
+            raise HTTPException(409, "device revoked")
+        if body.profile == "FULL_CONTROL" and (
+            "commandcore:full" not in principal.scopes
+            and principal.auth_kind not in {"bootstrap-bearer", "panel-cookie"}
+        ):
+            raise HTTPException(403, "full OAuth scope required")
+        try:
+            updated = db.set_permission(device["owner_id"], device_id, body.profile)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not updated:
+            raise HTTPException(404, "device not found")
+        service._audit(
+            principal.subject,
+            "enrollment.device.permission",
+            device_id,
+            device_id,
+            {"from": device["permission_profile"], "to": body.profile},
+        )
+        return {"ok": True, "device": db.get_device(device_id)}
 
     @app.put("/api/managed-devices/{device_id}/grants")
     async def grant_managed(

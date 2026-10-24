@@ -1,4 +1,5 @@
 import base64
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,12 +23,10 @@ def panel(tmp_path):
         subject = request.headers.get("test-subject")
         if not subject:
             raise HTTPException(401, "authentication required")
-        return Principal(
-            subject,
-            "test-panel",
-            "oauth2-panel",
-            ("commandcore:read", "commandcore:standard"),
-        )
+        scopes = ("commandcore:read", "commandcore:standard")
+        if request.headers.get("test-full-scope") == "1":
+            scopes += ("commandcore:full",)
+        return Principal(subject, "test-panel", "oauth2-panel", scopes)
 
     class Agents:
         disconnected = []
@@ -252,3 +251,54 @@ def test_managers_cannot_access_others_or_raise_ceiling(panel):
         ).status_code
         == 409
     )
+
+
+def test_managed_server_permission_respects_manager_scope_and_local_opt_in(panel):
+    client, db, _, _ = panel
+    device_id = approve(client, begin(client, "STANDARD"))
+    url = f"/api/managed-devices/{device_id}/permissions"
+    assert (
+        client.post(
+            url, headers=operator("stranger"), json={"profile": "FULL_CONTROL"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            url, headers=operator(), json={"profile": "FULL_CONTROL"}
+        ).status_code
+        == 403
+    )
+    full_headers = {**operator(), "test-full-scope": "1"}
+    assert (
+        client.post(
+            url, headers=full_headers, json={"profile": "FULL_CONTROL"}
+        ).status_code
+        == 409
+    )
+    assert db.get_device(device_id)["permission_profile"] != "FULL_CONTROL"
+    device = db.get_device(device_id)
+    capabilities = {
+        **device["capabilities"],
+        "local_max_permission_profile": "FULL_CONTROL",
+        "privileged_helper": True,
+    }
+    with db.lock, db.conn:
+        db.conn.execute(
+            "UPDATE devices SET capabilities_json=? WHERE id=?",
+            (json.dumps(capabilities), device_id),
+        )
+    response = client.post(url, headers=full_headers, json={"profile": "FULL_CONTROL"})
+    assert response.status_code == 200
+    assert response.json()["device"]["permission_profile"] == "FULL_CONTROL"
+    assert (
+        client.post(
+            url, headers=operator("stranger"), json={"profile": "READ_ONLY"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(url, headers=operator(), json={"profile": "STANDARD"}).status_code
+        == 200
+    )
+    assert db.get_device(device_id)["permission_profile"] == "STANDARD"
