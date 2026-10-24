@@ -98,9 +98,13 @@ class ManagedRename(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
 
 
+class ManagedPermission(BaseModel):
+    profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"]
+
+
 class ManagedGrant(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
-    profile: Literal["READ_ONLY", "STANDARD"] = "READ_ONLY"
+    profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"] = "READ_ONLY"
 
 
 def install_routes(
@@ -255,7 +259,7 @@ def install_routes(
                     "state": state,
                     "code_challenge": challenge,
                     "code_challenge_method": "S256",
-                    "scope": "commandcore:read commandcore:standard",
+                    "scope": "commandcore:read commandcore:standard commandcore:full",
                     "resource": settings.oauth_audience,
                 }
             )
@@ -428,6 +432,37 @@ def install_routes(
             )
         return {"ok": True}
 
+    @app.post("/api/managed-devices/{device_id}/permissions")
+    async def permission_managed(
+        device_id: str,
+        body: ManagedPermission,
+        request: Request,
+        principal=authenticated,
+    ):
+        mutation(request, principal)
+        device = manager(principal, device_id)
+        if not device or device["revoked_at"]:
+            raise HTTPException(409, "device revoked")
+        if body.profile == "FULL_CONTROL" and (
+            "commandcore:full" not in principal.scopes
+            and principal.auth_kind not in {"bootstrap-bearer", "panel-cookie"}
+        ):
+            raise HTTPException(403, "full OAuth scope required")
+        try:
+            updated = db.set_permission(device["owner_id"], device_id, body.profile)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not updated:
+            raise HTTPException(404, "device not found")
+        service._audit(
+            principal.subject,
+            "enrollment.device.permission",
+            device_id,
+            device_id,
+            {"from": device["permission_profile"], "to": body.profile},
+        )
+        return {"ok": True, "device": db.get_device(device_id)}
+
     @app.put("/api/managed-devices/{device_id}/grants")
     async def grant_managed(
         device_id: str, body: ManagedGrant, request: Request, principal=authenticated
@@ -435,8 +470,23 @@ def install_routes(
         mutation(request, principal)
         device = manager(principal, device_id)
         local = device["capabilities"].get("local_max_permission_profile", "READ_ONLY")
-        if local == "READ_ONLY" and body.profile != "READ_ONLY":
+        rank = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
+        if rank[body.profile] > rank.get(local, 0):
             raise HTTPException(403, "grant exceeds local ceiling")
+        if body.profile == "FULL_CONTROL":
+            if device["permission_profile"] != "FULL_CONTROL" or not device[
+                "capabilities"
+            ].get("privileged_helper"):
+                raise HTTPException(
+                    403, "full control requires server permission and privileged helper"
+                )
+            if (
+                "commandcore:full" not in principal.scopes
+                and principal.auth_kind not in {"bootstrap-bearer", "panel-cookie"}
+            ):
+                raise HTTPException(
+                    403, "full OAuth scope required to grant full control"
+                )
         if body.subject == settings.bootstrap_subject:
             raise HTTPException(400, "registry owner cannot receive a delegated grant")
         with db.lock, db.conn:

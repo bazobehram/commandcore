@@ -1702,12 +1702,26 @@ class ToolService:
                         oauth_ceiling,
                     ]
                     effective = min(profiles, key=lambda p: rank.get(p, 0))
+                    # A single effective level is authoritative; ceiling values
+                    # are diagnostics, not additional active permissions.
+                    sources = (
+                        "device_permission_profile",
+                        "device_grant_ceiling",
+                        "device_local_maximum",
+                        "oauth_scope_ceiling",
+                    )
+                    limiting_policies = [
+                        source
+                        for source, level in zip(sources, profiles)
+                        if rank.get(level, 0) == rank.get(effective, 0)
+                    ]
                     grants.append(
                         {
                             "device_id": d["id"],
                             "display_name": d["display_name"],
                             "grant_ceiling": d["access_max_permission_profile"],
                             "effective_permission": effective,
+                            "limiting_policies": limiting_policies,
                         }
                     )
                 return {
