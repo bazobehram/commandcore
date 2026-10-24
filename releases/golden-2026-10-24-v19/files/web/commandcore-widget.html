@@ -1,0 +1,1721 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>CommandCore · Live workspace V0.5</title><style>
+:root{color-scheme:dark;font:13px/1.5 system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#111a29;color:#f0f5ff}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #35465d}
+header strong{font-size:14px}#state{margin-left:auto;font-size:12px;color:#acc1db}
+header .live-dot{width:8px;height:8px;border-radius:50%;background:#60a5fa}
+.controls{padding:9px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:inherit;background:#263b58;color:inherit;border:1px solid #516a89;border-radius:8px;padding:5px 10px;cursor:pointer}
+button:focus-visible,summary:focus-visible{outline:2px solid #77bbff;outline-offset:2px}
+#updated{font-size:11px;color:#a9bad0;margin-left:auto}
+main{max-height:min(58vh,440px);overflow:auto;padding:0 14px}
+article{display:flex;align-items:flex-start;gap:9px;border-top:1px solid #344258;padding:8px 0}
+.dot{width:9px;height:9px;border-radius:50%;background:#8ca0be;flex:none;margin-top:9px}
+.running .dot{background:#60a5fa;animation:pulse 1.3s ease-in-out infinite}
+.ok .dot{background:#4acb9d}.error .dot{background:#ed887b}
+@keyframes pulse{50%{opacity:.3}}
+.body{flex:1;min-width:0}
+details{min-width:0}summary{cursor:pointer;list-style:none;border-radius:6px;padding:3px 0}
+summary::-webkit-details-marker{display:none}
+.summary-line{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
+.heading{font-weight:650;overflow-wrap:anywhere}
+.device{font-size:11px;color:#b8c7da}
+.chevron{display:inline-block;color:#85abdb;transform:rotate(-90deg);transition:transform .12s}
+details[open] .chevron{transform:rotate(0)}
+.timestamp{font-size:11px;color:#a5b7cc}
+.elapsed{font-size:11px;color:#b8c7da;white-space:nowrap;margin-top:4px}
+.trace{display:grid;gap:5px;background:#18273b;border:1px solid #304660;border-radius:8px;padding:10px;margin:8px 0 2px}
+.trace-line{display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;overflow-wrap:anywhere}
+.trace-label{min-width:72px;color:#a7b8cf;font-size:11px;font-weight:600}
+.trace-value{color:#e4efff;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;flex:1}
+.trace-note{color:#b8c7da;font-size:11px;overflow-wrap:anywhere}
+#empty{padding:22px 3px;color:#b8c7da}
+footer{padding:10px 14px;font-size:11px;color:#9bafc9;border-top:1px solid #344258}
+@media(prefers-reduced-motion:reduce){.running .dot{animation:none}}
+@media(prefers-color-scheme:light){
+body{background:#f7faff;color:#1b2a40}header,article,footer{border-color:#dce6f2}
+.trace{background:#ecf3fb;border-color:#cfdeef}.trace-value{color:#1a304d}
+.device,.timestamp,.elapsed,#state,#updated,footer,.trace-label,.trace-note{color:#52677d}
+button{background:#e4edf7;color:#1c304c;border-color:#b8c9dd}
+}
+/* Conversational execution workspace; uses host theme tokens when provided. */
+:root{color-scheme:light dark;--cc-bg:var(--color-background-primary,#101116);--cc-card:var(--color-background-secondary,#1b1c23);--cc-text:var(--color-text-primary,#f5f5f8);--cc-muted:var(--color-text-secondary,#9da3b1);--cc-line:var(--color-border-primary,#333544);--cc-accent:#9e87f7;--cc-cyan:#58cccf;--cc-ok:#43d0a2;--cc-fail:#fc8588}
+body{background:var(--cc-bg);color:var(--cc-text);min-width:240px}
+header{background:var(--cc-bg);border-color:var(--cc-line);gap:9px;padding:13px 14px}
+header strong{font-weight:720;letter-spacing:-.025em}header .live-dot{background:var(--cc-ok)}
+.cc-logo{width:36px;height:36px;flex:none;display:grid;place-items:center;color:#17152f;font-weight:850;font-size:12px;border-radius:9px;background:linear-gradient(135deg,#b5a5ff,#64d4df)}
+.cc-title{display:grid;gap:0}.cc-subtitle{font-size:10px;color:var(--cc-muted)}
+#state{font-size:11px;color:var(--cc-muted)}
+nav{display:flex;gap:5px;padding:8px 14px 0}
+nav button{flex:1;border:0;background:transparent;color:var(--cc-muted);font-weight:650;padding:8px}
+nav button[aria-selected=true]{background:var(--cc-card);color:var(--cc-text);box-shadow:inset 0 -2px var(--cc-accent)}
+nav button:disabled{cursor:not-allowed;opacity:.55}
+.controls{gap:6px;padding:11px 14px}
+select{font:inherit;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-card);color:var(--cc-text);padding:6px 8px;flex:1;min-width:125px;max-width:100%}
+button{background:var(--cc-card);border-color:var(--cc-line);color:var(--cc-text)}
+button:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--cc-accent);outline-offset:2px}
+#scope-hint{font-size:11px;color:var(--cc-muted);padding:0 14px 8px}
+.overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 14px 10px}
+.metric{background:var(--cc-card);border:1px solid var(--cc-line);border-radius:10px;padding:9px;min-width:0}
+.metric small{display:block;color:var(--cc-muted);font-size:10px;margin-bottom:4px}
+.metric strong{display:block;color:var(--cc-text);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metric strong.active{color:var(--cc-cyan)}
+.status-detail{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px}
+.kind-chip{font-size:10px;color:var(--cc-muted);padding:2px 6px;border:1px solid var(--cc-line);border-radius:9px}
+.trace-line{gap:7px}.trace-label{min-width:86px}
+.trace-value{word-break:break-word}
+#feed article{scroll-margin-top:8px}
+@media(max-width:340px){.overview{grid-template-columns:repeat(2,minmax(0,1fr))}.overview .metric:last-child{grid-column:span 2}}
+
+article{margin:4px 0;padding:9px 8px;border:1px solid transparent;border-radius:10px}
+article:hover,article:focus-within{background:var(--cc-card);border-color:var(--cc-line)}
+main{max-height:min(65vh,530px);padding:0 10px}
+.trace{background:var(--cc-card);border-color:var(--cc-line);border-radius:9px}
+.dot{width:8px;height:8px}.running .dot{background:var(--cc-cyan)}.ok .dot{background:var(--cc-ok)}.error .dot{background:var(--cc-fail)}
+.device,.timestamp,.elapsed,.trace-label,.trace-note,#updated,footer{color:var(--cc-muted)}
+.trace-value{color:var(--cc-text)}footer{border-color:var(--cc-line)}
+.cc-preview{font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--cc-muted);margin:5px 0;overflow-wrap:anywhere}
+@media(prefers-color-scheme:light){:root{--cc-bg:var(--color-background-primary,#fff);--cc-card:var(--color-background-secondary,#f4f3fa);--cc-text:var(--color-text-primary,#222131);--cc-muted:var(--color-text-secondary,#606577);--cc-line:var(--color-border-primary,#dcdde7);--cc-accent:#7058d6;--cc-cyan:#15979b;--cc-ok:#168a66;--cc-fail:#d84951}}
+
+[hidden]{display:none!important}.cc-logo{object-fit:contain;background:none}
+#browser-pane{padding-top:12px}#browser-host{font-weight:650;padding:0 14px}
+#browser-url{color:var(--cc-muted);padding:5px 14px 10px;font-size:11px;overflow-wrap:anywhere}
+#browser-stage{background:var(--cc-card);min-height:180px;position:relative;display:flex;align-items:center;justify-content:center}
+#browser-stage img{display:block;width:100%;max-height:68vh;object-fit:contain}
+#browser-pointer{position:absolute;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:#7058d666;box-shadow:0 0 0 3px #58cccf88;pointer-events:none;transform:translate(-50%,-50%);z-index:2}
+#browser-message{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--cc-muted);background:var(--cc-card)}
+#browser-state{padding:0 14px 10px;color:var(--cc-muted);font-size:12px}
+#browser-trail{padding:0 14px 14px;max-height:260px;overflow:auto}
+#browser-trail details{border:1px solid var(--cc-line);border-radius:10px;padding:9px;margin:6px 0;background:var(--cc-card)}
+#browser-trail summary{font-weight:650}#browser-trail .trail-meta{font:11px/1.7 ui-monospace,monospace;color:var(--cc-muted);white-space:pre-wrap;overflow-wrap:anywhere;padding:7px 0}
+#browser-take{border-color:var(--cc-accent);margin-left:auto}#browser-continue{border-color:var(--cc-ok);font-weight:700}#browser-monitor:disabled{opacity:.55;cursor:not-allowed}.browser-summary{padding-top:0}
+@media(max-width:420px){.browser-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.browser-toolbar button{width:100%;min-width:0;margin:0}#browser-continue{grid-column:1/-1}#browser-stage img{max-height:58vh}}
+
+
+/* CommandCore UI v0.5 source-led production skin. The canonical MCP bridge is unchanged. */
+:root{color-scheme:dark!important;--cc-bg:#000!important;--cc-card:#0d0d0f!important;--cc-text:#f4f4f5!important;--cc-muted:#929298!important;--cc-line:#242428!important;--cc-accent:#3b82f6!important;--cc-cyan:#3b82f6!important;--cc-ok:#30d158!important;--cc-fail:#ff5c72!important;--cc-warning:#f5ab16}
+html{background:#000}body{background:#000!important;color:var(--cc-text)!important;margin:0 auto;max-width:940px;min-width:0;min-height:320px;border:1px solid #202024;border-radius:16px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+header{background:#000!important;border-bottom:1px solid #222226!important;gap:10px;padding:16px 18px;min-height:67px}
+header strong{font-size:16px;font-weight:650;letter-spacing:-.025em}
+.cc-title{min-width:0}.cc-title strong{line-height:1.2}.cc-subtitle{color:#85858a;font-size:11px}
+.cc-logo{width:25px;height:25px;object-fit:contain;border-radius:0}
+header .live-dot{display:none}#state{background:#142016;border:1px solid #22442c;color:#62d49b;border-radius:50px;padding:5px 10px;font-size:11px;font-weight:620;margin-left:auto;white-space:nowrap}
+body:has(#metric-running.active) #activity-pane:not([hidden])~* #state{background:#251902}
+#cc-device-chip{background:#121214;color:#b0b0b6;border:1px solid #28282c;border-radius:6px;padding:4px 8px;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+nav{display:flex;gap:4px;padding:0 18px 12px;border-bottom:1px solid #19191c;background:#000}
+nav button{flex:0 0 auto;padding:5px 12px;border-radius:8px;color:#a5a5ad;border:1px solid transparent;font-size:12px;font-weight:600}
+nav button[aria-selected=true]{background:#17171b;color:#fff;border-color:#333338;box-shadow:none}
+button{background:#131316!important;border:1px solid #303037!important;color:#f4f4f5!important;border-radius:9px;min-height:34px;font-weight:560}
+button:hover:not(:disabled){background:#1d1d21!important}button:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #5a9bff;outline-offset:2px}
+button:disabled{opacity:.54;cursor:not-allowed}
+.controls{padding:12px 18px 8px;gap:8px}
+select{background:#111113;border:1px solid #29292f;border-radius:7px;color:#ddd;padding:8px;font-size:12px}
+#scope-hint{padding:0 18px 11px;color:#82828b;font-size:11px}
+.overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 18px 12px}
+.metric{background:#101012;border:1px solid #25252a;border-radius:9px;padding:10px}
+.metric small{color:#91919a;font-size:10px}.metric strong{font-size:12px;color:#e7e7ec}
+.metric strong.active{color:#f9bd4e}
+#updated{font-size:11px;margin:0;color:#86868e}
+#activity-pane>.controls:nth-of-type(2){padding:0 18px 8px}
+#feed{max-height:min(67vh,690px);padding:0 18px 15px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#303039 #0c0c0e}
+#feed article{display:flex;align-items:flex-start;gap:10px;min-width:0;margin:0;border:1px solid #242429;background:#0d0d0f;border-radius:11px;padding:12px}
+#feed article.running{order:-1;border-color:#3a3b44;background:#101013}
+#feed article:first-child:not(.running){border-color:#303036}
+#feed article:hover,#feed article:focus-within{border-color:#444450;background:#141417}
+#feed .body{min-width:0;flex:1}
+#feed summary{padding:0;cursor:pointer}
+#feed .summary-line{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+#feed .heading{color:#f0f0f3;font-size:13px;line-height:1.5;font-weight:650;overflow-wrap:anywhere}
+#feed .device{font:11px ui-monospace,Menlo,monospace;background:#151519;padding:2px 6px;border:1px solid #24242a;border-radius:5px}
+#feed .dot{margin-top:7px;width:9px;height:9px;background:#6f6f76}
+#feed .running .dot{background:#3b82f6}
+#feed .ok .dot{background:#30d158}
+#feed .error .dot{background:#ff5c72}
+#feed .chevron{color:#8a8a93}#feed .timestamp,#feed .elapsed{font-size:10px;color:#8c8c95;white-space:nowrap}
+#feed .cc-preview{font:11px/1.55 ui-monospace,Menlo,monospace;color:#acacb4;overflow-wrap:anywhere}
+#feed .trace{background:#070708;border:1px solid #25252b;border-radius:8px;gap:0;padding:9px 11px;font:11px/1.6 ui-monospace,Menlo,monospace;min-width:0}
+#feed .trace:before{content:"EXECUTION TRACE · AUTHORIZED METADATA";display:block;color:#8a8a93;font:9px -apple-system,system-ui,sans-serif;letter-spacing:.12em;border-bottom:1px solid #232329;padding-bottom:8px;margin-bottom:7px}
+#feed .trace-line{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;padding:3px 0;border-bottom:1px solid #19191d}
+#feed .trace-line:last-child{border:0}
+#feed .trace-label{color:#888893;min-width:93px;font:10px/1.5 ui-monospace,monospace}
+#feed .trace-value{color:#e2e2e9;font:11px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+#feed .kind-chip{border-color:#303039;background:#16161a;color:#b1b1bc;font-size:10px}
+#empty,#feed .empty{padding:22px 10px;color:#aaa}
+footer{background:#000;color:#82828b;border-top:1px solid #202025!important;padding:11px 18px;font-size:10px;line-height:1.6}
+#browser-pane{padding-top:0}
+#browser-pane>.overview{padding-top:12px}
+#browser-host{padding:8px 18px 0;color:#f0f0f0;font-weight:650;font-size:12px}
+#browser-url{padding:1px 18px 12px;font:11px ui-monospace,Menlo,monospace;color:#a4a4ac}
+#browser-stage{margin:0 18px;min-height:220px;overflow:hidden;background:#fff;border:1px solid #33333a;border-radius:12px;position:relative;display:flex;align-items:center;justify-content:center}
+#browser-stage img{max-height:min(65vh,680px);width:100%;height:auto;object-fit:contain}
+#browser-message{background:#0e0e10;color:#9c9ca6;padding:24px;text-align:center}
+#browser-state{padding:11px 18px 6px;color:#b5b5bd;font-size:12px}
+.cc-browser-flow{display:grid;gap:14px;margin:15px 18px 4px}
+.cc-flow-step{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.cc-flow-mark{font-size:17px;line-height:19px;color:#a2a2ad;flex:0 0 22px;text-align:center}
+.cc-flow-step[data-kind=ok] .cc-flow-mark{color:#30d158}
+.cc-flow-step[data-kind=active] .cc-flow-mark{color:#3b82f6}
+.cc-flow-step strong{display:block;font-size:13px;font-weight:650;color:#f4f4f6;line-height:1.35}
+.cc-flow-step small{display:block;color:#9c9ca5;font-size:11px;line-height:1.6;margin-top:2px}
+.browser-toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:17px 18px 12px}
+#browser-take{order:-2;flex:1 1 100%;min-height:42px;font-size:13px;border-color:#44444c!important;background:#131316!important}
+#browser-continue:not([hidden]){order:-1;flex:1 1 100%;min-height:42px;border-color:#2b704e!important}
+#browser-refresh,#browser-auto,#browser-monitor{flex:1;min-width:0;font-size:11px}
+#cc-browser-actions{margin:6px 18px 16px;background:#0d0d0f;border:1px solid #252529;border-radius:9px;padding:6px 11px}
+#cc-browser-actions>summary{font-size:12px;font-weight:650;color:#c6c6cd;cursor:pointer;padding:7px 0}
+#browser-trail{padding:0 0 6px;max-height:300px;overflow:auto}
+#browser-trail details{background:#09090b;border-color:#25252b}
+#browser-trail .trail-empty{font-size:11px;color:#999;padding:8px 0}
+#browser-pointer{background:#3b82f677;box-shadow:0 0 0 3px #3b82f644}
+#browser-pane footer{font-size:10px}
+@media(max-width:540px){
+ html,body{margin:0;max-width:none;border:0;border-radius:0;min-width:0}
+ header{padding:14px 14px 12px;min-height:62px;flex-wrap:wrap;row-gap:7px}
+ header strong{font-size:15px}
+ .cc-logo{width:20px;height:20px}
+ .cc-subtitle{display:none}
+ #cc-device-chip{font-size:10px;max-width:102px;margin-left:auto}
+ #state{font-size:11px;margin-left:0;min-height:27px;display:inline-flex;align-items:center;padding:4px 9px}
+ nav{padding:0 14px 10px;gap:8px}
+ nav button{font-size:12px;padding:5px 10px}
+ .controls{padding:10px 14px 7px;gap:6px}
+ #activity-pane>.controls:first-child{display:grid;grid-template-columns:1fr auto auto}
+ #activity-scope{min-width:0}
+ #activity-device:not([hidden]){grid-column:1/-1;min-width:0}
+ #scope-hint{padding:1px 14px 9px}
+ .overview{gap:6px;padding:0 14px 10px}
+ .metric{padding:8px 7px}
+ .metric small{font-size:9px}.metric strong{font-size:10px;line-height:1.4}
+ #feed{max-height:65vh;padding:0 12px 12px;gap:8px}
+ #feed article{padding:10px 9px;gap:7px;border-radius:11px}
+ #feed .heading{font-size:12px}
+ #feed .elapsed{font-size:10px}
+ #feed .trace{padding:9px 7px}
+ #feed .trace-line{gap:5px}
+ #feed .trace-label{min-width:70px}
+ #feed .trace-value{font-size:10px}
+ #feed .timestamp,#feed .cc-preview{font-size:10px}
+ #browser-pane>.overview{padding:10px 12px 9px}
+ #browser-host{padding:9px 14px 0;font-size:12px}
+ #browser-url{padding:0 14px 10px;font-size:10px}
+ #browser-stage{margin:0 12px;min-height:170px;border-radius:11px}
+ #browser-stage img{max-height:52vh;max-width:100%}
+ .cc-browser-flow{margin:14px 14px 0;gap:15px}
+ .cc-flow-step strong{font-size:13px}.cc-flow-step small{font-size:11px}
+ .browser-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:17px 14px 10px}
+ #browser-take,#browser-continue:not([hidden]){grid-column:1/-1;min-height:44px}
+ #browser-refresh,#browser-auto{min-height:36px}
+ #browser-monitor{grid-column:1/-1}
+ #browser-state{padding:10px 14px;font-size:11px}
+ #cc-browser-actions{margin:2px 14px 12px}
+ footer{padding:10px 14px;font-size:10px}
+}
+@media(max-width:340px){#cc-device-chip{max-width:82px}#feed .elapsed{font-size:9px}.overview{grid-template-columns:repeat(3,minmax(0,1fr))}.overview .metric:last-child{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:0.01ms!important;transition-duration:0.01ms!important;scroll-behavior:auto!important}}
+
+
+#state.cc-badge-running,#state.cc-badge-action{color:#f6bb45;background:#241903;border-color:#5e4011}
+#state.cc-badge-live{color:#63d1a2;background:#142016;border-color:#26402e}
+#state.cc-badge-unavailable{color:#a3a3ad;background:#151515;border-color:#38383a}
+
+
+/* V0.7: honest browser states, private-handoff recovery at the top of mobile. */
+#cc-browser-recovery{margin:0 18px 13px;padding:15px 16px;border:1px solid #60440c;background:#1b150a;border-radius:12px;color:#f0f0f2}
+#cc-browser-recovery[hidden]{display:none!important}
+#cc-browser-recovery .cc-recovery-heading{font-size:14px;font-weight:720;color:#f3c168;line-height:1.45}
+#cc-browser-recovery .cc-recovery-desc{font-size:12px;line-height:1.6;margin:6px 0 0;color:#c9c4bb}
+#cc-browser-recovery .cc-recovery-actions:not(:empty){margin-top:12px}
+#cc-browser-recovery .cc-recovery-actions button{width:100%;min-height:43px;text-align:center;white-space:normal;font-size:13px;line-height:1.4;border-color:#936118!important;background:#2d200b!important;color:#f8d79a!important}
+#cc-browser-recovery .cc-recovery-actions button:disabled{opacity:.6}
+body[data-cc-browser-state="awaiting_human"] #browser-pane>.overview,
+body[data-cc-browser-state="awaiting_human"] #browser-pane>.cc-browser-flow,
+body[data-cc-browser-state="awaiting_human"] #cc-browser-actions,
+body[data-cc-browser-state="awaiting_human"] #browser-state{display:none!important}
+body[data-cc-browser-state="awaiting_human"] #browser-stage{min-height:114px;max-height:145px;border-color:#503c21;background:#100f0d}
+body[data-cc-browser-state="awaiting_human"] #browser-message{background:#100f0d;padding:17px;color:#cbb893;font-size:12px;line-height:1.55}
+body[data-cc-browser-state="awaiting_human"] #browser-host{color:#edebec}
+body[data-cc-browser-state="awaiting_human"] #browser-pane>.browser-toolbar{padding-top:9px}
+body[data-cc-browser-state="awaiting_human"] #cc-browser-recovery{display:block}
+body[data-cc-browser-state="unavailable"] #cc-browser-recovery{border-color:#36363e;background:#141417}
+body[data-cc-browser-state="unavailable"] #cc-browser-recovery .cc-recovery-heading{color:#cacad4}
+body[data-cc-browser-state="unavailable"] #cc-browser-recovery .cc-recovery-desc{color:#9d9daa}
+@media(max-width:540px){
+ #cc-browser-recovery{margin:0 12px 11px;padding:14px;border-radius:11px}
+ #cc-browser-recovery .cc-recovery-heading{font-size:14px}
+ #cc-browser-recovery .cc-recovery-desc{font-size:12px}
+ body[data-cc-browser-state="awaiting_human"] #browser-stage{min-height:100px;max-height:120px}
+}
+
+#feed .summary-line .heading{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;min-width:0}
+#feed details[open] .summary-line .heading{white-space:normal;overflow-wrap:anywhere}
+#feed details[open] .trace-value{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}
+#feed .cc-audit-primary{padding:8px 0 14px}
+#feed .cc-command-steps code{white-space:pre-wrap;overflow-wrap:anywhere}
+#feed .timestamp{font-variant-numeric:tabular-nums}
+</style><style id="cc-tab-alignment-styles">
+/* 0.7.1: visible selected state, equal touch targets and compact ChatGPT header */
+nav[role="tablist"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:9px 16px 11px;background:#000;border-bottom:1px solid #26262b}
+nav[role="tablist"] button[role="tab"]{min-width:0;width:100%;min-height:42px;flex:none;padding:8px 12px;text-align:center;border-radius:10px;border:1px solid #2a2a31!important;background:#111114!important;color:#9797a1!important;box-shadow:none!important;font-size:13px;line-height:1.3;font-weight:600;transition:background-color .16s ease,border-color .16s ease,color .16s ease}
+nav[role="tablist"] button[role="tab"][aria-selected="true"]{background:#17233a!important;border-color:#3e70b7!important;color:#f1f6ff!important;box-shadow:inset 0 -2px 0 #5d9fff!important;font-weight:700}
+nav[role="tablist"] button[role="tab"][aria-selected="false"]:hover{background:#19191e!important;color:#d1d1db!important}
+nav[role="tablist"] button[role="tab"]:focus-visible{outline:2px solid #72abff;outline-offset:2px}
+#browser-pane .metric strong,#activity-pane .metric strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+#browser-pane .metric,#activity-pane .metric{min-width:0}
+#browser-host,#browser-url{overflow-wrap:anywhere}
+#browser-pane>.overview{padding-top:12px}
+#browser-stage{border-radius:11px}
+#cc-browser-actions{margin-bottom:12px}
+@media(max-width:540px){
+ header{display:flex;align-items:center;flex-wrap:nowrap;gap:9px;padding:14px 14px 12px;min-height:60px}
+ header .cc-logo{width:20px;height:20px;flex:0 0 20px}
+ header .cc-title{flex:1 1 auto;min-width:0}
+ header .cc-title strong{display:block;font-size:clamp(12px,3.55vw,15px);letter-spacing:-.025em;line-height:1.25;overflow-wrap:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ #cc-device-chip{display:none}
+ #state{flex:0 0 auto;margin:0;padding:5px 8px;min-height:26px;font-size:11px}
+ nav[role="tablist"]{padding:8px 12px 11px;gap:8px}
+ nav[role="tablist"] button[role="tab"]{min-height:43px;font-size:13px;padding:8px 10px}
+ #browser-pane>.overview{gap:7px;padding:12px 12px 10px}
+ #browser-pane .metric{padding:9px 8px}
+ #browser-pane .metric strong{font-size:11px}
+ #browser-host{padding:8px 13px 0;line-height:1.4;font-size:13px}
+ #browser-url{padding:2px 13px 11px;line-height:1.45;font-size:10.5px}
+ #browser-stage{margin:0 12px}
+ .cc-browser-flow{margin:13px 14px 4px;gap:13px}
+ .cc-flow-step{gap:10px}
+ .cc-flow-mark{flex-basis:20px}
+ .cc-flow-step small{line-height:1.48;margin-top:3px}
+ .browser-toolbar{padding:13px 14px 8px;gap:8px}
+ #browser-state{padding:8px 14px}
+ #activity-pane .overview{gap:7px}
+}
+@media(max-width:355px){
+ header .cc-title strong{font-size:12px}
+ #state{font-size:10px;padding:5px 7px}
+}
+@media(prefers-reduced-motion:reduce){nav[role="tablist"] button[role="tab"]{transition:none}}
+</style><style id="cc-managed-job-styles">
+.cc-managed-controls{margin-top:10px;padding:10px;background:#070708;border:1px solid #27272b;border-radius:9px}
+.cc-managed-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.cc-managed-buttons button{padding:6px 9px;min-height:32px;font-size:11px}
+.cc-managed-buttons .cc-managed-stop{border-color:#5a272b!important;color:#ff8c93!important;background:#1b0b0d!important}
+.cc-managed-feedback{display:block;font:11px/1.5 ui-monospace,SFMono-Regular,monospace;color:#acacb6;margin-top:6px;min-height:0}
+</style><style id="cc-premium-overhaul">
+/* CommandCore Premium Workspace. Visual-only; preserve ownership, operations, approvals. */
+:root{--cc-surface:#101113;--cc-raised:#191a1d;--cc-line:#2b2c30;--cc-text:#f1f1f3;--cc-muted:#a0a1aa;--cc-accent:#dedee3;color-scheme:dark}
+body{background:var(--cc-surface)!important;color:var(--cc-text)!important;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif!important;font-size:12.5px;letter-spacing:-.012em;min-width:0}
+header{padding:15px 18px!important;border-bottom:1px solid var(--cc-line)!important;background:#151619!important;min-height:64px}
+header strong{font-size:14px!important;font-weight:700;letter-spacing:-.025em}
+header .live-dot{width:6px;height:6px;box-shadow:none}
+.cc-subtitle,.device,.timestamp,.elapsed,#updated,#scope-hint{color:var(--cc-muted)!important}
+#state{font-size:11px!important;letter-spacing:0;border-radius:999px;padding:5px 11px;border:1px solid #36373b}
+#state.cc-badge-live{color:#77d9ac!important;background:#14231d!important;border-color:#315443!important}
+#state.cc-badge-unavailable{color:#b0b0b7!important;background:#1d1e21!important;border-color:#3c3d42!important}
+#state.cc-badge-running,#state.cc-badge-action{color:#f1c476!important;background:#292117!important;border-color:#68502b!important}
+button,select{font-size:12px!important;border:1px solid #34353a!important;border-radius:10px!important;background:#202125!important;color:#eeeeef!important;transition:background .16s ease,border-color .16s ease,transform .16s ease,box-shadow .16s ease!important}
+button:hover{background:#303137!important;border-color:#55565d!important}
+button:active{transform:scale(.98)}
+button:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #bdc8ff!important;outline-offset:3px!important}
+nav[role=tablist]{background:#17181b!important;border-bottom:1px solid var(--cc-line)!important;padding:8px 14px!important;gap:5px!important}
+nav[role=tablist] button{border-radius:9px!important;min-height:38px!important;font-weight:620!important;letter-spacing:-.02em}
+nav[role=tablist] button[aria-selected=true]{background:#333438!important;border-color:#505158!important;color:#fff!important;box-shadow:0 1px 2px #0004!important}
+.controls{gap:9px!important;padding:11px 16px!important}
+.overview{gap:9px!important;padding:10px 16px!important}
+.overview .metric,.metric{background:#1b1c20!important;border:1px solid #333439!important;border-radius:13px!important;padding:12px!important;box-shadow:0 2px 6px #0002!important}
+.metric small{color:#9fa0a9!important;font-size:10px!important;font-weight:560!important;letter-spacing:.025em}
+.metric strong{color:#f0f0f3!important;font-size:12px!important}
+#scope-hint{padding:4px 16px!important;font-size:11px!important}
+#feed{padding:7px 16px 13px!important;scrollbar-color:#4c4d54 transparent;scrollbar-width:thin}
+#feed article{margin:6px 0!important;padding:11px 12px!important;border:1px solid #2d2e33!important;background:#191a1e!important;border-radius:12px!important;transition:background .18s ease,border-color .18s ease;animation:cc-reveal .23s ease-out both}
+#feed article:hover{background:#222329!important;border-color:#414249!important}
+#feed article .dot{width:7px!important;height:7px!important;margin-top:8px!important;box-shadow:0 0 0 3px #ffffff07}
+#feed .heading{font-size:12px!important;font-weight:660!important}
+#feed .summary-line{gap:6px!important}
+#feed summary{padding:4px 0!important}
+#feed details[open] summary{margin-bottom:7px}
+.trace{background:#121316!important;border:1px solid #33343a!important;border-radius:9px!important;padding:11px!important}
+.trace-label{color:#92949d!important;font-weight:600}
+.trace-value{color:#e6e7ea!important;font-size:11px!important}
+#empty{padding:26px 10px!important;text-align:center;color:#a3a4aa!important}
+#browser-host,#browser-stage{border-radius:12px!important;overflow:hidden}
+#browser-state{border-radius:9px}
+footer{border-top:1px solid var(--cc-line)!important;color:#92939a!important;background:#141517!important;padding:12px 16px!important}
+.cc-skeleton{display:grid;gap:10px;margin:8px 0 15px}
+.cc-skeleton-card{background:#1a1b1f;border:1px solid #2a2b30;border-radius:12px;padding:13px 14px;display:grid;gap:10px;overflow:hidden}
+.cc-skeleton-bar{display:block;height:10px;border-radius:4px;background:linear-gradient(100deg,#28292e 20%,#3c3d44 45%,#28292e 70%);background-size:250% 100%;animation:cc-shimmer 1.6s ease-in-out infinite}
+.cc-skeleton-bar.short{width:28%}.cc-skeleton-bar.medium{width:56%}.cc-skeleton-bar.long{width:83%}
+@keyframes cc-shimmer{to{background-position-x:-250%}}
+@keyframes cc-reveal{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:430px){header{padding:11px 12px!important;min-height:58px}nav[role=tablist]{padding:7px 10px!important}#feed{padding:5px 10px 10px!important}#feed article{padding:10px!important}.overview{padding:8px 10px!important;gap:6px!important}.overview .metric{padding:9px!important}.controls{padding:9px 10px!important;gap:6px!important}footer{padding:10px!important}#state{padding:4px 8px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+<style id="cc-mobile-premium-v2">
+/* Responsive operation detail: high-density audit information stays legible */
+.trace{display:flex!important;flex-direction:column!important;gap:0!important;min-width:0!important;max-width:100%!important;overflow-wrap:anywhere!important}
+.trace-line{display:grid!important;grid-template-columns:minmax(0,100px) minmax(0,1fr)!important;align-items:start!important;gap:9px!important;padding:8px 2px!important;border-bottom:1px solid #ffffff0e!important;min-width:0}
+.trace-line:last-child{border-bottom:0!important}
+.trace-label{min-width:0!important;font-size:10px!important;line-height:1.45!important;color:#9c9da6!important;letter-spacing:.01em}
+.trace-value{min-width:0!important;font-size:11px!important;line-height:1.65!important;overflow-wrap:anywhere!important;word-break:break-word!important;white-space:pre-wrap!important}
+#feed .summary-line{display:flex!important;align-items:center!important;gap:6px!important}
+#feed .summary-line .heading{flex:1 1 auto!important;min-width:0}
+#feed .elapsed{font-variant-numeric:tabular-nums}
+#feed details{max-width:100%!important}
+#feed details[open]{animation:cc-detail-open .18s ease-out}
+@keyframes cc-detail-open{from{opacity:.75}to{opacity:1}}
+#browser-stage{min-height:100px}
+@media(max-width:480px){
+ #feed article{gap:8px!important;padding:10px!important}
+ #feed .summary-line{gap:4px 7px!important;align-items:flex-start!important}
+ #feed .trace{margin-top:10px!important;padding:10px 11px!important}
+ .trace-line{grid-template-columns:minmax(0,1fr)!important;gap:2px!important;padding:7px 1px!important}
+ .trace-label{font-size:10px!important;text-transform:none}
+ .trace-value{font-size:11px!important}
+ #feed .timestamp{font-size:10px!important}
+ #feed .elapsed{font-size:10px!important}
+ .cc-device-chip{max-width:100px}
+}
+@media(prefers-reduced-motion:reduce){#feed details[open]{animation:none!important}}
+</style>
+<style id="cc-trace-responsive-v3">
+/* Audit detail must never force narrow mobile tables. */
+#feed article{min-width:0}
+#feed .body,#feed details,#feed summary{min-width:0;max-width:100%}
+#feed .trace{width:100%;max-width:100%;min-width:0;box-sizing:border-box;display:grid;gap:0!important;overflow:hidden;padding:9px 12px!important}
+#feed .trace-line{display:grid!important;grid-template-columns:minmax(0,106px) minmax(0,1fr)!important;gap:11px!important;align-items:start!important;min-width:0;padding:8px 0!important;border-bottom:1px solid #ffffff12}
+#feed .trace-line:last-child{border-bottom:0}
+#feed .trace-label{min-width:0!important;font-size:10px!important;line-height:1.5;color:#9d9fa8!important}
+#feed .trace-value{min-width:0!important;max-width:100%;font-size:11px!important;line-height:1.65!important;white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+#feed .summary-line{min-width:0;gap:5px 7px!important;flex-wrap:wrap}
+#feed .heading{min-width:0;overflow-wrap:anywhere}
+#feed article .timestamp{font-variant-numeric:tabular-nums}
+#feed .cc-preview{overflow-wrap:anywhere}
+#feed .trace-line[data-cc-technical="true"] .trace-value{font-variant-numeric:tabular-nums}
+@media(max-width:500px){
+ #feed .trace{padding:8px 10px!important;border-radius:10px}
+ #feed .trace-line{grid-template-columns:minmax(0,1fr)!important;gap:2px!important;padding:8px 0!important}
+ #feed .trace-label{font-size:10px!important;letter-spacing:.015em}
+ #feed .trace-value{font-size:11px!important}
+ #feed article{padding:10px!important;gap:7px!important}
+ #feed .timestamp{font-size:10px!important}
+}
+@media(prefers-reduced-motion:reduce){#feed article{animation:none!important}}
+</style>
+<style id="cc-single-workspace-trace-v3">
+#feed article{min-width:0!important}
+#feed article>.body{min-width:0!important;width:100%!important}
+#feed details,#feed summary{min-width:0!important;width:100%!important}
+#feed .summary-line{display:flex!important;gap:5px 7px!important;align-items:center!important;flex-wrap:wrap!important;min-width:0}
+#feed .summary-line .heading{min-width:0!important;overflow-wrap:anywhere!important}
+#feed .trace{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;display:grid!important;gap:0!important;padding:8px 12px!important}
+#feed .trace-line{display:grid!important;grid-template-columns:minmax(0,104px) minmax(0,1fr)!important;min-width:0!important;gap:10px!important;align-items:start!important;border-bottom:1px solid #ffffff12!important;padding:7px 0!important}
+#feed .trace-line:last-child{border-bottom:none!important}
+#feed .trace-label{min-width:0!important;font-size:10px!important;color:#9d9fa8!important}
+#feed .trace-value{min-width:0!important;max-width:100%!important;font-size:11px!important;line-height:1.6!important;overflow-wrap:anywhere!important;word-break:break-word!important;white-space:pre-wrap!important}
+@media(max-width:560px){
+ #feed article{padding:11px!important;gap:7px!important}
+ #feed .trace{padding:8px 11px!important}
+ #feed .trace-line{grid-template-columns:minmax(0,1fr)!important;gap:3px!important;padding:7px 0!important}
+ #feed .trace-label{font-size:10px!important}
+ #feed .trace-value{font-size:11px!important}
+ #feed .summary-line .heading{flex:1 1 55%!important}
+}
+</style>
+<style id="cc-compact-operation-v5">
+#feed .cc-audit-primary{padding:9px 12px!important}
+#feed .cc-technical{margin:9px 0 2px;border:1px solid #34353a;border-radius:10px;overflow:hidden}
+#feed .cc-technical>summary{padding:9px 12px!important;color:#a9aab3!important;font-size:11px!important;font-weight:600;cursor:pointer;min-height:36px;display:flex;align-items:center}
+#feed .cc-technical>summary:hover{background:#25262b}
+#feed .cc-audit-technical{margin:0!important;border:0!important;border-top:1px solid #34353a!important;border-radius:0!important;background:#131417!important}
+#feed .cc-detail-hint{font-size:11px;color:#a3a4ac;padding:10px 1px}
+#feed .cc-technical .trace-line{max-width:100%}
+@media(max-width:560px){#feed .cc-audit-primary{padding:8px 10px!important}#feed .cc-technical>summary{padding:10px!important}}
+</style><style id="cc-ui-consistency-v6">
+.cc-build-version{font-size:10px;color:#90919a;border:1px solid #35363b;background:#1b1c20;padding:3px 7px;border-radius:7px;white-space:nowrap}
+#cc-browser-flow-empty{font-size:11px;color:#9fa1aa;padding:12px;border:1px dashed #3c3d45;border-radius:10px;margin:8px 14px}
+#cc-browser-flow-empty[hidden]{display:none!important}
+.cc-browser-flow[data-cc-empty="true"] .cc-flow-step{display:none!important}
+.cc-browser-flow[data-cc-empty="true"]{display:none!important}
+@media(max-width:420px){.cc-build-version{font-size:9px;padding:2px 5px}}
+</style><style id="cc-browser-state-v8">
+#browser-stage{position:relative}
+#cc-browser-loading{position:absolute;inset:0;background:#141518;display:flex;flex-direction:column;justify-content:center;gap:18px;padding:18px;pointer-events:none}
+#cc-browser-loading[hidden]{display:none!important}
+.cc-loading-screen{height:18px;width:72%;background:linear-gradient(100deg,#26272b 20%,#3a3b40 45%,#26272b 70%);background-size:250% 100%;border-radius:7px;animation:cc-shimmer 1.6s ease-in-out infinite}
+.cc-loading-screen.shorter{width:55%}.cc-loading-screen.small{width:29%}
+@media(prefers-reduced-motion:reduce){.cc-loading-screen{animation:none}}
+#cc-browser-recovery .cc-recovery-desc{max-width:68ch}
+</style><style id="cc-approval-inbox-styles">
+#cc-approval-inbox{margin:8px 16px 5px;border:1px solid #34353b;border-radius:12px;background:#1b1c20;overflow:hidden}
+#cc-approval-inbox>summary{padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;list-style:none;font-size:12px;font-weight:650}
+#cc-approval-inbox>summary::-webkit-details-marker{display:none}
+#cc-approval-inbox>summary:before{content:"▸";font-size:10px;color:#aaa;flex:0 0 auto}
+#cc-approval-inbox[open]>summary:before{content:"▾"}
+#cc-approval-inbox>summary>span:first-of-type{flex:1}
+#cc-approval-count{font-size:10px;color:#a8a9b1;font-weight:550}
+.cc-approval-content{padding:0 13px 13px;border-top:1px solid #34353b}
+#cc-approval-notice{padding:10px 0;color:#a6a8b1;font-size:11px;line-height:1.5}
+#cc-approval-list{display:grid;gap:8px;font-size:11px;color:#b8bac1}
+.cc-approval-card{display:grid;gap:5px;border-radius:9px;background:#121316;border:1px solid #33353a;padding:10px 11px}
+.cc-approval-card strong{font-size:11.5px;color:#e7e7ea;overflow-wrap:anywhere}
+.cc-approval-card small{font-size:10.5px;color:#a5a6b0;overflow-wrap:anywhere}
+.cc-approval-footer{margin-top:11px}
+#cc-approval-refresh{padding:8px 11px;min-height:33px}
+@media(max-width:430px){#cc-approval-inbox{margin:7px 10px 3px}#cc-approval-inbox>summary{padding:10px 11px}}
+</style>
+<style id="cc-session-stability-v9">
+/* Compact logo-first header; connection state remains visible. */
+header .cc-title,header .cc-subtitle{display:none!important}
+header .cc-logo{width:24px!important;height:24px!important;flex:0 0 24px!important}
+/* Activity trace and its technical disclosure must fill their content column. */
+#feed article .body{flex:1 1 0!important;width:auto!important;max-width:none!important;min-width:0!important}
+#feed article .body>details,
+#feed article .cc-audit-primary,
+#feed article .cc-technical,
+#feed article .cc-audit-technical{display:block;width:100%!important;max-width:none!important;box-sizing:border-box!important;min-width:0}
+#feed article .cc-audit-primary,#feed article .cc-audit-technical{display:grid!important}
+#feed article .trace-line{width:100%;min-width:0}
+#feed article .trace-value{min-width:0;overflow-wrap:anywhere}
+</style><style id="cc-activity-fullwidth-v9-1">
+#feed article{display:grid!important;grid-template-columns:8px minmax(0,1fr) auto!important;align-items:start!important;column-gap:9px!important;min-width:0!important}
+#feed article>.dot{grid-column:1;grid-row:1}
+#feed article>.body{grid-column:2 / -1;grid-row:1;min-width:0!important;width:100%!important;max-width:none!important;padding-top:0}
+#feed article>.elapsed{grid-column:3;grid-row:1;justify-self:end;position:relative;z-index:1;margin:0;white-space:nowrap;pointer-events:none}
+#feed article .body>details,#feed article .cc-audit-primary,#feed article .cc-technical,#feed article .cc-audit-technical{width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
+#feed article .body>details>summary{padding-right:110px!important;box-sizing:border-box!important}
+#feed article .trace-line{min-width:0;width:100%}
+#feed article .trace-value{min-width:0;overflow-wrap:anywhere}
+@media(max-width:420px){#feed article .body>details>summary{padding-right:78px!important}}
+</style><style id="cc-final-brand-v9-1">
+header .cc-logo{width:36px!important;height:36px!important;flex:0 0 36px!important;object-fit:contain}
+header{min-height:64px!important}
+#cc-release-footer{padding:10px 16px 13px;text-align:right;font:10px/1.3 system-ui,sans-serif;color:#92949c;letter-spacing:.025em;border-top:1px solid #28282d}
+</style><style id="cc-footer-bottom-v10">html,body{min-height:100%!important}body{display:flex!important;flex-direction:column!important;min-height:100vh!important}#activity-pane:not([hidden]),#browser-pane:not([hidden]){flex:1 0 auto}#cc-release-footer{margin-top:auto!important;text-align:right!important;flex-shrink:0}</style><style id="cc-current-device-v10-3">#cc-current-target{margin:0 14px 10px;padding:8px 10px;border:1px solid var(--cc-line);border-radius:9px;color:var(--cc-muted);font:11px/1.4 system-ui,sans-serif;overflow-wrap:anywhere}#cc-current-target.is-running{color:var(--cc-text);border-color:var(--cc-cyan)}</style><style id="cc-activity-context-v10-4">.cc-operation-context{margin:0 14px 9px;padding:9px 11px;border:1px solid var(--cc-line);border-radius:10px;display:flex;flex-direction:column;gap:4px;min-width:0;font:11px/1.4 system-ui,sans-serif;color:var(--cc-muted)}.cc-operation-context span{overflow-wrap:anywhere}.cc-operation-context span:first-child{font-weight:650;color:var(--cc-text)}.cc-operation-context.is-running{border-color:var(--cc-cyan)}@media(min-width:680px){.cc-operation-context{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr);gap:12px}}</style><style id="cc-sticky-footer-v10-5">#cc-release-footer{position:sticky!important;bottom:0!important;z-index:20!important;background:var(--cc-bg,#101114)!important;min-height:22px;box-sizing:border-box}</style><style id="cc-browser-viewport-v10-13">
+/* Prioritize the browser viewport without hiding takeover or navigation. */
+#browser-pane>.overview{padding:5px 12px!important;gap:6px}
+#browser-pane .metric{padding:6px 8px!important}
+#browser-host{padding-top:5px!important}
+#browser-url{padding-bottom:5px!important;overflow-wrap:anywhere}
+#browser-stage{min-height:225px!important}
+#browser-stage img{max-height:72vh!important}
+.cc-browser-flow{margin-top:8px!important;gap:8px!important}
+.browser-toolbar{padding-top:9px!important}
+@media(max-width:600px){
+ #browser-stage{margin:0 7px!important;min-height:230px!important}
+ #browser-stage img{max-height:64vh!important}
+ #browser-pane>.overview{padding:5px 8px!important}
+ .cc-browser-flow{margin:8px 10px 0!important;gap:7px!important}
+ .browser-toolbar{padding:8px 10px!important}
+}
+</style><style id="cc-conversation-ux-v11">
+/* Intrinsic size: never use 100vh inside an auto-sized chat iframe. */
+html,body{min-height:0!important;height:auto!important}
+body{max-width:940px;display:block!important;overflow:hidden}
+header{padding:9px 12px!important;min-height:52px!important;gap:8px!important}
+header .cc-logo{width:28px!important;height:28px!important;flex-basis:28px!important}
+.cc-title{display:none!important}#cc-device-chip{margin-left:auto;max-width:38%}
+#cc-close-view{min-height:34px;min-width:30px;padding:3px 7px;font-size:18px;line-height:1}
+@media(max-width:360px){header{gap:5px!important;padding:9px 8px!important}header .cc-logo{width:24px!important;height:24px!important;flex-basis:24px!important}#state{padding:4px 6px!important;font-size:10px!important}#cc-minimize{padding:5px 7px!important}#cc-device-chip{max-width:25%!important}}
+#cc-browser-enlarge{min-height:38px;font-size:11px}
+#cc-minimize{margin-left:0;min-height:34px;padding:5px 9px;font-size:11px}
+nav[role=tablist]{padding:6px 10px!important}
+.overview{padding:7px 10px!important;gap:6px!important}
+.overview .metric{padding:7px 8px!important}
+#cc-current-target{display:none!important}
+#cc-workspace-options,#cc-context-details{margin:0 10px 7px;border:1px solid var(--cc-line);border-radius:8px}
+#cc-workspace-options>summary,#cc-context-details>summary{padding:7px 10px;font-size:11px;color:var(--cc-muted);min-height:32px}
+#cc-workspace-options .controls{padding:8px!important}
+#cc-workspace-options #scope-hint{padding:0 8px 7px!important}
+#cc-workspace-options #cc-approval-inbox{margin:0 8px 8px!important}
+#cc-context-details .cc-operation-context{margin:0 8px 8px!important}
+#activity-pane>.controls{padding:0 12px 5px!important}
+#feed{max-height:280px!important;max-height:min(280px,40svh)!important;min-height:48px;padding:0 10px 8px!important;overscroll-behavior:contain}
+#feed article{padding:9px!important;grid-template-columns:8px minmax(0,1fr)!important}
+#feed article>.elapsed{grid-column:2 / -1;grid-row:2;justify-self:start;margin-top:5px;white-space:normal}
+#feed article .body>details>summary{padding-right:0!important}
+#cc-device-chip{display:inline-block!important}
+#feed .heading{font-size:12px!important}
+#cc-release-footer{position:static!important;margin:0!important;padding:5px 12px!important;min-height:20px;font-size:10px}
+#browser-pane>.overview{display:none!important}
+#browser-host{padding:5px 12px 0!important;font-size:12px}
+#browser-url{padding:2px 12px 6px!important}
+#browser-stage{min-height:100px!important;max-height:300px!important;margin:0 10px!important}
+#browser-stage img{max-height:300px!important;max-width:100%;object-fit:contain}
+.cc-browser-flow{display:none!important}
+.browser-toolbar{padding:8px 10px!important;display:flex!important;gap:6px!important}
+#browser-take,#browser-continue:not([hidden]){flex:1 1 auto!important;order:0!important;min-height:38px!important;font-size:11px!important}
+#browser-refresh,#browser-auto{min-height:38px!important}
+#browser-monitor{display:none!important}
+#browser-state{padding:0 12px 7px!important;font-size:11px}
+#cc-browser-actions{margin:0 10px 8px!important}
+body[data-cc-minimized=true]>:not(header):not(script):not(style){display:none!important}
+body[data-cc-minimized=true] #state{display:none!important}
+body[data-cc-activity-stale=true] #feed{opacity:.6}
+@media(max-width:540px){
+ #feed{max-height:200px!important}
+ #browser-stage,#browser-stage img{max-height:230px!important}
+ #cc-device-chip{max-width:34%;font-size:10px}
+ .overview .metric small{font-size:10px!important}.overview .metric strong{font-size:11px!important}
+ button,summary{touch-action:manipulation}
+}
+#feed .cc-command-steps{display:block;grid-column:1/-1;margin:4px 0;padding-left:24px;min-width:0}
+#feed .cc-command-steps li{padding:5px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+#feed .cc-command-steps code{font:11px/1.5 monospace}
+#cc-developer-view{width:auto;min-height:24px;flex:none}
+<style id="cc-b38-loading">@media(prefers-reduced-motion:reduce){.cc-skeleton-bar{animation:none!important}}<style id="cc-b39-activity-loading">
+#cc-activity-loading{display:flex;gap:10px;align-items:center;margin:4px 12px 8px;padding:9px 12px;border:1px solid #303238;border-radius:9px;background:#1a1c20;min-height:24px}
+#cc-activity-loading .cc-skeleton-bar{height:8px;flex:1;min-width:18px}
+#cc-activity-loading .cc-skeleton-bar.short{flex:0 0 22%}
+#cc-activity-loading small{color:#a5a8b0;font-size:10px;white-space:nowrap}
+#feed .trace-value,#feed .cc-audit-primary .trace-value,#feed .cc-technical .trace-value{
+background:#151c1b!important;color:#d8e3dc!important;border:1px solid #2a3934!important;
+border-radius:8px!important;padding:8px 10px!important;
+font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;
+font-size:12px!important;line-height:1.6!important;white-space:pre-wrap!important;
+overflow-wrap:anywhere!important;max-height:220px!important;overflow-y:auto!important;
+-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
+#feed .cc-technical .trace-label,#feed .trace-label{color:#8ad4a8!important}
+#feed .cc-technical>summary{list-style:none}
+#feed .cc-technical>summary::before{content:"›";font-size:17px;margin-right:8px}
+#feed .cc-technical[open]>summary::before{content:"⌄"}
+
+@media(prefers-reduced-motion:reduce){#cc-activity-loading .cc-skeleton-bar{animation:none}}
+/* b42 terminal details */
+#feed .trace-line:has(>.trace-label:first-child) .trace-value{font-variant-ligatures:none}
+#feed .trace-value{tab-size:2}
+#feed article .cc-audit-primary{gap:8px}
+</style></head><body>
+<header><img class="cc-logo" alt="CommandCore" src="data:image/png;base64,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"><div class="cc-title"><strong>CommandCore</strong><span class="cc-subtitle">AI execution workspace</span></div><span class="live-dot" aria-hidden="true"></span><span id="state" role="status">Connecting…</span></header>
+<nav role="tablist" aria-label="Workspace tabs"><button id="activity-tab" role="tab" type="button" aria-selected="true" aria-controls="activity-pane">Activity</button><button id="browser-tab" role="tab" type="button" aria-selected="false" aria-controls="browser-pane">Browser</button></nav><section id="activity-pane" role="tabpanel" aria-labelledby="activity-tab">
+<details id="cc-workspace-options"><summary>Filters &amp; collaboration</summary><div class="controls"><select id="activity-scope" aria-label="Activity scope"><option value="conversation">This conversation</option><option value="all">All activity</option><option value="device">By device</option></select><select id="activity-device" aria-label="Device filter" hidden></select><button id="refresh" type="button" title="Refresh activity">↻</button><button id="pause" type="button">Pause</button></div>
+<details id="cc-approval-inbox" aria-label="Collaboration proposals">
+<summary><span>Collaboration requests</span><span id="cc-approval-count" aria-live="polite">—</span></summary>
+<div class="cc-approval-content">
+<div id="cc-approval-notice">Proposals are read-only. Authenticated approval and delivery are not enabled yet.</div>
+<div id="cc-approval-list" aria-live="polite">Open to check pending requests.</div>
+<div class="cc-approval-footer"><button type="button" id="cc-approval-refresh">Refresh requests</button></div>
+</div></details>
+<div id="scope-hint" role="status">Checking conversation attribution…</div>
+</details><input type="checkbox" id="cc-developer-view" checked hidden aria-hidden="true"><div class="controls" id="cc-developer-policy" hidden>Command details require verified access. Raw output and file diffs are unavailable.</div><div class="overview" aria-label="Live execution summary">
+<div class="metric"><small>Execution</small><strong id="metric-running">Connecting…</strong></div>
+<div class="metric"><small id="metric-device-label">Device</small><strong id="metric-device">—</strong></div>
+<div class="metric"><small>Operations</small><strong id="metric-count">—</strong></div>
+</div>
+<div id="cc-current-target" role="status" aria-live="polite">Waiting for attributed operations…</div>
+<details id="cc-context-details"><summary>Operation context</summary><div id="cc-operation-context" class="cc-operation-context" role="status" aria-live="polite"><span id="cc-context-heading">No active operation</span><span id="cc-context-path">Working directory not reported</span><span id="cc-context-effect">File effects not reported</span></div></details><div class="controls"><button id="activity-reconnect" type="button" hidden>Reconnect Activity</button><span id="updated">Updates while visible</span></div>
+<main id="feed" aria-label="Connected device operations"><div id="empty" aria-live="polite"><div class="cc-skeleton" aria-hidden="true"><div class="cc-skeleton-card"><span class="cc-skeleton-bar short"></span><span class="cc-skeleton-bar long"></span><span class="cc-skeleton-bar medium"></span></div><div class="cc-skeleton-card"><span class="cc-skeleton-bar short"></span><span class="cc-skeleton-bar medium"></span></div><div class="cc-skeleton-card"><span class="cc-skeleton-bar short"></span><span class="cc-skeleton-bar long"></span></div></div><span>Connecting to your activity…</span></div></main>
+
+</section>
+<section id="browser-pane" role="tabpanel" aria-labelledby="browser-tab" hidden>
+<section id="cc-browser-recovery" role="status" aria-live="polite" hidden>
+ <div class="cc-recovery-heading" id="cc-recovery-title">Private control</div>
+ <p class="cc-recovery-desc" id="cc-recovery-desc">Waiting for verified Browser state…</p>
+ <div class="cc-recovery-actions" id="cc-recovery-actions"></div>
+</section>
+
+<div class="overview browser-summary" aria-label="Browser session context">
+<div class="metric"><small>Browser session</small><strong id="browser-session">No active session</strong></div>
+<div class="metric"><small>Browser host</small><strong id="browser-device">Operator-managed worker</strong></div>
+<div class="metric"><small>Control</small><strong id="browser-control">Connecting</strong></div></div>
+<div id="browser-host">Waiting for browser…</div><div id="browser-url" aria-label="Current browser URL">—</div>
+<section id="browser-stage" aria-label="Browser viewport"><img id="browser-screen" alt="Current remote Chromium screenshot" hidden>
+<div id="browser-message">Ask ChatGPT to open a website to begin.</div><div id="cc-browser-loading" hidden aria-hidden="true"><span class="cc-loading-screen"></span><span class="cc-loading-screen shorter"></span><span class="cc-loading-screen small"></span></div><div id="browser-pointer" hidden aria-hidden="true"></div></section>
+<div class="controls browser-toolbar"><button id="browser-refresh" type="button">Refresh now</button>
+<button id="browser-auto" type="button" aria-pressed="true">Pause live view</button><button id="browser-stop" type="button" disabled title="Close only this conversation’s Browser. This does not stop the ChatGPT response.">Stop Browser</button><button id="browser-monitor" type="button" disabled>Open separate monitor ↗</button><button id="browser-take" type="button">Take control</button><button id="browser-continue" type="button" hidden>Continue in ChatGPT →</button></div>
+<div id="browser-state" role="status" aria-live="polite">Connecting to your owner-bound Browser…</div>
+<div id="browser-trail" aria-label="Recent AI browser actions"></div>
+</section><div id="cc-release-footer" aria-label="CommandCore UI version">UI 0.12.0 · build 1</div><script id="workspace-runtime">(()=>{"use strict";
+const activity=document.getElementById("activity-pane"),browser=document.getElementById("browser-pane");
+const activityTab=document.getElementById("activity-tab"),browserTab=document.getElementById("browser-tab");
+let manualTabChoice=false, lastBrowserTaskKey=null;
+window.__ccWorkspaceSuspended=false;
+if(typeof window.openai?.requestDisplayMode==="function"){
+ const enlarge=document.createElement("button");enlarge.id="cc-browser-enlarge";enlarge.type="button";enlarge.textContent="Enlarge";
+ enlarge.title="Open a larger browser preview";
+ document.querySelector(".browser-toolbar").append(enlarge);
+ enlarge.addEventListener("click",async()=>{
+  try{await window.openai.requestDisplayMode({mode:"fullscreen"});}
+  catch(_){enlarge.textContent="Use expand above";}
+ });
+}
+window.addEventListener("pagehide",()=>{window.__ccWorkspaceSuspended=true;});
+window.addEventListener("pageshow",()=>{window.__ccWorkspaceSuspended=false;});
+function select(view){
+ const isBrowser=view==="browser";
+ activity.hidden=isBrowser;browser.hidden=!isBrowser;
+ document.body.dataset.ccWorkspaceView=isBrowser?"browser":"activity";
+ activityTab.setAttribute("aria-selected",String(!isBrowser));
+ browserTab.setAttribute("aria-selected",String(isBrowser));
+ activityTab.tabIndex=isBrowser?-1:0;
+ browserTab.tabIndex=isBrowser?0:-1;
+ window.dispatchEvent(new Event("commandcore:"+view+"-active"));
+}
+activityTab.addEventListener("click",()=>{manualTabChoice=true;select("activity");});
+browserTab.addEventListener("click",()=>{manualTabChoice=true;select("browser");});
+const tabs=[activityTab,browserTab];
+for(const tab of tabs)tab.addEventListener("keydown",event=>{
+ if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;
+ event.preventDefault();
+ const current=tabs.indexOf(tab);
+ const next=event.key==="Home"?0:event.key==="End"?1:(current+(event.key==="ArrowRight"?1:tabs.length-1))%tabs.length;
+ const target=tabs[next];manualTabChoice=true;select(target===browserTab?"browser":"activity");target.focus();
+});
+document.body.dataset.ccWorkspaceView="activity";
+activityTab.tabIndex=0;browserTab.tabIndex=-1;
+function output(raw){
+ const p=raw?.structuredContent||raw?.result?.structuredContent||raw||{};
+ // Only focus on a newly announced browser task; never steal manual selection
+ // during successive frame updates or after the operator chooses Activity.
+ // Viewer availability is not browser activity. Never switch based on it.
+ // A new browser action must actually be observed before taking focus.
+}
+window.addEventListener("commandcore:device-action",()=>{
+ // A newly observed non-browser device command brings the operation log forward.
+ if(document.body.dataset.ccWorkspaceView!=="activity")select("activity");
+});
+window.addEventListener("commandcore:browser-action",e=>{
+ const next=Number(e.detail?.sequence);
+ if(!Number.isSafeInteger(next))return;
+ // A new AI action may happen inside the same persistent Browser session.
+ // Honor explicit Activity selection for passive frame refreshes, but a
+ // genuinely new action brings the Browser forward.
+ if(document.body.dataset.ccWorkspaceView!=="browser")select("browser");
+});
+window.addEventListener("openai:set_globals",e=>output(e?.detail?.globals?.toolOutput));
+window.addEventListener("message",e=>{if(e.source===window.parent&&e.data?.method==="ui/notifications/tool-result")output(e.data.params);});
+output(window.openai?.toolOutput||window.openai?.toolResponseMetadata?.mcp_tool_result);
+})();</script><script id="activity-runtime">
+(()=>{
+"use strict";
+const by=id=>document.getElementById(id);
+let busy=false,paused=false,number=0,sessionRef="",sessionAvailable=false,refreshPending=false;
+let previousActivityIds=null,lastHiddenActivityPoll=0,lastFailureAt=0,attributionBlocked=false,lastRenewedRef=null;
+const scopeKey=()=>JSON.stringify([scopeEl.value,deviceEl.value,sessionRef,by("cc-developer-view").checked]);
+function setActivityState(label,className){
+ window.__ccActivityBadge={label,className};
+ if(!by("activity-pane").hidden){by("state").textContent=label;by("state").className=className;}
+ window.dispatchEvent(new Event("commandcore:activity-state"));
+}
+let deviceChoices=[],scopeTouched=false;
+const scopeEl=by("activity-scope"),deviceEl=by("activity-device");
+function initScope(fromHost){
+ const metadata=fromHost||window.openai?.toolResponseMetadata||{};
+ const meta=metadata.call_tool_result||metadata.mcp_tool_result||metadata;
+ const raw=fromHost||window.openai?.toolOutput||meta?.result?.structuredContent||meta?.structuredContent||{};
+ const unwrapped=raw?.call_tool_result||raw?.mcp_tool_result||raw;
+ const output=unwrapped?.structuredContent||unwrapped?.result?.structuredContent||unwrapped;
+ const linked=fromHost?.["commandcore/viewer"]||meta?._meta?.["commandcore/viewer"]||
+   meta?.result?._meta?.["commandcore/viewer"]||
+   window.openai?.toolResponseMetadata?.call_tool_result?._meta?.["commandcore/viewer"]||{};
+ const session=output?.session_available===true?output:linked;
+ const available=session?.session_available===true&&typeof session?.session_ref==="string"&&session.session_ref.length<129;
+ if(available){
+  const changed=!sessionAvailable||sessionRef!==session.session_ref;
+  sessionAvailable=true;sessionRef=session.session_ref;
+  if(changed){attributionBlocked=false;lastRenewedRef=null;}
+  window.__ccBrowserViewerRef=sessionRef;
+  if(changed)window.dispatchEvent(new Event("commandcore:viewer-changed"));
+  scopeEl.querySelector('[value="conversation"]').disabled=false;
+  if(!scopeTouched)scopeEl.value="conversation";
+  by("scope-hint").textContent="Only MCP operations attributed to this conversation";
+  return changed;
+ }
+ if(sessionAvailable)return false;
+ scopeEl.querySelector('[value="conversation"]').disabled=false;
+ if(!scopeTouched)scopeEl.value="conversation";
+ by("scope-hint").textContent="Checking conversation attribution through the widget connection…";
+ return false;
+}
+window.addEventListener("openai:set_globals",event=>{
+ const g=event?.detail?.globals;
+ if(!g||(!("toolOutput" in g)&&!("toolResponseMetadata" in g)))return;
+ let changed=false;
+ if(g.toolResponseMetadata)changed=initScope(g.toolResponseMetadata)||changed;
+ if(g.toolOutput)changed=initScope(g.toolOutput)||changed;
+ if(changed)refresh(true);
+});
+window.addEventListener("message",event=>{
+ if(event.source===window.parent&&event.data?.method==="ui/notifications/tool-result"){
+  if(initScope(event.data.params))refresh(true);
+ }
+});
+async function loadDevices(){
+ if(document.body.dataset.ccOperationCompact==="true")return;
+ try{const r=await callTool("devices.list",{});const payload=r?.structuredContent||r?.result?.structuredContent||r;deviceChoices=(payload.devices||[]).filter(d=>d?.id&&!d?.revoked_at);deviceEl.replaceChildren(...deviceChoices.map(d=>{const o=document.createElement("option");o.value=d.id;o.textContent=String(d.display_name||d.hostname||d.id).slice(0,85);return o;}));}catch(_){deviceChoices=[];}
+}
+scopeEl.addEventListener("change",()=>{scopeTouched=true;deviceEl.hidden=scopeEl.value!=="device";rowCache.clear();refresh(true);});
+deviceEl.addEventListener("change",()=>{rowCache.clear();refresh(true);});
+const waiting=new Map(),expanded=new Set(),collapsedRunning=new Set();
+const rowCache=new Map();
+window.addEventListener("commandcore:viewer-changed",()=>{
+ setActivityState("Connecting","cc-badge-unavailable");
+ by("cc-developer-view").checked=true;
+ previousActivityIds=null;rowCache.clear();expanded.clear();collapsedRunning.clear();
+ by("feed").replaceChildren(text("div","Connecting to this conversation…","empty"));
+ by("metric-device").textContent="—";by("metric-count").textContent="—";
+ by("metric-running").textContent="Connecting…";
+ by("cc-context-heading").textContent="No active operation";
+ by("cc-context-path").textContent="—";by("cc-context-effect").textContent="—";
+});
+function rpc(method,params){
+ const id="activity-"+(++number);
+ return new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{if(waiting.has(id)){waiting.delete(id);reject(Error("Host did not respond"));}},15000);
+  waiting.set(id,{resolve,reject,timer});
+  window.parent.postMessage({jsonrpc:"2.0",id,method,params},"*");
+ });
+}
+window.addEventListener("message",e=>{
+ if(e.source!==window.parent||e.data?.jsonrpc!=="2.0")return;
+ if(typeof e.data.method==="string"||(!("result" in e.data)&&!("error" in e.data)))return;
+ const p=waiting.get(e.data.id);if(!p)return;
+ waiting.delete(e.data.id);clearTimeout(p.timer);
+ if(e.data.error)p.reject(Object.assign(Error(e.data.error.message||"MCP error"),{code:e.data.error.code}));
+ else p.resolve(e.data.result);
+});
+let bridgeMode="mcp";
+const bridgeReady=rpc("ui/initialize",{
+ protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
+ appCapabilities:{}
+}).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized",params:{}},"*")).catch(error=>{
+ // A native alias does not establish MCP Apps readiness. Only an explicit
+ // unsupported-method response permits the legacy native bridge fallback.
+ if(error.code===-32601&&typeof window.openai?.callTool==="function"){bridgeMode="native";return;}
+ throw error;
+});
+window.__ccBridgeReady=bridgeReady;window.__ccCallTool=callTool;window.__ccAcceptViewer=initScope;
+async function callTool(name,args){
+ // Some hosts leave callTool pending when a mounted card loses its bridge.
+ // Bound both initialization and the request so viewers can leave loading,
+ // unlock their controls and offer recovery. Never retry a mutation here.
+ let deadline,expired=false;
+ const hostTimeout=()=>Object.assign(Error("CommandCore connection timed out. Refresh to reconnect."),{code:"host_timeout"});
+ try{
+  return await Promise.race([
+   (async()=>{
+    await bridgeReady;
+    if(expired)throw hostTimeout();
+    return bridgeMode==="native"
+     ?window.openai.callTool(name,args)
+     :rpc("tools/call",{name,arguments:args});
+   })(),
+   new Promise((_,reject)=>{deadline=setTimeout(()=>{expired=true;reject(hostTimeout());},15000);})
+  ]);
+ }finally{clearTimeout(deadline);}
+}
+const statusText=x=>({
+ running:"Running",started:"Started",ok:"Completed",completed:"Completed",
+ error:"Failed",timeout:"Timed out",agent_disconnected:"Disconnected",
+ canceled:"Canceled",stopped:"Stopped (SIGTERM)",rolled_back:"Rolled back"
+})[x]||String(x||"Unknown").slice(0,15);
+function text(tag,content,klass){
+ const el=document.createElement(tag);
+ if(klass)el.className=klass;
+ el.textContent=String(content??"");
+ return el;
+}
+function render(list){
+ const running=list.filter(x=>x.status==="running").length;
+ const active=list.filter(x=>["running","started"].includes(x.status));
+ const meaningful=x=>typeof x?.device==="string" && x.device && x.device!=="Control plane";
+ const target=active.length?active.find(meaningful):list.find(meaningful);
+ const latestActive=active[0];
+ const hasRunningOperation=!!active.length;
+ by("metric-running").textContent=hasRunningOperation?active.length+" running":"Idle";
+ by("metric-running").classList.toggle("active",hasRunningOperation);
+ by("metric-device-label").textContent=hasRunningOperation?"Active device":"Last device";
+ by("metric-device").textContent=target?.device || (hasRunningOperation?"Control plane":"—");
+ const operation=hasRunningOperation?latestActive:target;
+ const summary=hasRunningOperation?"Now working":target?"Last used":"No device operation";
+ by("cc-current-target").textContent=summary+" · "+(target?.device || "—")+(operation?.tool?" · "+String(operation.tool).slice(0,48):"")+(hasRunningOperation?" · Running":" · Idle");
+ by("cc-current-target").classList.toggle("is-running",hasRunningOperation);
+ const detail=by("cc-developer-view").checked && operation?.detail && typeof operation.detail==="object" ? operation.detail : {};
+ const reportedPath=[detail.cwd,detail.root,detail.repo,detail.path,detail.destination,detail.source].find(v=>typeof v==="string"&&v.trim());
+ const reportedEffect=[detail.verified_effect,detail.effect_summary].find(v=>typeof v==="string"&&v.trim());
+ by("cc-context-heading").textContent=hasRunningOperation?"Running · "+String(operation?.tool||"Operation").slice(0,60):operation?"Last operation · "+String(operation.tool||"Operation").slice(0,60):"No active operation";
+ by("cc-context-path").textContent=reportedPath?"Path · "+reportedPath.slice(0,180):"Working directory or target not reported";
+ by("cc-context-effect").textContent=reportedEffect?"Verified effect · "+reportedEffect.slice(0,180):"File effects not reported";
+ by("cc-operation-context").classList.toggle("is-running",hasRunningOperation);
+ by("metric-count").textContent=String(list.length)+" recent";
+ const root=by("feed");
+ if(!list.length){
+  rowCache.clear();
+  root.replaceChildren(text("div","No recent operations","empty"));
+  return;
+ }
+ const ordered=[],seen=new Set();
+ for(const raw of list){
+  // Discard detail locally too: a late response or host-supplied payload must
+  // never bypass the explicit per-widget opt-in.
+  const x=by("cc-developer-view").checked?raw:{...raw,detail:null};
+  // Exit -15 from a managed process stop is a termination outcome, not a
+  // normal command success; scope this display correction to process tools.
+  const stoppedBySignal=x.status==="error" && x.exit_code===-15 &&
+    (x.tool==="process.stop" || x.tool==="process.status");
+  const status=stoppedBySignal?"stopped":String(x.status||"");
+  const id=String(x.id||"").slice(0,140);
+  // Deliberately exclude duration from identity: running time changes on
+  // every poll but must not destroy keyboard focus or an open detail row.
+  const signature=JSON.stringify([
+   x.tool,x.device,x.started_at,status,x.exit_code,x.finished_at,x.detail||null
+  ]);
+  const prior=rowCache.get(id);
+  const ms=x.duration_ms;
+  const duration=statusText(status)+(Number.isFinite(ms)?" · "+
+   (ms>=1000?(ms/1000).toFixed(1)+"s":ms+"ms"):"");
+  seen.add(id);
+  if(prior&&prior.signature===signature){
+   prior.row.lastElementChild.textContent=duration;
+   ordered.push(prior.row);
+   continue;
+  }
+  const row=document.createElement("article");
+  row.className=status==="running"?"running":
+   ["ok","completed"].includes(status)?"ok":
+   ["error","timeout","agent_disconnected","canceled","stopped"].includes(status)?"error":"";
+  const dot=document.createElement("span");dot.className="dot";dot.setAttribute("aria-hidden","true");
+  const body=document.createElement("div");body.className="body";
+  const details=document.createElement("details");
+  const traceId=String(x.id||"").replace(/^trace-/,"").slice(0,140);
+  details.open=expanded.has(traceId)||(status==="running"&&!collapsedRunning.has(traceId));
+  details.addEventListener("toggle",()=>{
+    if(details.open){expanded.add(traceId);collapsedRunning.delete(traceId);}
+    else{expanded.delete(traceId);if(status==="running")collapsedRunning.add(traceId);}
+  });
+  const summary=document.createElement("summary");
+  const line=document.createElement("div");line.className="summary-line";
+  line.append(text("span","▾","chevron"),text("span",x.detail?.command_display ? ("$ "+x.detail.command_display) : (x.detail?.workflow||x.detail?.action||x.tool||"Operation"),"heading"),
+   text("span",x.device||"Control plane","device"));
+  if(x.detail?.category)line.append(text("span",x.detail.category,"kind-chip"));
+  const clock=String(x.started_at||"").slice(11,19);
+  line.prepend(text("time",clock,"timestamp"));
+  summary.append(line);
+  if(x.detail?.command_display||x.detail?.public_url||x.detail?.path||x.detail?.cwd||x.detail?.command_name||x.detail?.image||x.detail?.service){
+   const target=x.detail.command_display||x.detail.public_url||x.detail.path||x.detail.cwd||x.detail.image||x.detail.service||x.detail.command_name;
+   if(!x.detail.command_display)summary.append(text("div",String(target).slice(0,175),"cc-preview"));
+  }
+  details.append(summary);
+  const data=x.detail;
+  if(data&&typeof data==="object"){
+   const trace=document.createElement("div");trace.className="trace cc-audit-primary";
+   const technicalTrace=document.createElement("div");technicalTrace.className="trace cc-audit-technical";
+   const fields=[
+    ["Tool",x.tool],["Category",data.category],["Workflow",data.workflow],["Device",x.device],["Status",statusText(status)],
+    ["Requested",data.action],["Confirmed change",data.verified_effect],
+    ["Command",data.command_display||data.command_name],["URL",data.public_url],
+    ["Visibility",data.command_visibility],["Redaction",data.redaction_reason],["URL policy",data.url_visibility],
+    ["Output",data.output_policy==="Raw output is not captured by this Activity feed."?null:data.output_policy],["File diff",data.preview],["Working directory",data.cwd||data.root||data.repo],
+    ["Target path",data.path],["From",data.source],["To",data.destination],
+    ["Container",data.container||data.container_id],["Image",data.image],["Service",data.service],
+    ["Action",data.action&&data.service?data.action:null],["Manager",data.manager],
+    ["Mode",data.mode],["Patches",Number.isInteger(data.patch_count)?String(data.patch_count):null],
+    ["Packages",Number.isInteger(data.package_count)?String(data.package_count):null],
+    ["Exit code",Number.isInteger(x.exit_code)?String(x.exit_code):null],
+    ["Duration",Number.isFinite(x.duration_ms)?String(x.duration_ms)+" ms":null],
+    ["Started",x.started_at],["Finished",x.finished_at],
+    ["Execution ID",x.execution_id],["Operation ID",x.operation_id],
+   ];
+   for(const [key,value] of fields){
+    if(typeof value!=="string"||!value)continue;
+    const entry=document.createElement("div");entry.className="trace-line";
+    const formatted=key==="Command"?"$ "+value.slice(0,4096):value.slice(0,300);
+    entry.append(text("span",key,"trace-label"),text("span",formatted,"trace-value"));
+    const secondary=["Tool","Category","Device","Status","Duration","Started","Finished","Execution ID","Operation ID","Requested","Visibility","URL policy"].includes(key);
+    if(!secondary)trace.append(entry);
+   }
+   if(Array.isArray(data.command_steps) && !(data.command_steps.length===1 && data.command_display)){
+    const steps=document.createElement("ol");steps.className="cc-command-steps";
+    steps.setAttribute("aria-label","Requested command steps (execution within a shell is not independently observed)");
+    data.command_steps.slice(0,12).forEach((step,index)=>{
+     if(typeof step!=="string")return;
+     const item=document.createElement("li");
+     const code=document.createElement("code");code.textContent=step.slice(0,4096);item.append(code);
+     if(index>0&&Array.isArray(data.step_operators))item.prepend(text("small",({"&&":"After success: ","||":"After failure: ","|":"Pipeline: ",";":"Next: "})[data.step_operators[index-1]]||""));
+     steps.append(item);
+    });
+    trace.append(text("div","Requested shell steps · per-step completion is not observed","trace-note"),steps);
+   }
+   if(data.redaction_reason)trace.append(text("div",String(data.redaction_reason),"trace-note"));
+   if(trace.children.length)details.append(trace);
+   else details.append(text("div",status==="running"?"Operation in progress":"No additional verified details","cc-detail-hint"));
+
+  }else{
+   details.append(text("div","Summary view. Enable Developer steps for verified STANDARD / FULL_CONTROL details.","trace-note"));
+  }
+  body.append(details);
+  // Actionable only for verified managed jobs returned by process.start.
+  const managedId=x.tool==="process.start"?x.detail?.managed_process_id:null;
+  if (typeof managedId==="string" && /^[0-9a-fA-F-]{36}$/.test(managedId)
+      && typeof x.device_id==="string" && /^[0-9a-fA-F-]{36}$/.test(x.device_id)) {
+    const rowControls=document.createElement("div");rowControls.className="cc-managed-controls";
+    const inspect=document.createElement("button");inspect.type="button";inspect.textContent="Check process";
+    inspect.dataset.jobAction="inspect";
+    const stop=document.createElement("button");stop.type="button";stop.textContent="Stop managed process";
+    stop.dataset.jobAction="stop";stop.className="cc-managed-stop";
+    const feedback=document.createElement("span");feedback.className="cc-managed-feedback";feedback.setAttribute("role","status");
+    const controls=document.createElement("div");controls.className="cc-managed-buttons";
+    controls.append(inspect,stop);rowControls.append(controls,feedback);
+    rowControls.dataset.processId=managedId;rowControls.dataset.deviceId=x.device_id;
+    body.append(rowControls);
+  }
+  const elapsed=text("span",duration,"elapsed");
+  row.append(dot,body,elapsed);
+  ordered.push(row);
+  rowCache.set(id,{row,signature});
+ }
+ for(const id of rowCache.keys()){
+  if(!seen.has(id))rowCache.delete(id);
+ }
+ // Reparenting an unchanged row on every 1.2 s poll can steal keyboard
+ // focus from <summary>. Touch the live DOM only when its order changes.
+ const current=[...root.children];
+ if(current.length!==ordered.length||current.some((item,index)=>item!==ordered[index])){
+  root.replaceChildren(...ordered);
+ }
+}
+async function refresh(force=false){
+ if(busy){if(force)refreshPending=true;return;}
+ if((!force&&paused)||document.hidden||document.body.dataset.ccOperationCompact==="true"||window.__ccWorkspaceSuspended||document.body.dataset.ccMinimized==="true")return;
+ if(!force&&(attributionBlocked||(document.body.dataset.ccActivityStale==="true"&&Date.now()-lastFailureAt<12000)))return;
+ const activityHidden=by("activity-pane").hidden;
+ if(activityHidden && !force && Date.now()-lastHiddenActivityPoll<3500)return;
+ if(activityHidden)lastHiddenActivityPoll=Date.now();
+ busy=true;
+ const loadingHost=by("activity-pane");
+ if((force || document.body.dataset.ccInitialActivityLoad!=="done") && loadingHost && !loadingHost.querySelector("#cc-activity-loading")){
+   const loading=document.createElement("div");
+   loading.id="cc-activity-loading";
+   loading.setAttribute("role","status");
+   loading.setAttribute("aria-label","Loading activity");
+   loading.innerHTML='<span class="cc-skeleton-bar medium" aria-hidden="true"></span><span class="cc-skeleton-bar short" aria-hidden="true"></span><small>Loading activity…</small>';
+   by("feed").before(loading);
+ }
+ document.body.dataset.ccInitialActivityLoad="done";
+ const startedLoading=Date.now();
+ const feedEl=by("feed");
+ if(feedEl&&!feedEl.querySelector("article")&&!feedEl.querySelector(".cc-skeleton")){
+   const placeholder=document.createElement("div");
+   placeholder.id="empty";
+   placeholder.setAttribute("aria-live","polite");
+   placeholder.innerHTML='<div class="cc-skeleton" aria-hidden="true"><div class="cc-skeleton-card"><span class="cc-skeleton-bar short"></span><span class="cc-skeleton-bar long"></span><span class="cc-skeleton-bar medium"></span></div><div class="cc-skeleton-card"><span class="cc-skeleton-bar medium"></span><span class="cc-skeleton-bar long"></span></div></div><span>Loading activity…</span>';
+   feedEl.replaceChildren(placeholder);
+ }
+ const requestedScope=scopeKey();
+ try{
+  const view=scopeEl.value;
+  const args={limit:35,include_details:by("cc-developer-view").checked};
+  if(view==="conversation"){args.view="conversation";if(sessionRef)args.session_ref=sessionRef;if(window.__ccTaskId)args.task_id=window.__ccTaskId;}
+  if(view==="device"){if(!deviceEl.value)throw Error("Select a device");args.device_id=deviceEl.value;}
+  let res=await callTool("activity.feed",args);
+  if(res?.isError&&/insufficient_scope|invalid_include_details|STANDARD OAuth/i.test(
+   String(res?.structuredContent?.error||"")+" "+String(res?.structuredContent?.message||""))){
+   by("cc-developer-view").checked=false;
+   by("cc-developer-policy").textContent="Developer steps unavailable: verified STANDARD / FULL_CONTROL OAuth access is required.";
+   rowCache.clear();by("feed").replaceChildren();
+   args.include_details=false;res=await callTool("activity.feed",args);
+  }
+  if(res?.isError&&view==="conversation"&&lastRenewedRef!==(sessionRef||"host")&&/invalid_session_view/i.test(JSON.stringify(res?.structuredContent||res?.content||{}))){
+   // A restart invalidates ephemeral references. Only the host can reissue
+   // attribution for this conversation; never retry against all activity.
+   lastRenewedRef=sessionRef||"host";
+   const renewed=await callTool("commandcore.viewer",{});
+   const fresh=renewed?.structuredContent||renewed?.result?.structuredContent||{};
+   if(!renewed?.isError&&initScope(fresh)){refreshPending=true;return;}
+  }
+  if(res?.isError){
+   const errorText=JSON.stringify(res?.structuredContent||res?.content||res?.error||{}).slice(0,500);
+   if(view==="conversation"&&/invalid_session_view/i.test(errorText)){attributionBlocked=true;throw Error("Conversation attribution unavailable");}
+   throw Error("Access denied");
+  }
+  const payload=res?.structuredContent||res?.result?.structuredContent||res;
+  if(!Array.isArray(payload?.events))throw Error("Invalid activity response");
+  if(requestedScope!==scopeKey()){refreshPending=true;return;}
+  const currentIds=new Set(payload.events.map(x=>String(x.execution_id||x.operation_id||x.id||"")).filter(Boolean));
+  if(previousActivityIds!==null && view==="conversation" && activityHidden) {
+   const newDeviceOperation=payload.events.some(x=>{
+     const id=String(x.execution_id||x.operation_id||x.id||"");
+     const tool=String(x.tool||"").toLowerCase();
+     return id&&!previousActivityIds.has(id) && tool && !tool.includes("browser.")
+       && !tool.includes("activity.") && !tool.includes("commandcore.watch");
+   });
+   if(newDeviceOperation)window.dispatchEvent(new Event("commandcore:device-action"));
+  }
+  if(previousActivityIds!==null && view==="conversation" && payload.events.some(x=>{
+   const id=String(x.execution_id||x.operation_id||x.id||"");
+   return id&&!previousActivityIds.has(id)&&/^browser\.(open|click|move|scroll|type|keypress)$/.test(String(x.tool||""));
+  }))window.dispatchEvent(new Event("commandcore:browser-requested"));
+  previousActivityIds=currentIds;
+  document.body.dataset.ccActivityStale="false";attributionBlocked=false;by("activity-reconnect").hidden=true;
+  if(!activityHidden || !by("activity-pane").hidden)render(payload.events);
+  setActivityState(paused?"Paused":"Live",paused?"cc-badge-running":"cc-badge-live");
+  by("updated").textContent="Updated "+new Date().toLocaleTimeString();
+  by("scope-hint").textContent=view==="conversation"?"This conversation · attributed MCP operations":view==="device"?"Filtered to selected authorized device":"All authorized account activity";
+ }catch(e){
+  if(requestedScope!==scopeKey()){refreshPending=true;return;}
+  lastFailureAt=Date.now();by("activity-reconnect").hidden=false;
+  if(!by("feed").querySelector("article")){
+   by("feed").replaceChildren(text("div",attributionBlocked?"This saved view could not verify its conversation. Reconnect here or ask ChatGPT to reopen CommandCore in this conversation.":"Activity connection unavailable. Reconnect to try again.","empty"));
+  }
+  const empty=by("empty");
+  if(empty&&empty.querySelector(".cc-skeleton")){
+   empty.replaceChildren(document.createTextNode("Activity unavailable — check connection and refresh."));
+  }
+  if(by("metric-running")?.textContent==="Connecting…")by("metric-running").textContent="Unavailable";
+  document.body.dataset.ccActivityStale="true";
+  setActivityState("Unavailable","cc-badge-unavailable");
+  by("updated").textContent=attributionBlocked?"Conversation verification unavailable · no other conversation was loaded.":by("feed").querySelector("article")?"Connection lost · previous snapshot. Refresh to reconnect.":"Not connected · no activity snapshot loaded.";
+ }finally{
+   const loading=by("cc-activity-loading");
+   if(loading){
+     // Keep a short, readable confirmation even for fast requests, without delaying data rendering.
+     const remaining=Math.max(0,380-(Date.now()-startedLoading));
+     setTimeout(()=>loading.remove(),remaining);
+   }
+   busy=false;if(refreshPending){refreshPending=false;refresh(true);}
+  }
+}
+by("feed").addEventListener("click",async event=>{
+  const btn=event.target.closest("button[data-job-action]");
+  if(!btn)return;
+  const controls=btn.closest(".cc-managed-controls"), pid=controls?.dataset.processId, device=controls?.dataset.deviceId;
+  if(!controls || !/^[0-9a-fA-F-]{36}$/.test(pid||"") || !/^[0-9a-fA-F-]{36}$/.test(device||""))return;
+  const feedback=controls.querySelector(".cc-managed-feedback");
+  const stop=controls.querySelector(".cc-managed-stop");
+  const action=btn.dataset.jobAction;
+  if(action==="stop") {
+    stop.dataset.jobAction="confirm";stop.textContent="Confirm stop";
+    feedback.textContent="Stopping can interrupt work. Confirm to send a device command.";
+    return;
+  }
+  if(action==="cancel") {
+    stop.dataset.jobAction="stop";stop.textContent="Stop managed process";
+    feedback.textContent="Cancellation dismissed.";return;
+  }
+  if(action!=="confirm" && action!=="inspect")return;
+  if(action==="confirm") {
+    stop.dataset.jobAction="cancel";stop.textContent="Cancel";stop.disabled=true;
+  }
+  btn.disabled=true;
+  feedback.textContent=action==="inspect"?"Checking actual device status…":"Checking process before requesting stop…";
+  try {
+    const statusResult=await callTool("process.status",{device_id:device,process_id:pid});
+    if(statusResult?.isError)throw Error("Process status could not be verified");
+    const status=statusResult?.structuredContent||statusResult?.result?.structuredContent||statusResult;
+    const state=status?.result||status;
+    if(state?.found!==true || state?.managed!==true){
+      feedback.textContent="Managed process not found or not verified. Stop not sent.";
+      return;
+    }
+    if(action==="inspect"){
+      feedback.textContent=state.running===true?"Process confirmed running on device.":state.running===false?"Device reports process finished.":"Device status unknown.";
+      return;
+    }
+    if(state.running!==true){
+      feedback.textContent="Device reports process is not running. No stop was sent.";return;
+    }
+    feedback.textContent="Sending stop request to the device…";
+    const stopped=await callTool("process.stop",{device_id:device,process_id:pid,force:false});
+    if(stopped?.isError)throw Error("Device rejected the stop request");
+    feedback.textContent="Stop request acknowledged. Verifying device state…";
+    const verified=await callTool("process.status",{device_id:device,process_id:pid});
+    if(verified?.isError)throw Error("Stop requested; final state still unverified");
+    const q=verified?.structuredContent?.result||verified?.result?.structuredContent?.result||{};
+    feedback.textContent=q.running===false?"Device confirms process stopped.":"Stop sent; device has not confirmed termination.";
+  }catch(error){
+    feedback.textContent=String(error?.message||"Operation unavailable").slice(0,160);
+  }finally{
+    btn.disabled=false;
+    if(action==="confirm"){stop.dataset.jobAction="stop";stop.textContent="Stop managed process";stop.disabled=false;}
+  }
+});
+function reconnect(){lastRenewedRef=null;attributionBlocked=false;refresh(true);}
+by("cc-developer-view").addEventListener("change",()=>{
+ rowCache.clear();expanded.clear();collapsedRunning.clear();
+ by("feed").replaceChildren(text("div","Refreshing Activity view…","empty"));
+ by("cc-context-path").textContent="—";by("cc-context-effect").textContent="—";
+ refresh(true);
+});
+by("activity-reconnect").addEventListener("click",reconnect);
+by("refresh").addEventListener("click",reconnect);
+by("pause").addEventListener("click",()=>{
+ paused=!paused;
+ by("pause").textContent=paused?"Resume":"Pause";
+ setActivityState(paused?"Paused":"Connecting","cc-badge-running");
+ if(!paused)refresh(true);
+});
+window.addEventListener("commandcore:activity-active",()=>{if(!deviceChoices.length)loadDevices();refresh(true);});
+initScope();
+bridgeReady.then(loadDevices).then(()=>refresh(true)).catch(()=>{});
+setInterval(refresh,1200);
+setTimeout(refresh,450);
+})();
+</script><script id="browser-runtime">
+(() => {
+  "use strict";
+  const screen = document.getElementById("browser-screen");
+  const message = document.getElementById("browser-message");
+  const host = document.getElementById("browser-host");
+  const state = document.getElementById("browser-state");
+  const pointer = document.getElementById("browser-pointer");
+  const stage = document.getElementById("browser-stage");
+  const trail = document.getElementById("browser-trail");
+  let recentActions = [], trailSignature="";
+  function renderTrail() {
+    const signature=JSON.stringify(recentActions);
+    if(signature===trailSignature)return;
+    trailSignature=signature;
+    const openSteps=new Set([...trail.querySelectorAll("details[open]")].map(x=>x.dataset.sequence));
+    trail.replaceChildren();
+    if(!recentActions.length) {
+      const empty=document.createElement("div");empty.className="trail-empty";
+      empty.textContent="No browser actions yet.";
+      trail.append(empty);return;
+    }
+    for(const item of recentActions.slice(-8).reverse()) {
+      const detail=document.createElement("details");
+      detail.dataset.sequence=String(item.sequence);detail.open=openSteps.has(String(item.sequence));
+      const summary=document.createElement("summary");
+      summary.textContent="▸ "+item.action;
+      detail.append(summary);
+      const meta=document.createElement("div");meta.className="trail-meta";
+      let description="Step #"+item.sequence;
+      if(item.at)description+=" · "+item.at.slice(11,19)+" UTC";
+      if(item.cursor)description+=" · pointer "+item.cursor.x+", "+item.cursor.y;
+      if(item.status)description+="\nStatus: "+item.status; if(Number.isInteger(item.duration_ms))description+=" · "+item.duration_ms+" ms"; if(item.tool)description+="\nTool: "+item.tool; if(item.request_id)description+="\nRequest: "+item.request_id; if(Number.isInteger(item.delta_y))description+="\nScroll: "+item.delta_y+" px"; meta.textContent=description;
+      detail.append(meta);trail.append(detail);
+    }
+  }
+  const refreshBtn = document.getElementById("browser-refresh");
+  const autoBtn = document.getElementById("browser-auto");
+  const stopBtn = document.getElementById("browser-stop");
+  let stopSession="",closing=false;
+  const takeBtn = document.getElementById("browser-take");
+  const monitorBtn = document.getElementById("browser-monitor");
+  const continueBtn = document.getElementById("browser-continue");
+  const recoveryBox = document.getElementById("cc-browser-recovery");
+  const recoveryTitle = document.getElementById("cc-recovery-title");
+  const recoveryDesc = document.getElementById("cc-recovery-desc");
+  const recoveryActions = document.getElementById("cc-recovery-actions");
+  const originalToolbar = takeBtn.parentElement;
+  const originalNext = takeBtn.nextSibling;
+  function recoveryState(mode, canRenew=false) {
+    document.body.dataset.ccBrowserState=mode;
+    recoveryBox.hidden=!["awaiting_human","unavailable"].includes(mode);
+    if(mode==="awaiting_human"){
+      recoveryTitle.textContent=canRenew?"Private control link expired":"Private human control active";
+      recoveryDesc.textContent=canRenew
+        ? "AI is still paused. Renew your secure control link, then explicitly resume AI in CommandCore when finished. Your private screen is never shared here."
+        : "AI is paused. Select Open private control to open your existing authenticated private tab. This does not resume AI or extend the 10-minute link. Never share the private link in chat.";
+      recoveryActions.append(takeBtn);
+    }else{
+      if(takeBtn.parentElement===recoveryActions)
+        originalToolbar.insertBefore(takeBtn, originalNext && originalNext.parentElement===originalToolbar ? originalNext : originalToolbar.firstChild);
+      if(mode==="unavailable"){
+        recoveryTitle.textContent="Browser connection unavailable";
+        recoveryDesc.textContent="The viewer could not verify the session. Refresh here or ask ChatGPT to reopen a browser. No remote action was performed by this screen.";
+      }
+    }
+  }
+  let busy = false, automatic = true, paused = false, nextId = 1, handoffPending = false;
+  let browserEmpty=false, lastEmptyPoll=0, browserUnavailable=false, lastUnavailablePoll=0, firstFramePending=false;
+  let monitorUrl = null;
+  let sequence = -1, cursor = null;
+  let browserSequenceInitialized=false,lastHiddenBrowserPoll=0,viewerGeneration=0;
+  window.addEventListener("commandcore:viewer-changed",()=>{
+    viewerGeneration++;sequence=-1;cursor=null;recentActions=[];trailSignature="";
+    stopSession="";closing=false;stopBtn.disabled=true;stopBtn.textContent="Stop Browser";
+    browserSequenceInitialized=false;browserEmpty=false;browserUnavailable=false;
+    paused=false;firstFramePending=false;recoveryState("agent");monitorUrl=null;monitorBtn.disabled=true;
+    continueBtn.hidden=true;takeBtn.disabled=true;trail.replaceChildren();
+    host.textContent="Waiting for this conversation’s browser";
+    document.getElementById("browser-url").textContent="—";
+    document.getElementById("browser-session").textContent="No active session";
+    document.getElementById("browser-control").textContent="Connecting";
+    hide("Checking this conversation’s browser session…");
+  });
+  const pending = new Map();
+  function rpc(method, params) {
+    const id = "browser-"+(nextId++);
+    return new Promise((resolve, reject) => {
+      pending.set(id, {resolve, reject});
+      // Do not queue tool calls without a response from the host.
+      const timeout = setTimeout(() => {
+        if(pending.has(id)) {
+          pending.delete(id);
+          reject(Error("Browser UI request timed out"));
+        }
+      }, 18000);
+      pending.get(id).timeout = timeout;
+      window.parent.postMessage({jsonrpc:"2.0", id, method, params}, "*");
+    });
+  }
+  const bridgeReady = window.__ccBridgeReady ? window.__ccBridgeReady : typeof window.openai?.callTool === "function"
+    ? Promise.resolve()
+    : rpc("ui/initialize", {
+        protocolVersion:"2026-01-26",
+        appInfo:{name:"CommandCore Live Browser",version:"0.9.0"},
+        appCapabilities:{}
+      }).then(() => {
+        window.parent.postMessage(
+          {jsonrpc:"2.0",method:"ui/notifications/initialized"}, "*"
+        );
+      });
+  async function callTool(name,args={}) {
+    return window.__ccCallTool(name,args);
+  }
+  async function openLink(url) {
+    await bridgeReady;
+    if(typeof window.openai?.openExternal === "function")
+      return window.openai.openExternal({href:url,redirectUrl:false});
+    return rpc("ui/open-link",{url});
+  }
+  function status(text) {state.textContent = text;}
+  function setMonitorLink(result) {
+    const data = result?.structuredContent || result?.result?.structuredContent || result;
+    if (typeof data?.dashboard_url !== "string") return;
+    try {
+      const u = new URL(data.dashboard_url);
+      if (u.protocol !== "https:" || u.username || u.password || u.hash
+        || u.pathname !== "/" || u.search !== "?view=browser") return;
+      monitorUrl = u.href;
+      monitorBtn.disabled = false;
+      // The link is generated by the authenticated CommandCore server, not
+      // derived from the untrusted browser page's own URL.
+      if (typeof window.openai?.setOpenInAppUrl === "function")
+        window.openai.setOpenInAppUrl({href:monitorUrl});
+    } catch (_) {}
+  }
+  monitorBtn.addEventListener("click", async () => {
+    if (!monitorUrl) return;
+    try { await openLink(monitorUrl); }
+    catch (_) {status("Could not open the independent monitor. Ask ChatGPT for the CommandCore Browser dashboard link.");}
+  });
+  continueBtn.addEventListener("click", async () => {
+    if (paused || continueBtn.disabled) return;
+    continueBtn.disabled = true;
+    const prompt = "Continue the existing CommandCore Browser task in this conversation. Check the current canonical Browser session and page before taking any action. Human control has been explicitly returned to AI. Do not repeat previous clicks, submissions or approvals; ask if the original task goal is unclear.";
+    try {
+      await bridgeReady;
+      if (typeof window.openai?.sendFollowUpMessage === "function")
+        await window.openai.sendFollowUpMessage({prompt, scrollToBottom:true});
+      else await rpc("ui/message", {
+        role:"user", content:[{type:"text",text:prompt}]
+      });
+      continueBtn.hidden = true;
+      status("Requested a new ChatGPT turn to continue the Browser task.");
+    } catch (_) {
+      continueBtn.disabled = false;
+      status("ChatGPT could not accept the follow-up. Send Continue in the conversation.");
+    }
+  });
+function safeError(err){const raw=String(err?.message||""); if(/another conversation owns|browser_conversation_in_use/i.test(raw))return "Browser is active in another conversation. Return there and close its Browser before opening one here."; if(/no browser session|session invalidated|worker restarted/.test(raw))return "Session ended safely. Ask ChatGPT to reopen the Browser; ownership will be checked again."; if(/paused for human/.test(raw))return "Human control active. Resume AI control in your private console."; if(/not currently verified/.test(raw))return "Worker verification unavailable. Control is blocked; refresh after recovery."; return "Browser connection unavailable. Refresh, or ask ChatGPT to check the session.";}
+  const browserLoading=document.getElementById("cc-browser-loading");
+  function setBrowserLoading(active){
+    browserLoading.hidden=!active;
+    browserLoading.setAttribute("aria-hidden",active?"false":"true");
+  }
+  function hide(text) {
+    screen.hidden = true;
+    screen.removeAttribute("src");
+    message.hidden = false;
+    message.textContent = text;
+    setBrowserLoading(false);
+    pointer.hidden = true;
+  }
+  // Move the cursor through a reviewed stylesheet CSSOM rule. Mutating
+  // element.style creates inline styles that strict MCP Apps CSP rejects.
+  const pointerRule=[...(document.styleSheets||[])].flatMap(s=>[...(s.cssRules||[])])
+    .find(rule=>rule.selectorText==="#browser-pointer");
+  function updatePointer() {
+    if (!cursor || screen.hidden || !screen.naturalWidth || !pointerRule) {pointer.hidden=true;return;}
+    const bounds=screen.getBoundingClientRect(), area=stage.getBoundingClientRect();
+    const scale=Math.min(bounds.width/screen.naturalWidth,bounds.height/screen.naturalHeight);
+    const width=screen.naturalWidth*scale,height=screen.naturalHeight*scale;
+    const x=bounds.left-area.left+(bounds.width-width)/2+cursor.x*scale;
+    const y=bounds.top-area.top+(bounds.height-height)/2+cursor.y*scale;
+    pointerRule.style.left=x+"px";pointerRule.style.top=y+"px";pointer.hidden=false;
+  }
+  screen.addEventListener("load", updatePointer);
+  window.addEventListener("resize", updatePointer);
+  function show(data) {
+    const page = data.structuredContent || {};
+    stopSession=typeof page.session_id==="string"&&page.session_id.length<=128?page.session_id:"";
+    stopBtn.disabled=closing||!stopSession||page.state!=="agent";
+    stopBtn.title=page.state==="awaiting_human"?"Resume AI control in the private window before stopping this Browser.":"Close only this conversation’s Browser. This does not stop the ChatGPT response.";
+    setMonitorLink(data);
+    if(typeof page.session_id==="string"&&page.session_id){
+      window.dispatchEvent(new CustomEvent("commandcore:browser-session",{detail:{session_id:page.session_id}}));
+    }
+    const browserAction=String(page.action||"");
+    const actionFailed=/failed|timed out|timeout|error/i.test(browserAction);
+    document.getElementById("browser-control").textContent=page.state==="awaiting_human"?"Human control":actionFailed?"Interaction failed":page.busy?"AI working":"AI control";
+    if(typeof page.session_id==="string"){
+      document.getElementById("browser-session").textContent="Connected";
+      if(host.textContent==="Waiting for browser…"){
+        host.textContent="Browser connected · waiting for first frame";
+        document.getElementById("browser-url").textContent="Loading safe browser preview…";
+      }
+    }
+    if(typeof page.host==="string")document.getElementById("browser-device").textContent=page.host.slice(0,80);
+    if(typeof page.url==="string"){try{const u=new URL(page.url);document.getElementById("browser-url").textContent=u.origin+u.pathname.slice(0,256);}catch(_){}}
+    if(page.state === "awaiting_human") {
+      setBrowserLoading(false);
+      // A paused owner-bound session deliberately has no AI-visible URL/frame.
+      // Clear the previous title, URL and stale session placeholders.
+      document.getElementById("browser-session").textContent="Private session paused";
+      host.textContent="Private browser session · AI paused";
+      document.getElementById("browser-url").textContent="Page address hidden during private control";
+      paused=true;
+      continueBtn.hidden = true;
+      continueBtn.disabled = false;
+      takeBtn.textContent=page.can_renew?"Renew private control link":"Open private control";
+      takeBtn.disabled=false;
+      recoveryState("awaiting_human",page.can_renew===true);
+      recentActions=[];trail.textContent="Private human activity is never shown here.";
+      hide(page.can_renew
+        ? "Private control link expired. AI remains paused until you renew and explicitly resume."
+        : "Privacy shield active. ChatGPT cannot see your private browser or recover the control link.");
+      status(page.can_renew
+        ? "Private link expired; your AI session is still paused."
+        : "Private human control active in the authenticated CommandCore console.");
+      return;
+    }
+    const returnedFromHuman = paused && page.state === "agent"
+      && page.action === "Control returned to AI";
+    paused=false;
+    recoveryState("agent");
+    takeBtn.textContent="Take control";takeBtn.disabled=false;
+    if(returnedFromHuman) {
+      host.textContent="AI control restored · fetching safe browser frame";
+      document.getElementById("browser-url").textContent="Waiting for a new AI-visible frame";
+      continueBtn.hidden = false;
+      continueBtn.disabled = false;
+      status("Browser control returned to AI. Choose Continue in ChatGPT to restart the task.");
+    }
+    cursor=page.cursor || null;
+    const incomingSequence=Number.isSafeInteger(page.sequence) ? page.sequence : sequence;
+    if(incomingSequence>sequence && incomingSequence>0 && typeof page.action==="string"
+       && page.action!=="Observing" && page.action!=="Control returned to AI") {
+      window.dispatchEvent(new CustomEvent("commandcore:browser-action",
+        {detail:{sequence:incomingSequence}}));
+    }
+    sequence=incomingSequence;
+    browserSequenceInitialized=true;
+    if(Array.isArray(page.recent_actions)) {
+      for(const event of page.recent_actions.slice(-24)) {
+        if(!Number.isSafeInteger(event.sequence)||typeof event.action!=="string")continue;
+        if(recentActions.some(a=>a.sequence===event.sequence))continue;
+        const position=event.cursor&&Number.isInteger(event.cursor.x)&&Number.isInteger(event.cursor.y)
+          ?{x:event.cursor.x,y:event.cursor.y}:null;
+        recentActions.push({sequence:event.sequence,action:event.action.slice(0,54),
+          at:typeof event.at==="string"?event.at.slice(0,32):null,cursor:position,status:["ok","error"].includes(event.status)?event.status:null,duration_ms:Number.isInteger(event.duration_ms)?event.duration_ms:null,tool:typeof event.tool==="string"?event.tool.slice(0,54):null,request_id:typeof event.request_id==="string"&&/^[0-9a-f-]{36}$/.test(event.request_id)?event.request_id:null,delta_y:Number.isInteger(event.delta_y)?event.delta_y:null});
+      }
+      recentActions=recentActions.slice(-8);
+      renderTrail();
+    }
+    if(!page.changed && typeof page.session_id==="string" && screen.hidden) {
+      firstFramePending=true;
+      host.textContent="Browser connected · waiting for first frame";
+      document.getElementById("browser-url").textContent="Waiting for first safe browser frame";
+      hide("Browser session connected. Waiting for ChatGPT to navigate or capture the first frame.");
+    }
+    if(page.changed) {
+      firstFramePending=false;
+      const png=(data.content||[]).find(x=>x.type==="image"&&x.mimeType==="image/png");
+      if(!png || !/^[A-Za-z0-9+/=]+$/.test(png.data||""))throw Error("Live frame missing PNG");
+      host.textContent=String(page.title||page.url||"Browser viewport").slice(0,240);
+      screen.src="data:image/png;base64,"+png.data;
+      setBrowserLoading(false);
+      screen.hidden=false;message.hidden=true;
+    }
+    updatePointer();
+    status((actionFailed?"Browser interaction failed: ":page.busy?"AI working: ":"AI control: ")+String(page.action||"Observing").slice(0,72)+
+      (cursor?" · pointer "+cursor.x+", "+cursor.y:"")+
+      (!continueBtn.hidden?" · Continue in ChatGPT when ready.":""));
+  }
+  async function tool(name,args={}) {
+    const response = await callTool(name,args);
+    if(response?.isError) {
+      let reason="CommandCore tool unavailable";
+      try {reason = JSON.parse(response.content?.[0]?.text || "{}").message || reason;}catch(_){}
+      throw Error(reason);
+    }
+    return response;
+  }
+  async function refresh(force=false) {
+    if(busy||closing||document.hidden||document.body.dataset.ccOperationCompact==="true"||window.__ccWorkspaceSuspended||document.body.dataset.ccMinimized==="true")return;
+    const browserHidden=document.getElementById("browser-pane").hidden;
+    if(browserHidden && !force && Date.now()-lastHiddenBrowserPoll<3500)return;
+    if(browserHidden)lastHiddenBrowserPoll=Date.now();
+    // Inactive sessions are a stable empty state. Probe quietly every 12s,
+    // or immediately on a user Refresh / new-activity notification.
+    if(browserEmpty && !force && Date.now()-lastEmptyPoll<12000)return;
+    if(browserEmpty)lastEmptyPoll=Date.now();
+    if(browserUnavailable && !force && Date.now()-lastUnavailablePoll<12000)return;
+    if(browserUnavailable)lastUnavailablePoll=Date.now();
+    busy=true;refreshBtn.disabled=true;
+    const requestedGeneration=viewerGeneration;
+    if(!paused && screen.hidden && !browserEmpty && !browserUnavailable && !firstFramePending){
+      setBrowserLoading(true);
+      message.textContent="Connecting to live Browser…";
+    }
+    try {
+      const result=await tool("browser.frame",{
+        after_sequence:sequence,
+        session_ref:window.__ccBrowserViewerRef||""
+      });
+      if(requestedGeneration!==viewerGeneration)return;
+      browserEmpty=false;browserUnavailable=false;
+      show(result);
+      setBrowserLoading(false);
+    } catch(err) {
+      if(requestedGeneration!==viewerGeneration)return;
+      const absent=/no browser session|browser_conversation_not_active|no browser session belongs|session invalidated|worker restarted|session ended safely/i.test(String(err?.message||""));
+      if(absent){
+        browserEmpty=true;browserUnavailable=false;firstFramePending=false;paused=false;sequence=-1;cursor=null;recentActions=[];trailSignature="";
+        recoveryState("agent");
+        document.getElementById("browser-session").textContent="No active session";
+        document.getElementById("browser-control").textContent="No session";
+        host.textContent="No active browser session";
+        document.getElementById("browser-url").textContent="—";
+        stopSession="";stopBtn.disabled=true;
+        takeBtn.disabled=true;continueBtn.hidden=true;
+        trail.replaceChildren();
+        hide("Ask ChatGPT to open a website to begin a new browser session.");
+        status("No browser session · waiting for ChatGPT to open a site");
+        return;
+      }
+      browserEmpty=false;browserUnavailable=true;firstFramePending=false;lastUnavailablePoll=Date.now();
+      stopSession="";stopBtn.disabled=true;
+      recoveryState("unavailable");
+      if(/another conversation owns|browser_conversation_in_use/i.test(String(err?.message||""))){recoveryTitle.textContent="Browser active in another conversation";recoveryDesc.textContent=safeError(err);}
+      document.getElementById("browser-session").textContent="Unavailable";
+      host.textContent="Browser status unavailable";
+      document.getElementById("browser-url").textContent="—";
+      hide(safeError(err));status(safeError(err));takeBtn.disabled=true;document.getElementById("browser-control").textContent="Unavailable";
+    } finally {busy=false;refreshBtn.disabled=closing;if(handoffPending){handoffPending=false;requestHandoff();}}
+  }
+  stopBtn.addEventListener("click",async()=>{
+    if(closing||stopBtn.disabled||!stopSession)return;
+    const expected=stopSession,current=++viewerGeneration;
+    closing=true;handoffPending=false;stopBtn.disabled=true;stopBtn.textContent="Stopping…";refreshBtn.disabled=true;takeBtn.disabled=true;
+    document.getElementById("browser-control").textContent="Stopping";
+    hide("Stopping this conversation’s Browser…");status("Stop requested · waiting for server confirmation");
+    try{
+      const result=await tool("browser.close",{session_ref:window.__ccBrowserViewerRef||"",expected_session_id:expected});
+      if(current!==viewerGeneration)return;
+      const payload=result?.structuredContent||result?.result?.structuredContent||result;
+      if(typeof payload?.closed!=="boolean")throw Error("Browser stop was not confirmed");
+      stopSession="";sequence=-1;cursor=null;browserEmpty=true;browserUnavailable=false;lastEmptyPoll=Date.now();
+      host.textContent=payload.closed?"Browser stopped":"No active browser session";
+      document.getElementById("browser-url").textContent="—";
+      document.getElementById("browser-control").textContent=payload.closed?"Stopped":"No session";
+      continueBtn.hidden=true;trail.replaceChildren();
+      hide(payload.closed?"This Browser is closed. Ask ChatGPT to open a website to start again.":"No Browser was closed. This session was already absent.");
+      status(payload.closed?"Browser stopped · server confirmed closure":"No active Browser · no closure performed");
+    }catch(_){
+      if(current!==viewerGeneration)return;
+      stopSession="";browserUnavailable=true;lastUnavailablePoll=Date.now();
+      recoveryState("unavailable");host.textContent="Browser stop unconfirmed";
+      document.getElementById("browser-control").textContent="Unverified";
+      status("Stop could not be confirmed. Refresh to check the session before trying again. No automatic retry was sent.");
+    }finally{
+      if(current===viewerGeneration){closing=false;stopBtn.disabled=true;stopBtn.textContent="Stop Browser";refreshBtn.disabled=false;}
+    }
+  });
+  function stopAuto() {
+    automatic=false;
+    autoBtn.textContent="Resume live view";
+    autoBtn.setAttribute("aria-pressed","false");
+  }
+  autoBtn.addEventListener("click",()=>{
+    automatic=!automatic;
+    autoBtn.textContent=automatic?"Pause live view":"Resume live view";
+    autoBtn.setAttribute("aria-pressed",String(automatic));
+    if(automatic)refresh(true);
+  });
+  refreshBtn.addEventListener("click",()=>refresh(true));
+  setInterval(()=>{if(automatic&&!document.hidden)refresh();},1200);
+  async function requestHandoff(){
+    if(closing)return;
+    browserEmpty=false;
+    // Keep the read-only viewer synchronized while private human control is active.
+    // The server suppresses all human frames, but the viewer can detect Resume.
+    automatic=true;
+    autoBtn.textContent="Pause live view";
+    autoBtn.setAttribute("aria-pressed","true");
+    if(busy){handoffPending=true;takeBtn.disabled=true;status("Finishing the current frame before private takeover…");return;}
+    busy=true;takeBtn.disabled=true;
+    try {
+      const result = await tool("browser.handoff",{
+        session_ref:window.__ccBrowserViewerRef||""
+      });
+      const url = (result.structuredContent?.sign_in_url||result.structuredContent?.handoff_url);
+      if(typeof url !== "string" || !url.startsWith("https://")) throw Error("HTTPS handoff URL unavailable");
+      paused=true;sequence=-1;cursor=null;recentActions=[];
+      continueBtn.hidden=true;continueBtn.disabled=false;
+      takeBtn.textContent="Human control active";
+      hide("AI control paused. Complete your login in CommandCore's secure handoff page.");
+      status("Human control active. After Resume AI control, return to ChatGPT and send Continue; the assistant does not resume automatically.");
+      // Only user-initiated external opening. Never embed or expose raw CDP.
+      await openLink(url);
+    } catch(err) {status(safeError(err));}
+    finally{busy=false;takeBtn.disabled=paused;}
+  }
+  takeBtn.addEventListener("click",requestHandoff);
+  window.addEventListener("message",event=>{
+    if(event.source !== window.parent) return;
+    const msg=event.data;
+    if(!msg || msg.jsonrpc!=="2.0") return;
+    if(msg.id !== undefined && typeof msg.method!=="string" && ("result" in msg||"error" in msg) && pending.has(msg.id)){
+      const p=pending.get(msg.id);pending.delete(msg.id);clearTimeout(p.timeout);
+      if(msg.error)p.reject(Error(msg.error.message || "MCP UI error"));
+      else p.resolve(msg.result);
+    }
+    if(msg.method==="ui/notifications/tool-result") setMonitorLink(msg.params);
+    if(msg.method==="ui/notifications/tool-result" &&
+       msg.params?.structuredContent?.state==="viewer_ready"){
+      status("Live Browser ready. Following AI actions.");
+      refresh();
+    }
+  });
+  window.addEventListener("commandcore:browser-active",()=>refresh(true));
+  window.addEventListener("commandcore:browser-requested",()=>refresh(true));
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh(true);});
+  // The host may preload the renderer tool result without a model-side call.
+  setMonitorLink(window.openai?.toolOutput);
+  setMonitorLink(window.openai?.toolResponseMetadata?.mcp_tool_result);
+  window.addEventListener("openai:set_globals",event=>{
+    setMonitorLink(event?.detail?.globals?.toolOutput);
+  });
+  // Wait for the official MCP Apps handshake, or an available native bridge.
+  bridgeReady.then(()=>refresh()).catch(err=>status("MCP Apps unavailable: "+err.message));
+})();
+</script>
+<script id="commandcore-v05-runtime">
+(() => {
+ "use strict";
+ const by=id=>document.getElementById(id);
+ const title=document.querySelector(".cc-title strong");
+
+ const subtitle=document.querySelector(".cc-subtitle");
+ const badge=by("state");
+ const device=document.createElement("span");
+ device.id="cc-device-chip";device.textContent="Device: —";
+ const dot=document.querySelector("header .live-dot");
+ if(dot)dot.before(device);
+ const metric=by("metric-device"),active=by("metric-running"),control=by("browser-control");
+ function updateActivity(){
+  if(!by("activity-pane").hidden){
+   title.textContent="";
+   subtitle.textContent="Live execution workspace";
+   const name=metric?.textContent||"";
+   device.textContent=name&&name!=="Control plane" ? name : "Device: —";
+   const activityState=window.__ccActivityBadge||{label:"Connecting",className:"cc-badge-unavailable"};
+   const running=activityState.label==="Live"&&active?.classList.contains("active");
+   badge.textContent=running?"● Running":activityState.label==="Live"?"● Live":activityState.label;
+   badge.className=running?"cc-badge-running":activityState.className;
+  }
+ }
+ const browserFlow=document.createElement("section");
+ browserFlow.className="cc-browser-flow";browserFlow.setAttribute("aria-label","Browser control steps");
+ browserFlow.innerHTML='<div class="cc-flow-step" data-kind="pending"><span class="cc-flow-mark" aria-hidden="true">○</span><div><strong>Browser session</strong><small id="cc-session-text">Waiting for a real browser session</small></div></div><div class="cc-flow-step" data-kind="active"><span class="cc-flow-mark" aria-hidden="true">◌</span><div><strong id="cc-control-title">AI browser control</strong><small id="cc-control-text">Waiting for verified session status</small></div></div><div class="cc-flow-step"><span class="cc-flow-mark" aria-hidden="true">♢</span><div><strong>Private human handoff</strong><small>Use the authenticated CommandCore page for passwords, MFA and approvals. Enter private details only after server-confirmed human control.</small></div></div>';
+ const stage=by("browser-stage");if(stage)stage.after(browserFlow);
+ const trail=by("browser-trail");
+ if(trail){const disclosure=document.createElement("details");disclosure.id="cc-browser-actions";const summary=document.createElement("summary");summary.textContent="Recent AI browser actions";trail.before(disclosure);disclosure.append(summary,trail);}
+ function updateBrowser(){
+  if(!by("browser-pane").hidden){
+   title.textContent="";
+   subtitle.textContent="Remote browser workspace";
+   device.textContent="Browser";
+   const mode=(control?.textContent||"").toLowerCase();
+   const human=mode.includes("human");
+   const working=mode.includes("working");
+   const stateMessage=(by("browser-state")?.textContent||"").toLowerCase();
+   const stopped=mode==="stopped",stopping=mode==="stopping";
+   const noSession=!human&&(mode==="no session"||/session ended safely|no browser session|no active browser|session invalidated|worker restarted/.test(stateMessage));
+   const unknown=mode.includes("unavailable")||mode.includes("unverified");
+   const unavailable=unknown||mode.includes("connecting")||noSession||stopped;
+   browserFlow.dataset.ccEmpty=noSession?"true":"false";
+   if(noSession){
+    by("cc-control-title").textContent="No active browser session";
+    by("cc-control-text").textContent="Ask ChatGPT to open a website using CommandCore Browser.";
+   }
+   const actionFailure=/failed|timed out|timeout|error/i.test((by("browser-state")?.textContent||""));
+   badge.textContent=human?"● Your action needed":stopping?"◌ Stopping":stopped?"○ Stopped":noSession?"○ No session":unknown?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
+   badge.className=human?"cc-badge-action":unavailable?"cc-badge-unavailable":"cc-badge-live";
+   by("cc-control-title").textContent=human?"Private human control":stopping?"Stopping Browser":stopped?"Browser stopped":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
+   by("cc-control-text").textContent=human?"AI frames and input are disabled by the browser server until you resume through the authenticated handoff.":noSession?"No session is running. Ask ChatGPT to open a website with CommandCore Browser. No recovery or login action is needed.":(by("browser-state")?.textContent||"Waiting for browser").slice(0,230);
+   const sessionText=by("browser-session")?.textContent||"";
+   const sessionKnown=human||(!unavailable&&!sessionText.startsWith("No active")&&sessionText!=="Unavailable");
+   const marker=browserFlow.querySelector(".cc-flow-step");
+   marker.dataset.kind=sessionKnown?"ok":"pending";
+   marker.querySelector(".cc-flow-mark").textContent=sessionKnown?"✓":"○";
+   by("cc-session-text").textContent=human?"Private session connected · AI view safely hidden":
+     noSession?"No active browser session":unavailable?"Browser connection not confirmed":
+     (by("browser-host")?.textContent||"Waiting for verified browser session").slice(0,150);
+  }
+ }
+ const observed={childList:true,subtree:true,characterData:true};
+ if(metric)new MutationObserver(updateActivity).observe(metric,observed);
+ if(active)new MutationObserver(updateActivity).observe(active,observed);
+ if(control)new MutationObserver(updateBrowser).observe(control,observed);
+ if(by("browser-state"))new MutationObserver(updateBrowser).observe(by("browser-state"),observed);
+ if(by("browser-host"))new MutationObserver(updateBrowser).observe(by("browser-host"),observed);
+ window.addEventListener("commandcore:activity-state",updateActivity);
+ window.addEventListener("commandcore:activity-active",()=>queueMicrotask(updateActivity));
+ window.addEventListener("commandcore:browser-active",()=>queueMicrotask(updateBrowser));
+ updateActivity();
+})();
+</script>
+
+<script id="cc-approval-inbox-runtime">
+(()=>{
+"use strict";
+const root=document.getElementById("cc-approval-inbox");
+const count=document.getElementById("cc-approval-count");
+const content=document.getElementById("cc-approval-list");
+const refresh=document.getElementById("cc-approval-refresh");
+let busy=false;
+function show(message){content.textContent=message;}
+function unwrap(raw){
+ const a=raw&&typeof raw==="object"?(raw.structuredContent||raw.result?.structuredContent||raw):{};
+ return a.result&&typeof a.result==="object"&&Array.isArray(a.result.approval_requests)?a.result:a;
+}
+function render(items){
+ content.replaceChildren();
+ if(!items.length){show("No pending collaboration requests.");return;}
+ for(const item of items.slice(0,20)){
+  const card=document.createElement("article");card.className="cc-approval-card";
+  const title=document.createElement("strong");title.textContent=String(item.window_title||"Existing application").slice(0,220);
+  const device=document.createElement("small");device.textContent="Device: "+String(item.device_id||"Unspecified").slice(0,90);
+  const when=document.createElement("small");
+  const expiry=Number(item.expires_at);
+  const expires=Number.isFinite(expiry)?new Date(expiry*1000).toLocaleTimeString():"Unknown";
+  when.textContent="Pending review · Expires "+expires;
+  const note=document.createElement("small");note.textContent="Delivery not authorized";
+  card.append(title,device,when,note);
+  content.append(card);
+ }
+}
+async function load(){
+ if(busy||!root.open)return;
+ busy=true;refresh.disabled=true;show("Checking owner-scoped requests…");
+ try{
+  if(typeof window.openai?.callTool!=="function"){
+   show("Approval inbox requires the connected ChatGPT tool bridge.");return;
+  }
+  const raw=await window.openai.callTool("agents.approval.inbox",{limit:20});
+  const payload=unwrap(raw);
+  if(!Array.isArray(payload.approval_requests))throw Error("inbox_unavailable");
+  const items=payload.approval_requests.filter(x=>x&&x.status==="pending"&&x.delivery_authorized===false);
+  count.textContent=items.length+" pending";
+  render(items);
+ }catch(_){
+  count.textContent="Unavailable";
+  show("Approval inbox not available in this connection.");
+ }finally{busy=false;refresh.disabled=false;}
+}
+root.addEventListener("toggle",()=>{if(root.open)load();});
+refresh.addEventListener("click",load);
+})();
+</script>
+</body></html>

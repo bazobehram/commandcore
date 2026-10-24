@@ -1,0 +1,90 @@
+{
+  "release": "CommandCore Golden V19 - 2026-10-24",
+  "source_base": "4499d05",
+  "routing": "V18",
+  "browser_ui": "V19",
+  "shell_ui": "V16",
+  "container_image": "commandcore-session-ui-v9:20261018",
+  "container_image_id": "sha256:f95bc2cde8d81d243fde45c0a49fe48c81557af59284fbf8478046c3248cb20e",
+  "production_healthy_at_capture": true,
+  "files": [
+    {
+      "file": "files/server/activity_trace.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/activity_trace.py",
+      "sha256": "778589f9b5ed65213f74536dd0afc155223ebce9d16ac13f1d11567044546149",
+      "bytes": 1456
+    },
+    {
+      "file": "files/server/activity_visibility.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/activity_visibility.py",
+      "sha256": "637a135a7183cb02febf01137ffaa2434323383a20c6def4b21902d9c865ba0c",
+      "bytes": 9677
+    },
+    {
+      "file": "files/server/agent_gateway.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/agent_gateway.py",
+      "sha256": "51009d14f764e15ce227895de0618a10456065a3a6ffd6c9d39936058def3be9",
+      "bytes": 24155
+    },
+    {
+      "file": "files/server/browser_gateway.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/browser_gateway.py",
+      "sha256": "5ca4962e4ca25088cfab763ec946bb41dde22570d36e2e448a1ea57e4e780dd2",
+      "bytes": 70704
+    },
+    {
+      "file": "files/server/browser_session_store.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/browser_session_store.py",
+      "sha256": "6aac61a617ed6d2ccc5620d478678c4dd3b3062415326856df9a8c279c0f33fc",
+      "bytes": 6138
+    },
+    {
+      "file": "files/server/live_activity.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/live_activity.py",
+      "sha256": "74dfd498991008c96ce3e95e5832818ab4bebd943b98bfe14d53001a544a732d",
+      "bytes": 17361
+    },
+    {
+      "file": "files/server/mcp.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/mcp.py",
+      "sha256": "952fc8e05f02257e261c09d78dbe73eff9930cdf9f9c6d902aae1bba2e142a7f",
+      "bytes": 170438
+    },
+    {
+      "file": "files/server/tools.py",
+      "target": "/usr/local/lib/python3.13/site-packages/commandcore_server/tools.py",
+      "sha256": "d2001ed8f6c37cc972e23349072d720f9c54b0015a01410b71cb2522e1ebc063",
+      "bytes": 82388
+    },
+    {
+      "file": "files/web/activity-widget.html",
+      "target": "/usr/local/share/commandcore/web/activity-widget.html",
+      "sha256": "f3d6f4849be0342880925413a9469503c5ab2a4fb2a46e7e505819f007d98555",
+      "bytes": 119559
+    },
+    {
+      "file": "files/web/browser-widget.html",
+      "target": "/usr/local/share/commandcore/web/browser-widget.html",
+      "sha256": "f3d6f4849be0342880925413a9469503c5ab2a4fb2a46e7e505819f007d98555",
+      "bytes": 119559
+    },
+    {
+      "file": "files/web/commandcore-widget.html",
+      "target": "/usr/local/share/commandcore/web/commandcore-widget.html",
+      "sha256": "81908184698b86ed9881d9a5ea7e2df5121d2f71ab8e8a4dfcf7f87108399e52",
+      "bytes": 128633
+    },
+    {
+      "file": "files/web/panel.css",
+      "target": "/usr/local/share/commandcore/web/panel.css",
+      "sha256": "e7d236da037d7398ad66ca2699b5b37985060c7f8d485db788a28c34704ac9f9",
+      "bytes": 4306
+    },
+    {
+      "file": "files/web/panel.js",
+      "target": "/usr/local/share/commandcore/web/panel.js",
+      "sha256": "9ae43c7c5dc09cb91ff5b8c2addb9d01f3fe3593675c8db51c66e06d39369f28",
+      "bytes": 19772
+    }
+  ]
+}
