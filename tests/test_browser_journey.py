@@ -136,6 +136,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
             "document.elementFromPoint",
             '[aria-hidden="true"]',
             "form,button",
+            "[onclick]",
             "hasAttribute('download')",
         ]:
             self.assertIn(text, expression)
@@ -341,7 +342,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "5c5e34137fbc54cda2dcc6ebb9d24bd15c2b40fc840fec27d22b514aa826b52e",
+            "7d6d66e1d0fe75cb05d398eb2289cf82634b2a82fa3f244a248f3d90020415eb",
         )
 
 

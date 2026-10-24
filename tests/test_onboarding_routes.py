@@ -136,14 +136,7 @@ def test_device_audit_is_manager_scoped_and_contains_no_arguments_or_credentials
     )
 
 
-def test_http_authentication_csrf_reviewer_isolation_and_input_limits(
-    panel, monkeypatch
-):
-    from commandcore_server import enrollment
-
-    # Requests must remain in one limiter window even on a loaded runner.
-    now = enrollment.time.time()
-    monkeypatch.setattr(enrollment, "time", SimpleNamespace(time=lambda: now))
+def test_http_authentication_csrf_reviewer_isolation_and_input_limits(panel):
     client, _, _, _ = panel
     item = begin(client)
     body = {"view_token": item["view_token"]}
@@ -226,7 +219,7 @@ def test_managers_cannot_access_others_or_raise_ceiling(panel):
             headers=operator(),
             json={"subject": "second", "profile": "FULL_CONTROL"},
         ).status_code
-        == 422
+        == 403
     )
     assert (
         client.put(
