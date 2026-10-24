@@ -1,0 +1,18 @@
+# Explicitly opt-in proof of concept. Do NOT merge this into production compose.
+# Start: docker compose -f experiments/browser/compose.yaml up -d
+# Stop:  docker compose -f experiments/browser/compose.yaml down
+services:
+  steel-browser:
+    image: ${COMMANDCORE_BROWSER_IMAGE:-ghcr.io/steel-dev/steel-browser:latest}
+    container_name: commandcore-browser-poc
+    restart: "no"
+    ports:
+      # Steel API/UI is reachable only from this host. Never publish its CDP port.
+      - "127.0.0.1:3010:3000"
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 3g
+    cpus: 2
+    pids_limit: 300
+    # No host volumes, no host credentials, no Docker socket.
+    # The browser profile is deliberately ephemeral for this experiment.
