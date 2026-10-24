@@ -35,7 +35,7 @@ _LINK_VISIBLE_SCRIPT = r"""
   const linkVisible = a => {
     const s=getComputedStyle(a);
     if(s.visibility==='hidden'||s.display==='none'||a.hasAttribute('download')
-      ||a.closest('[aria-hidden="true"],form,button,[role=button]'))return false;
+      ||a.closest('[aria-hidden="true"],form,button,[role=button],[onclick],[onmousedown],[onpointerdown]'))return false;
     const pieces=[a,...Array.from(a.querySelectorAll('h1,h2,h3,span,img')).slice(0,8)];
     const rects=pieces.flatMap(e=>Array.from(e.getClientRects())).slice(0,24);
     return rects.some(r=>{
