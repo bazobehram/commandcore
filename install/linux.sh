@@ -164,7 +164,20 @@ if [ -e "$bin_root/commandcore-agent" ] || [ -L "$bin_root/commandcore-agent" ];
   [ "$(readlink "$bin_root/commandcore-agent")" = "$install_root/current/commandcore-agent" ] || { echo 'An unrelated commandcore-agent already exists.' >&2; exit 2; }
 fi
 if [ -e "$unit_root/$service_name" ]; then
-  [ "$(head -n 1 "$unit_root/$service_name")" = '# Managed by CommandCore' ] || { echo 'An unrelated service already exists.' >&2; exit 2; }
+  python3 - "$unit_root/$service_name" "$install_root" "$state_root" <<'PY_UNIT'
+import hashlib,pathlib,sys
+unit=pathlib.Path(sys.argv[1])
+if unit.is_symlink() or not unit.is_file(): raise SystemExit('Refusing an unexpected service path')
+lines=unit.read_text().splitlines()
+expected=f'ExecStart="{sys.argv[2]}/current/commandcore-agent" run --state "{sys.argv[3]}/agent.json"'
+legacy_hash='79ed9052a1390363c3969b7ea374d50df9dbe9cef7807d98c5a1f89752bb70b6'
+first=lines[0] if lines else ''
+legacy=hashlib.sha256(first.encode()).hexdigest()==legacy_hash
+marker=pathlib.Path(sys.argv[2])/'.commandcore-install'
+managed=marker.is_file() and not marker.is_symlink() and marker.read_text().strip()=='commandcore-agent'
+if first!='# Managed by CommandCore' and not (legacy and expected in lines and managed):
+    raise SystemExit('An unrelated service already exists.')
+PY_UNIT
 fi
 # Match the Agent's managed-job trust boundary before enrollment. Do not
 # silently chmod an existing HOME, symlink, or shared parent directory.
@@ -181,7 +194,13 @@ for ancestor in reversed((path.parent, *path.parent.parents)):
     if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, uid):
         raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (owner mismatch or symlink)")
     if info.st_mode & 0o022 and not (info.st_uid == 0 and info.st_mode & stat.S_ISVTX):
-        raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (writable by group/others)")
+        # A normal user's ~/.config must not be writable by other users.
+        # Repair this one familiar, user-owned location only; never chmod
+        # HOME, a shared ancestor, a symlink or a foreign-owned directory.
+        if ancestor == pathlib.Path.home() / '.config' and info.st_uid == uid and not ancestor.is_symlink():
+            ancestor.chmod(info.st_mode & ~0o022)
+        else:
+            raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (writable by group/others)")
 if path.is_symlink():
     raise SystemExit(f"Unsafe CommandCore state directory symlink: {path}")
 if path.exists():
