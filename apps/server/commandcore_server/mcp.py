@@ -100,10 +100,12 @@ OPERATION_UI_URIS = {
     "ui://commandcore/operation-0.11.0-b1.html",
 }
 
+
 def _cc_lookup_operation(live, principal, operation_id, host_session, devices):
     """Authorize one ephemeral shell trace; no output, cross-tenant data, or audit fallback."""
     import uuid
     from .auth import STANDARD_SCOPE, scope_allows
+
     if not isinstance(operation_id, str):
         return None
     try:
@@ -111,9 +113,13 @@ def _cc_lookup_operation(live, principal, operation_id, host_session, devices):
             return None
     except (ValueError, AttributeError, TypeError):
         return None
-    if not (principal.auth_kind == "oauth2" and principal.subject and principal.issuer
-            and principal.client_id not in ("", "unknown", "oauth-client")
-            and scope_allows(principal.scopes, STANDARD_SCOPE)):
+    if not (
+        principal.auth_kind == "oauth2"
+        and principal.subject
+        and principal.issuer
+        and principal.client_id not in ("", "unknown", "oauth-client")
+        and scope_allows(principal.scopes, STANDARD_SCOPE)
+    ):
         return None
     tag = live.session_tag(host_session)
     if not tag:
@@ -122,23 +128,32 @@ def _cc_lookup_operation(live, principal, operation_id, host_session, devices):
     row = live.completed.get(operation_id)
     if not isinstance(row, dict) or row.get("tool") != "shell.exec":
         return None
-    if (row.get("issuer"), row.get("owner"), row.get("client_id"),
-        row.get("session_tag")) != (
-        principal.issuer, principal.subject, principal.client_id, tag):
+    if (
+        row.get("issuer"),
+        row.get("owner"),
+        row.get("client_id"),
+        row.get("session_tag"),
+    ) != (principal.issuer, principal.subject, principal.client_id, tag):
         return None
     allowed_ids = {
-        device["id"] for device in devices
+        device["id"]
+        for device in devices
         if isinstance(device, dict) and "id" in device and not device.get("revoked_at")
     }
     if not row.get("device_id") or row["device_id"] not in allowed_ids:
         return None
     return {
-        "operation_id": operation_id, "device_id": row["device_id"],
-        "tool": "shell.exec", "status": row.get("status", "error"),
+        "operation_id": operation_id,
+        "device_id": row["device_id"],
+        "tool": "shell.exec",
+        "status": row.get("status", "error"),
         "exit_code": row.get("exit_code"),
-        "duration_ms": max(0, int((row["finished_epoch"] - row["started_epoch"]) * 1000)),
+        "duration_ms": max(
+            0, int((row["finished_epoch"] - row["started_epoch"]) * 1000)
+        ),
         "output_available": False,
     }
+
 
 OPERATION_TOOLS = (
     {
@@ -478,15 +493,28 @@ def _with_server_info(
     return out
 
 
-
 _SHELL_CARD_ALLOWED_EXECUTABLES = {
-    "hostname", "uname", "pwd", "whoami", "date", "git", "npm",
-    "pytest", "cargo", "docker", "ls", "id", "uptime", "df", "free"
+    "hostname",
+    "uname",
+    "pwd",
+    "whoami",
+    "date",
+    "git",
+    "npm",
+    "pytest",
+    "cargo",
+    "docker",
+    "ls",
+    "id",
+    "uptime",
+    "df",
+    "free",
 }
 _SHELL_CARD_SENSITIVE = re.compile(
     r"(?i)(password|passwd|api.?key|token|secret|private|credential|"
     r"cookie|authorization|\.ssh|\.env|id_ed25519|id_rsa)"
 )
+
 
 def _cc_safe_shell_display(args):
     """Display ordinary commands while withholding potential credentials."""
@@ -502,8 +530,11 @@ def _cc_safe_shell_display(args):
     # Code execution is not inherently sensitive; apply the same secret
     # checks to inline Python/Node/shell that we use for other commands.
     # Explicit credential-bearing requests remain withheld.
-    if re.search(r"(?i)(--password|--token|--secret|--api-key|bearer\s|"
-                 r"\b(?:curl|wget)\b.*(?:-H|--header|--data))", command):
+    if re.search(
+        r"(?i)(--password|--token|--secret|--api-key|bearer\s|"
+        r"\b(?:curl|wget)\b.*(?:-H|--header|--data))",
+        command,
+    ):
         return None
     return command.strip()
 
@@ -511,12 +542,15 @@ def _cc_safe_shell_display(args):
 def _cc_terminal_display(value, limit):
     if not isinstance(value, str):
         return "", False
-    text = "".join(ch for ch in value if ch in "\t\n" or 32 <= ord(ch) < 127 or ord(ch) > 159)
+    text = "".join(
+        ch for ch in value if ch in "\t\n" or 32 <= ord(ch) < 127 or ord(ch) > 159
+    )
     clipped = len(text) > limit
     text = text[:limit]
     text = re.sub(
         r"(?i)(bearer\s+\S+|(?:token|api.?key|password|secret)\s*[:=]\s*\S+)",
-        "[REDACTED]", text
+        "[REDACTED]",
+        text,
     )
     return text, clipped
 
@@ -536,12 +570,18 @@ def _cc_standalone_view_html(asset: str, view: str):
     html = web_asset(asset).read_text(encoding="utf-8")
     if view == "browser":
         # V25: periodic frame polling must not flicker the Refresh control.
-        assert 'busy=true;refreshBtn.disabled=true;' in html
-        assert 'finally {busy=false;refreshBtn.disabled=false;if(handoffPending)' in html
-        html = html.replace('busy=true;refreshBtn.disabled=true;', 'busy=true;', 1)
-        html = html.replace('finally {busy=false;refreshBtn.disabled=false;if(handoffPending)', 'finally {busy=false;if(handoffPending)', 1)
+        assert "busy=true;refreshBtn.disabled=true;" in html
+        assert (
+            "finally {busy=false;refreshBtn.disabled=false;if(handoffPending)" in html
+        )
+        html = html.replace("busy=true;refreshBtn.disabled=true;", "busy=true;", 1)
+        html = html.replace(
+            "finally {busy=false;refreshBtn.disabled=false;if(handoffPending)",
+            "finally {busy=false;if(handoffPending)",
+            1,
+        )
 
-    assert html.count('</head>') == 1 and html.count('</body>') == 1
+    assert html.count("</head>") == 1 and html.count("</body>") == 1
     assert 'id="browser-tab"' in html and 'id="activity-tab"' in html
     light_css = """<style id="cc-browser-light-v5">
 :root{color-scheme:light!important;--cc-bg:#ffffff!important;--cc-card:#f9fafb!important;--cc-text:#202124!important;--cc-muted:#70757d!important;--cc-line:#dce0e4!important;--cc-accent:#5276be!important;--cc-cyan:#287a9c!important;--cc-ok:#168454!important;--cc-fail:#bd4149!important}
@@ -560,9 +600,16 @@ button:focus-visible,summary:focus-visible{outline:2px solid #6586be!important}
 #cc-standalone-build{color:#80858e!important;opacity:1!important}
 nav[role="tablist"][aria-label="Workspace tabs"]{display:none!important}
 </style>"""
-    html=html.replace('</head>', (
-        light_css if view=="browser" else '<style>nav[role="tablist"][aria-label="Workspace tabs"]{display:none!important}</style>'
-       )+'</head>', 1)
+    html = html.replace(
+        "</head>",
+        (
+            light_css
+            if view == "browser"
+            else '<style>nav[role="tablist"][aria-label="Workspace tabs"]{display:none!important}</style>'
+        )
+        + "</head>",
+        1,
+    )
     if view == "browser":
         # Specific older control styles were painted dark; resolve contrast
         # without mutating the browser runtime, permissions or handoff logic.
@@ -640,7 +687,7 @@ body[data-cc-browser-state="awaiting_human"] #cc-browser-loading{display:none!im
 body[data-cc-browser-state="awaiting_human"] #browser-refresh{animation:none!important}
 
 </style>"""
-        html=html.replace("</head>",v6+"</head>",1)
+        html = html.replace("</head>", v6 + "</head>", 1)
     js = """<script>
 (() => {
  "use strict";
@@ -714,8 +761,8 @@ body[data-cc-browser-state="awaiting_human"] #browser-refresh{animation:none!imp
  activate();
  window.addEventListener("openai:set_globals",()=>queueMicrotask(activate));
 })();
-</script>""".replace("__VIEW__",repr(view))
-    return html.replace('</body>', js+'</body>', 1)
+</script>""".replace("__VIEW__", repr(view))
+    return html.replace("</body>", js + "</body>", 1)
 
 
 def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
@@ -753,7 +800,11 @@ def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
             code = payload.get("exit_code")
             audited = str(step.get("status") or "").lower()
             if (isinstance(code, int) and code != 0) or audited in {
-                "error", "failed", "timeout", "canceled", "interrupted"
+                "error",
+                "failed",
+                "timeout",
+                "canceled",
+                "interrupted",
             }:
                 payload["command_status"] = "failed"
             elif audited in {"started", "running"}:
@@ -767,8 +818,16 @@ def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
         operation_id = step.get("operation_id")
         if operation_id:
             is_visible = isinstance(ui_shell_command, str) and bool(ui_shell_command)
-            stdout, truncated_out = _cc_terminal_display(payload.get("stdout"), 4096) if is_visible else ("", False)
-            stderr, truncated_err = _cc_terminal_display(payload.get("stderr"), 2048) if is_visible else ("", False)
+            stdout, truncated_out = (
+                _cc_terminal_display(payload.get("stdout"), 4096)
+                if is_visible
+                else ("", False)
+            )
+            stderr, truncated_err = (
+                _cc_terminal_display(payload.get("stderr"), 2048)
+                if is_visible
+                else ("", False)
+            )
             payload["shell_card"] = {
                 "operation_id": operation_id,
                 "command": ui_shell_command if is_visible else "",
@@ -778,8 +837,9 @@ def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
                 "device": step.get("device", ""),
                 "exit_code": payload.get("exit_code"),
                 "duration_ms": step.get("duration_ms"),
-                "truncated": truncated_out or truncated_err
-                    or bool((payload.get("output_capture") or {}).get("truncated")),
+                "truncated": truncated_out
+                or truncated_err
+                or bool((payload.get("output_capture") or {}).get("truncated")),
             }
     # Screenshots must be returned as MCP images, not twice as huge
     # text/structured JSON or in an activity log.
@@ -831,7 +891,8 @@ def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
         def printable(value: Any, cap: int) -> str:
             value = value if isinstance(value, str) else ""
             value = "".join(
-                ch for ch in value[: cap + 1]
+                ch
+                for ch in value[: cap + 1]
                 if ch in "\n\t" or ord(ch) >= 32 and ord(ch) != 127
             )
             if len(value) > cap:
@@ -847,13 +908,21 @@ def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
         exit_code = meta.get("exit_code")
         audited = (meta.get("activity_step") or {}).get("status")
         raw_status = str(
-            meta.get("command_status") or audited or operation.get("status")
-            or meta.get("status") or "returned"
+            meta.get("command_status")
+            or audited
+            or operation.get("status")
+            or meta.get("status")
+            or "returned"
         ).lower()
         status = {
-            "ok": "COMPLETED", "completed": "COMPLETED", "returned": "COMPLETED",
-            "failed": "FAILED", "error": "FAILED", "timeout": "TIMED OUT",
-            "canceled": "CANCELED", "interrupted": "INTERRUPTED",
+            "ok": "COMPLETED",
+            "completed": "COMPLETED",
+            "returned": "COMPLETED",
+            "failed": "FAILED",
+            "error": "FAILED",
+            "timeout": "TIMED OUT",
+            "canceled": "CANCELED",
+            "interrupted": "INTERRUPTED",
             "running": "RUNNING",
         }.get(raw_status, raw_status.upper())
         if isinstance(exit_code, int) and exit_code != 0:
@@ -912,7 +981,7 @@ def _tool_error(code: str, message: str, modern: bool) -> dict[str, Any]:
 
 CARD_STYLE = '<style id="cc-operation-card-style">\nbody[data-cc-operation-compact=true]{border-radius:12px!important;min-height:0!important;max-width:940px!important;background:var(--cc-card)!important}\nbody[data-cc-operation-compact=true]>:not(#cc-step):not(script):not(style){display:none!important}\n#cc-step{display:none;border:1px solid var(--cc-line);border-radius:12px;overflow:hidden;font:12px/1.45 system-ui,sans-serif;color:var(--cc-text);background:var(--cc-card)}\nbody[data-cc-operation-compact=true] #cc-step{display:block}\n#cc-step-head{display:flex;align-items:center;gap:8px;padding:4px 8px;min-width:0}\n#cc-step-mark{width:7px;height:7px;background:#929298;border-radius:50%;flex:none}\n#cc-step[data-status=ok] #cc-step-mark{background:var(--cc-ok)}\n#cc-step[data-status=error] #cc-step-mark{background:var(--cc-fail)}\n#cc-step-tool{font-weight:650;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}\n#cc-step-device{color:var(--cc-muted);font:10px/1.4 ui-monospace,monospace;max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n#cc-step-expand{flex:none;min-width:40px;min-height:40px;font-size:17px;padding:3px 8px}\n#cc-step-summary{padding:0 8px 5px;color:var(--cc-muted);overflow-wrap:anywhere;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n#cc-step-details{padding:0 8px 5px}#cc-step-details summary{color:var(--cc-muted);font-size:11px}\n#cc-step-context{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 ui-monospace,monospace;padding-top:6px}\n#cc-step-preview{display:block;width:100%;max-height:180px;object-fit:contain;background:#17181b;border-top:1px solid var(--cc-line)}\n#cc-step-caption{display:block;padding:7px 12px;color:var(--cc-muted);font-size:10px;border-top:1px solid var(--cc-line)}\n#cc-step-back{min-width:30px;min-height:34px;padding:3px 7px}\n@media(prefers-color-scheme:light){#cc-step{background:var(--color-background-secondary,#f7f7f8);color:var(--color-text-primary,#202124)}#cc-step-summary,#cc-step-device,#cc-step-details summary,#cc-step-caption{color:var(--color-text-secondary,#62646b)}}\n#cc-step-output{padding:0 8px 7px}#cc-step-output summary{cursor:pointer}#cc-step-output pre{font:11px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;margin:6px 0 0;padding:8px;border-radius:7px;background:rgba(127,127,127,.08)}\n\n#cc-step-details,#cc-step-output{margin:4px 8px 6px;border:1px solid var(--cc-line);border-radius:8px;overflow:hidden}\n#cc-step-details summary,#cc-step-output summary{display:flex;align-items:center;gap:8px;min-height:38px;padding:9px 11px;cursor:pointer;list-style:none;font-weight:600;color:var(--cc-text);user-select:none}\n#cc-step-details summary::-webkit-details-marker,#cc-step-output summary::-webkit-details-marker{display:none}\n#cc-step-details summary::before,#cc-step-output summary::before{content:"";width:7px;height:7px;flex:none;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:rotate(-45deg);transition:transform .16s}\n#cc-step-details[open] summary::before,#cc-step-output[open] summary::before{transform:rotate(45deg)}\n#cc-step-details summary:hover,#cc-step-output summary:hover{background:rgba(127,127,127,.09)}\n#cc-step-details summary:focus-visible,#cc-step-output summary:focus-visible{outline:2px solid var(--cc-text);outline-offset:-3px}\n#cc-step-details[open] summary,#cc-step-output[open] summary{border-bottom:1px solid var(--cc-line)}\n#cc-step-output pre{margin:8px 10px 10px!important}\n#cc-step-context{padding:8px 10px 10px}\n@media(prefers-reduced-motion:reduce){#cc-step-details summary::before,#cc-step-output summary::before{transition:none}}\n\n/* b31 understated terminal surfaces: preserve the outer premium card */\n#cc-step-context,#cc-step-output pre{\n  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace!important;\n  font-size:12px!important;line-height:1.65!important;letter-spacing:0!important;\n  color:#d8e3dc!important;background:#151c1b!important;\n  white-space:pre-wrap!important;overflow-wrap:anywhere!important;\n  border:1px solid #2a3934!important;border-radius:8px!important;\n}\n#cc-step-context{margin:8px 10px 10px;padding:10px 12px!important}\n#cc-step-context:not(:empty)::before{content:"$ ";color:#7acc9a;font-weight:700}\n#cc-step-output pre{max-height:225px;overflow:auto;padding:11px 12px!important}\n#cc-step-output[open] summary::after{content:"read-only";font:10px ui-monospace,monospace;opacity:.55;margin-left:auto}\n\n/* Expanded view uses the available handset viewport; compact remains unchanged. */\nhtml:has(body[data-cc-operation-compact="false"]){height:100%!important;min-height:0!important;overflow:hidden!important}\nbody[data-cc-operation-compact="false"]{\nheight:100dvh!important;height:100svh!important;max-height:100dvh!important;\nmin-height:0!important;max-width:none!important;width:100%!important;\ndisplay:flex!important;flex-direction:column!important;overflow:hidden!important;\n}\nbody[data-cc-operation-compact="false"]>header,\nbody[data-cc-operation-compact="false"]>nav{flex:0 0 auto!important}\nbody[data-cc-operation-compact="false"] #activity-pane:not([hidden]){\ndisplay:flex!important;flex:1 1 auto!important;flex-direction:column!important;\nmin-height:0!important;overflow:hidden!important;\n}\nbody[data-cc-operation-compact="false"] #feed{\ndisplay:block!important;flex:1 1 auto!important;min-height:0!important;\nheight:auto!important;max-height:none!important;overflow-y:auto!important;\n-webkit-overflow-scrolling:touch;overscroll-behavior:contain;\npadding-bottom:24px!important;\n}\nbody[data-cc-operation-compact="false"] #browser-pane:not([hidden]){\ndisplay:block!important;flex:1 1 auto!important;min-height:0!important;\noverflow-y:auto!important;-webkit-overflow-scrolling:touch;\n}\nbody[data-cc-operation-compact="false"] #cc-release-footer{flex:0 0 auto!important}\n@media(max-width:540px){\nbody[data-cc-operation-compact="false"] header{gap:6px!important}\nbody[data-cc-operation-compact="false"] #cc-minimize{padding:5px 8px!important}\nbody[data-cc-operation-compact="false"] #feed{max-height:none!important}\nbody[data-cc-operation-compact="false"] .overview{grid-template-columns:repeat(3,minmax(0,1fr))!important}\n}\n\n/* The compact Output is its own touch-scroll surface, never an endlessly tall card. */\nbody[data-cc-operation-compact="true"] #cc-step-output[open] pre{\n display:block!important;box-sizing:border-box!important;\n max-height:min(220px,32dvh)!important;min-height:0!important;\n overflow-y:auto!important;overflow-x:auto!important;\n -webkit-overflow-scrolling:touch!important;\n overscroll-behavior:contain!important;touch-action:pan-y!important;\n scrollbar-width:thin;scrollbar-color:#607b6e #151c1b;\n}\nbody[data-cc-operation-compact="true"] #cc-step-output[open] pre::-webkit-scrollbar{width:5px;height:5px}\nbody[data-cc-operation-compact="true"] #cc-step-output[open] pre::-webkit-scrollbar-thumb{background:#607b6e;border-radius:5px}\nbody[data-cc-operation-compact="true"] #cc-step-output[open] summary::after{\n content:"Scroll to view output";font:10px ui-monospace,monospace;\n color:var(--cc-muted);margin-left:auto;opacity:.8;\n}\n\n/* b44: ChatGPT owns fullscreen close. No duplicate controls in our header. */\nbody[data-cc-operation-compact="false"]>header{\n display:flex!important;align-items:center!important;min-width:0!important;\n box-sizing:border-box!important;gap:8px!important;\n padding:11px max(72px,env(safe-area-inset-right,0px)) 11px max(14px,env(safe-area-inset-left,0px))!important;\n}\nbody[data-cc-operation-compact="false"] #cc-device-chip,\nbody[data-cc-operation-compact="false"] #state,\nbody[data-cc-operation-compact="false"] #cc-minimize,\nbody[data-cc-operation-compact="false"] #cc-close-view,\nbody[data-cc-operation-compact="false"] #cc-step-back{\n display:none!important;\n}\n</style>'
 CARD_BODY = '\n<section id="cc-step" aria-label="CommandCore operation" data-status="pending">\n <div id="cc-step-head"><span id="cc-step-mark" aria-hidden="true"></span><strong id="cc-step-tool">CommandCore</strong><span id="cc-step-device">—</span><button id="cc-step-expand" type="button" aria-label="Expand operation in CommandCore" title="Open full workspace">⤢</button></div>\n <div id="cc-step-summary" role="status">Loading operation details…</div>\n <details id="cc-step-details" open hidden><summary>Command &amp; target</summary><div id="cc-step-context"></div></details>\n <details id="cc-step-output" hidden><summary>Output</summary><pre id="cc-step-output-text"></pre></details>\n <img id="cc-step-preview" alt="Browser screenshot returned by this operation" hidden>\n <small id="cc-step-caption" hidden>Snapshot of this step · expand for live Browser</small>\n</section>\n'
-CARD_RUNTIME = '\n<script id="cc-operation-card-runtime">\n(()=>{\n "use strict";\n const by=id=>document.getElementById(id),root=by(\'cc-step\');\n let kind=\'activity\',boundOperation=null,displaySequence=0;\n const clean=(s,n=180)=>typeof s===\'string\'?s.slice(0,n):\'\';\n function envelope(raw){\n  let value=raw||{};\n  for(let i=0;i<4;i++){\n   const next=value.call_tool_result||value.mcp_tool_result||(value.result?.structuredContent?value.result:null);\n   if(!next)break;value=next;\n  }\n  return value;\n }\n function recordedResult(r){\n  const data=r.structuredContent||r;\n  if(!data||typeof data!==\'object\')return null;\n  // Rehydrate only this saved result. Never use latest account feed rows,\n  // raw commands, file content, browser control tokens or another card.\n  const match=typeof data.summary===\'string\'?data.summary.match(/^([a-z][a-z0-9_.]+) on ([^\\n]{1,100}): [a-z_]+$/):null;\n  if(match&&typeof data.execution_id===\'string\')return {tool:match[1],kind:\'activity\',device:match[2],execution_id:data.execution_id,status:data.status||\'returned\',exit_code:data.exit_code};\n  if(data.activity_step?.tool)return { ...data.activity_step,detail:data.activity_step.command?{command_display:data.activity_step.command}:{} };\n  if(r.isError||data.error)return {tool:\'CommandCore result\',status:\'error\'};\n  if(typeof data.state===\'string\'&&(\'url\' in data||\'session_id\' in data))return {tool:\'Browser result\',kind:\'browser\',status:\'returned\'};\n  return null;\n }\n function render(raw){\n  const outer=envelope(raw),r=outer?.result?.structuredContent?outer.result:outer;\n  const meta=r?._meta||{};\n  const op=meta[\'commandcore/operation\']||raw?.[\'commandcore/operation\']||(!boundOperation?recordedResult(r):null);\n  if(!op||typeof op.tool!==\'string\')return;\n  if(boundOperation?.operation_id&&op.operation_id&&boundOperation.operation_id!==op.operation_id)return;\n  // This result is the sole source of the compact card. Never read latest feed\n  // rows, another widget\'s state, raw input arguments or shell stdout here.\n  boundOperation=op;kind=op.kind===\'browser\'?\'browser\':\'activity\';\n  by(\'cc-step-tool\').textContent=op.tool;\n  by(\'cc-step-device\').textContent=kind===\'browser\'?\'Browser worker\':clean(op.device,80)||\'Device not reported\';\n  const status=r.isError||[\'error\',\'failed\',\'timeout\',\'agent_disconnected\',\'disconnected\',\'canceled\',\'stopped\',\'interrupted\'].includes(op.status)||(Number.isInteger(op.exit_code)&&op.exit_code!==0)?\'error\':[\'running\',\'started\'].includes(op.status)?\'running\':[\'ok\',\'completed\'].includes(op.status)?\'ok\':\'returned\';\n  root.dataset.status=status;\n  let label=({ok:\'Completed\',error:\'Failed\',running:\'Running\',returned:\'Returned\'})[status];\n  if(Number.isFinite(op.duration_ms))label+=\' · \'+(op.duration_ms>=1000?(op.duration_ms/1000).toFixed(1)+\'s\':op.duration_ms+\'ms\');\n  if(Number.isInteger(op.exit_code))label+=\' · exit \'+op.exit_code;\n  by(\'cc-step-summary\').textContent=label;\n  const d=op.detail&&typeof op.detail===\'object\'?op.detail:{};\n  let target=clean(d.command_display||d.path||d.cwd||d.command_name,500);\n  if(kind===\'browser\'&&typeof (r.structuredContent||r)?.url===\'string\'){try{const u=new URL((r.structuredContent||r).url);if(!u.username&&!u.password)target=u.origin+u.pathname;}catch(_){}}\n  if(target){by(\'cc-step-summary\').textContent=label+\' · \'+target;by(\'cc-step-summary\').title=target;}\n  const data=r?.structuredContent||r||{};\n  const safeCommand=(d.command_display||data.activity_step?.command||\'\').trim();\n  // Avoid exposing arbitrary stdout (tokens, private file contents, credentials).\n  // Only predefined benign machine-inspection commands may preview their output.\n  const previewAllowed=/^(pwd|hostname|uname(?: -[a-zA-Z]+)?)$/.test(safeCommand) || safeCommand === \'ls -la /usr/share/zoneinfo && uname -a\';\n  const output=typeof data.stdout===\'string\'?data.stdout:\'\';\n  const panel=by(\'cc-step-output\');\n  if(previewAllowed&&output&&!/[\\x00-\\x08\\x0e-\\x1f]/.test(output)\n   && !/(?:secret|password|credential|token|private.key|BEGIN [A-Z ]+ KEY)/i.test(output)){\n    panel.hidden=false;\n    by(\'cc-step-output-text\').textContent=output.slice(0,2000)+(output.length>2000?\'\\n… output truncated in compact preview\':\'\');\n  }else{\n    panel.hidden=true;\n    by(\'cc-step-output-text\').textContent=\'\';\n  }\n  const lines=[];\n  for(const [key,name] of [[\'command_display\',\'Command\'],[\'cwd\',\'Folder\'],[\'path\',\'File\'],[\'destination\',\'Target\'],[\'verified_effect\',\'Effect\']]){\n   if(typeof d[key]===\'string\'&&d[key])lines.push(name+\' · \'+clean(d[key],500));\n  }\n  // Execution ID stays in metadata for auditing; do not show it in the user card.\n  by(\'cc-step-context\').textContent=lines.join(\'\\n\');by(\'cc-step-details\').hidden=!lines.length;\n  const image=(r.content||[]).find(x=>x.type===\'image\'&&x.mimeType===\'image/png\'&&/^[A-Za-z0-9+/=]+$/.test(x.data||\'\'));\n  const privateControl=r.structuredContent?.state===\'awaiting_human\';\n  by(\'cc-step-preview\').hidden=true;by(\'cc-step-preview\').removeAttribute(\'src\');by(\'cc-step-caption\').hidden=true;\n  if(kind===\'browser\'&&image&&!privateControl){\n   by(\'cc-step-preview\').src=\'data:image/png;base64,\'+image.data;by(\'cc-step-preview\').hidden=false;by(\'cc-step-caption\').hidden=false;\n  }else if(kind===\'browser\'&&privateControl){by(\'cc-step-summary\').textContent=\'Private human control · screen hidden\';}\n }\n // ChatGPT owns the fullscreen X. Only that control dismisses fullscreen;\n // the host displayMode notification restores our own compact operation card.\n let hostModeRequest=0;\n function setCompact(compact){\n  document.body.dataset.ccOperationCompact=compact?\'true\':\'false\';\n  document.body.dataset.ccMinimized=\'false\';\n\n }\n function onHostMode(mode,fromHost=false){\n  if(fromHost)++hostModeRequest;\n  if(mode===\'inline\')setCompact(true);\n  else if(mode===\'fullscreen\'||mode===\'pip\')setCompact(false);\n }\n function hostMode(mode){\n  const seq=++hostModeRequest;\n  if(typeof window.openai?.requestDisplayMode===\'function\'){\n   return Promise.resolve(window.openai.requestDisplayMode({mode}))\n    .then(result=>{\n      if(seq!==hostModeRequest)return;\n      if(result&&[\'inline\',\'fullscreen\',\'pip\'].includes(result.mode))onHostMode(result.mode);\n    }).catch(()=>{\n      // A refused host request must not strand the expanded workspace inline.\n      if(seq===hostModeRequest&&mode===\'fullscreen\')setCompact(true);\n    });\n  }\n  // Shared MCP Apps bridge; keep a usable local compact view on dismissal.\n  window.parent.postMessage({jsonrpc:\'2.0\',id:\'cc-step-mode-\'+(++displaySequence),method:\'ui/request-display-mode\',params:{mode}},\'*\');\n  return Promise.resolve();\n }\n function expand(){\n  setCompact(false);\n  document.getElementById(kind===\'browser\'?\'browser-tab\':\'activity-tab\').click();\n  hostMode(\'fullscreen\');\n }\n by(\'cc-step-expand\').addEventListener(\'click\',expand);\n window.addEventListener(\'message\',e=>{\n  if(e.source!==window.parent)return;\n  if(e.data?.method===\'ui/notifications/host-context-changed\'){\n   const ctx=e.data.params||{};\n   const mode=ctx.displayMode||ctx.hostContext?.displayMode;\n   if(typeof mode===\'string\')onHostMode(mode,true);\n  }\n  if(e.data?.method===\'ui/notifications/tool-result\')render(e.data.params);\n  if(e.data?.method===\'ui/notifications/tool-input\'&&!boundOperation){\n   root.dataset.status=\'running\';by(\'cc-step-summary\').textContent=\'Running this operation…\';\n  }\n });\n window.addEventListener(\'openai:set_globals\',e=>{\n  const g=e.detail?.globals||{};\n  if(typeof g.displayMode===\'string\')onHostMode(g.displayMode,true);\n  render(g.toolResponseMetadata||{});\n  if(!boundOperation)render(g.toolOutput||{});\n });\n window.addEventListener(\'pageshow\',()=>{\n  const mode=window.openai?.displayMode;\n  if(typeof mode===\'string\')onHostMode(mode,true);\n });\n render(window.openai?.toolResponseMetadata||{});\n if(!boundOperation)render(window.openai?.toolOutput||{});\n setTimeout(()=>{if(!boundOperation)by(\'cc-step-summary\').textContent=\'Operation details unavailable in this view. No command was rerun.\';},5000);\n})();\n</script>\n'
+CARD_RUNTIME = "\n<script id=\"cc-operation-card-runtime\">\n(()=>{\n \"use strict\";\n const by=id=>document.getElementById(id),root=by('cc-step');\n let kind='activity',boundOperation=null,displaySequence=0;\n const clean=(s,n=180)=>typeof s==='string'?s.slice(0,n):'';\n function envelope(raw){\n  let value=raw||{};\n  for(let i=0;i<4;i++){\n   const next=value.call_tool_result||value.mcp_tool_result||(value.result?.structuredContent?value.result:null);\n   if(!next)break;value=next;\n  }\n  return value;\n }\n function recordedResult(r){\n  const data=r.structuredContent||r;\n  if(!data||typeof data!=='object')return null;\n  // Rehydrate only this saved result. Never use latest account feed rows,\n  // raw commands, file content, browser control tokens or another card.\n  const match=typeof data.summary==='string'?data.summary.match(/^([a-z][a-z0-9_.]+) on ([^\\n]{1,100}): [a-z_]+$/):null;\n  if(match&&typeof data.execution_id==='string')return {tool:match[1],kind:'activity',device:match[2],execution_id:data.execution_id,status:data.status||'returned',exit_code:data.exit_code};\n  if(data.activity_step?.tool)return { ...data.activity_step,detail:data.activity_step.command?{command_display:data.activity_step.command}:{} };\n  if(r.isError||data.error)return {tool:'CommandCore result',status:'error'};\n  if(typeof data.state==='string'&&('url' in data||'session_id' in data))return {tool:'Browser result',kind:'browser',status:'returned'};\n  return null;\n }\n function render(raw){\n  const outer=envelope(raw),r=outer?.result?.structuredContent?outer.result:outer;\n  const meta=r?._meta||{};\n  const op=meta['commandcore/operation']||raw?.['commandcore/operation']||(!boundOperation?recordedResult(r):null);\n  if(!op||typeof op.tool!=='string')return;\n  if(boundOperation?.operation_id&&op.operation_id&&boundOperation.operation_id!==op.operation_id)return;\n  // This result is the sole source of the compact card. Never read latest feed\n  // rows, another widget's state, raw input arguments or shell stdout here.\n  boundOperation=op;kind=op.kind==='browser'?'browser':'activity';\n  by('cc-step-tool').textContent=op.tool;\n  by('cc-step-device').textContent=kind==='browser'?'Browser worker':clean(op.device,80)||'Device not reported';\n  const status=r.isError||['error','failed','timeout','agent_disconnected','disconnected','canceled','stopped','interrupted'].includes(op.status)||(Number.isInteger(op.exit_code)&&op.exit_code!==0)?'error':['running','started'].includes(op.status)?'running':['ok','completed'].includes(op.status)?'ok':'returned';\n  root.dataset.status=status;\n  let label=({ok:'Completed',error:'Failed',running:'Running',returned:'Returned'})[status];\n  if(Number.isFinite(op.duration_ms))label+=' · '+(op.duration_ms>=1000?(op.duration_ms/1000).toFixed(1)+'s':op.duration_ms+'ms');\n  if(Number.isInteger(op.exit_code))label+=' · exit '+op.exit_code;\n  by('cc-step-summary').textContent=label;\n  const d=op.detail&&typeof op.detail==='object'?op.detail:{};\n  let target=clean(d.command_display||d.path||d.cwd||d.command_name,500);\n  if(kind==='browser'&&typeof (r.structuredContent||r)?.url==='string'){try{const u=new URL((r.structuredContent||r).url);if(!u.username&&!u.password)target=u.origin+u.pathname;}catch(_){}}\n  if(target){by('cc-step-summary').textContent=label+' · '+target;by('cc-step-summary').title=target;}\n  const data=r?.structuredContent||r||{};\n  const safeCommand=(d.command_display||data.activity_step?.command||'').trim();\n  // Avoid exposing arbitrary stdout (tokens, private file contents, credentials).\n  // Only predefined benign machine-inspection commands may preview their output.\n  const previewAllowed=/^(pwd|hostname|uname(?: -[a-zA-Z]+)?)$/.test(safeCommand) || safeCommand === 'ls -la /usr/share/zoneinfo && uname -a';\n  const output=typeof data.stdout==='string'?data.stdout:'';\n  const panel=by('cc-step-output');\n  if(previewAllowed&&output&&!/[\\x00-\\x08\\x0e-\\x1f]/.test(output)\n   && !/(?:secret|password|credential|token|private.key|BEGIN [A-Z ]+ KEY)/i.test(output)){\n    panel.hidden=false;\n    by('cc-step-output-text').textContent=output.slice(0,2000)+(output.length>2000?'\\n… output truncated in compact preview':'');\n  }else{\n    panel.hidden=true;\n    by('cc-step-output-text').textContent='';\n  }\n  const lines=[];\n  for(const [key,name] of [['command_display','Command'],['cwd','Folder'],['path','File'],['destination','Target'],['verified_effect','Effect']]){\n   if(typeof d[key]==='string'&&d[key])lines.push(name+' · '+clean(d[key],500));\n  }\n  // Execution ID stays in metadata for auditing; do not show it in the user card.\n  by('cc-step-context').textContent=lines.join('\\n');by('cc-step-details').hidden=!lines.length;\n  const image=(r.content||[]).find(x=>x.type==='image'&&x.mimeType==='image/png'&&/^[A-Za-z0-9+/=]+$/.test(x.data||''));\n  const privateControl=r.structuredContent?.state==='awaiting_human';\n  by('cc-step-preview').hidden=true;by('cc-step-preview').removeAttribute('src');by('cc-step-caption').hidden=true;\n  if(kind==='browser'&&image&&!privateControl){\n   by('cc-step-preview').src='data:image/png;base64,'+image.data;by('cc-step-preview').hidden=false;by('cc-step-caption').hidden=false;\n  }else if(kind==='browser'&&privateControl){by('cc-step-summary').textContent='Private human control · screen hidden';}\n }\n // ChatGPT owns the fullscreen X. Only that control dismisses fullscreen;\n // the host displayMode notification restores our own compact operation card.\n let hostModeRequest=0;\n function setCompact(compact){\n  document.body.dataset.ccOperationCompact=compact?'true':'false';\n  document.body.dataset.ccMinimized='false';\n\n }\n function onHostMode(mode,fromHost=false){\n  if(fromHost)++hostModeRequest;\n  if(mode==='inline')setCompact(true);\n  else if(mode==='fullscreen'||mode==='pip')setCompact(false);\n }\n function hostMode(mode){\n  const seq=++hostModeRequest;\n  if(typeof window.openai?.requestDisplayMode==='function'){\n   return Promise.resolve(window.openai.requestDisplayMode({mode}))\n    .then(result=>{\n      if(seq!==hostModeRequest)return;\n      if(result&&['inline','fullscreen','pip'].includes(result.mode))onHostMode(result.mode);\n    }).catch(()=>{\n      // A refused host request must not strand the expanded workspace inline.\n      if(seq===hostModeRequest&&mode==='fullscreen')setCompact(true);\n    });\n  }\n  // Shared MCP Apps bridge; keep a usable local compact view on dismissal.\n  window.parent.postMessage({jsonrpc:'2.0',id:'cc-step-mode-'+(++displaySequence),method:'ui/request-display-mode',params:{mode}},'*');\n  return Promise.resolve();\n }\n function expand(){\n  setCompact(false);\n  document.getElementById(kind==='browser'?'browser-tab':'activity-tab').click();\n  hostMode('fullscreen');\n }\n by('cc-step-expand').addEventListener('click',expand);\n window.addEventListener('message',e=>{\n  if(e.source!==window.parent)return;\n  if(e.data?.method==='ui/notifications/host-context-changed'){\n   const ctx=e.data.params||{};\n   const mode=ctx.displayMode||ctx.hostContext?.displayMode;\n   if(typeof mode==='string')onHostMode(mode,true);\n  }\n  if(e.data?.method==='ui/notifications/tool-result')render(e.data.params);\n  if(e.data?.method==='ui/notifications/tool-input'&&!boundOperation){\n   root.dataset.status='running';by('cc-step-summary').textContent='Running this operation…';\n  }\n });\n window.addEventListener('openai:set_globals',e=>{\n  const g=e.detail?.globals||{};\n  if(typeof g.displayMode==='string')onHostMode(g.displayMode,true);\n  render(g.toolResponseMetadata||{});\n  if(!boundOperation)render(g.toolOutput||{});\n });\n window.addEventListener('pageshow',()=>{\n  const mode=window.openai?.displayMode;\n  if(typeof mode==='string')onHostMode(mode,true);\n });\n render(window.openai?.toolResponseMetadata||{});\n if(!boundOperation)render(window.openai?.toolOutput||{});\n setTimeout(()=>{if(!boundOperation)by('cc-step-summary').textContent='Operation details unavailable in this view. No command was rerun.';},5000);\n})();\n</script>\n"
 
 
 def _operation_html(html: str) -> str:
@@ -1268,7 +1337,7 @@ class UITaskLedger:
 
 TASK_STYLE = '<style id="cc-task-style">\nbody[data-cc-task-compact=true]{display:block!important;border:0!important;padding:0!important;height:auto!important;min-height:0!important;max-width:940px!important;background:var(--cc-card)!important;border-radius:12px!important}\nbody[data-cc-task-compact=true]>:not(#cc-task):not(script):not(style){display:none!important}\n#cc-task{display:none;border:1px solid var(--cc-line);border-radius:12px;background:var(--cc-card);color:var(--cc-text);font:12px/1.45 system-ui,sans-serif;overflow:hidden}\nbody[data-cc-task-compact=true] #cc-task{display:block}\n#cc-task-head{display:flex;align-items:center;gap:8px;padding:8px 12px 4px;min-width:0}\n#cc-task-dot{width:7px;height:7px;flex:none;border-radius:50%;background:var(--cc-muted)}\n#cc-task[data-state=running] #cc-task-dot{background:var(--cc-warn,#b58023)}\n#cc-task[data-state=ok] #cc-task-dot{background:var(--cc-ok)}\n#cc-task[data-state=error] #cc-task-dot{background:var(--cc-fail)}\n#cc-task-title{font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:650}\n#cc-task-device{padding:3px 6px;border:1px solid var(--cc-line);border-radius:6px;max-width:30%;color:var(--cc-muted);font:10px/1.4 ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n#cc-task-device:empty{display:none}\n#cc-task-expand{min-height:40px;min-width:40px;padding:3px 8px;font-size:17px;flex:none}\n#cc-task-summary{padding:0 12px 8px;color:var(--cc-muted);font-size:12px;overflow-wrap:anywhere}\n#cc-task-steps{padding:0 12px 8px;font-size:12px}#cc-task-steps summary{color:var(--cc-muted);cursor:pointer;min-height:32px;align-content:center}#cc-task-steps[open] summary{color:var(--cc-text)}\n#cc-task-list{list-style:none;padding:0;margin:5px 0 0}#cc-task-list li{border-top:1px solid var(--cc-line);padding:5px 0;overflow-wrap:anywhere}\n#cc-task-list small{display:block;color:var(--cc-muted);font-size:10px}\n#cc-task-preview{width:100%;max-height:260px;object-fit:contain;background:#17181b;border-top:1px solid var(--cc-line)}\n#cc-task-caption{display:block;padding:5px 8px;color:var(--cc-muted);font-size:10px}\n#cc-task-retry{margin:0 8px 7px;min-height:40px;font-size:11px}\n#cc-task-back{min-height:40px;min-width:36px;padding:3px 7px}\n#cc-task :is(button,summary):focus-visible{outline:2px solid var(--cc-cyan);outline-offset:-2px}\n#cc-task [hidden]{display:none!important}\n#cc-task-list li{padding:8px 0}\n#cc-task-list small{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--cc-muted)}\n#cc-task-steps[open]{max-height:min(380px,42dvh);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}\n</style>'
 TASK_BODY = '<section id="cc-task" aria-label="CommandCore live task" data-state="waiting">\n <div id="cc-task-head"><span id="cc-task-dot" aria-hidden="true"></span><strong id="cc-task-title">CommandCore</strong><span id="cc-task-device"></span><button id="cc-task-expand" type="button" aria-label="Expand task in CommandCore" title="Show task details">⤢</button></div>\n <div id="cc-task-summary" role="status">Loading this task…</div>\n <details id="cc-task-steps" open hidden><summary>Details</summary><ol id="cc-task-list"></ol><button id="cc-task-retry" type="button" hidden>Retry live updates</button></details>\n <img id="cc-task-preview" alt="Browser preview for this conversation" hidden><small id="cc-task-caption" hidden></small>\n</section>'
-TASK_RUNTIME = '<script id="cc-task-runtime">\n(()=>{\n \'use strict\';\n const by=id=>document.getElementById(id),root=by(\'cc-task\');\n let widgetId=\'\',id=\'\',viewer=\'\',task=null,kind=\'activity\',generation=0,busy=false,timer=null,failures=0,renewed=false,sequence=-1,frameMissing=false,browserActive=false,previewSession=\'\';\n const clean=(x,n=160)=>typeof x===\'string\'?x.slice(0,n):\'\';\n const label=tool=>({\'shell.exec\':\'Command\',\'system.metrics\':\'Device resources\',\'system.info\':\'Device information\',\'fs.read\':\'Reading a file\',\'fs.write\':\'File update\',\'fs.list\':\'Files\',\'process.start\':\'Starting a process\',\'process.stop\':\'Stopping a process\',\'git.status\':\'Git status\',\'git.diff\':\'Reviewing changes\',\'browser.search\':\'Web search\',\'browser.open\':\'Browsing\',\'browser.links\':\'Inspecting page links\',\'browser.follow\':\'Opening a page link\',\'browser.back\':\'Previous page\',\'browser.forward\':\'Next page\',\'browser.observe\':\'Page inspection\',\'browser.close\':\'Browser closed\'})[tool]||tool||\'CommandCore\';\n const normalized=raw=>{let v=raw||{};for(let i=0;i<4;i++){const next=v.call_tool_result||v.mcp_tool_result||(v.result?.structuredContent?v.result:null);if(!next)break;v=next;}return v;};\n const data=raw=>{const r=normalized(raw);return r.structuredContent||r;};\n const active=()=>document.body.dataset.ccTaskCompact===\'true\';\n function imageOff(){by(\'cc-task-preview\').hidden=true;by(\'cc-task-preview\').removeAttribute(\'src\');by(\'cc-task-caption\').hidden=true;}\n function schedule(delay=750){clearTimeout(timer);if(active()&&id&&task?.ended==null&&failures<3)timer=setTimeout(poll,(document.hidden||window.__ccWorkspaceSuspended)?Math.max(2000,delay):delay);}\n let lastSaved=\'\';\n function summarySnapshot(events){\n  const total=Number.isSafeInteger(task?.total)&&task.total>=0?task.total:0;\n  return {version:1,task:{id,total,running:Number.isSafeInteger(task?.running)?Math.max(0,task.running):0,failed:Number.isSafeInteger(task?.failed)?Math.max(0,task.failed):0,ended:typeof task?.ended===\'number\'&&Number.isFinite(task.ended)?task.ended:null,last_tool:clean(task?.last_tool,80),device:clean(task?.device,80)},events:(Array.isArray(events)?events:[]).slice(0,3).map(row=>({tool:clean(row?.tool,80),status:clean(row?.status,32),device:clean(row?.device,80)}))};\n }\n function saveSummary(events){\n  if(typeof window.openai?.setWidgetState!==\'function\')return;\n  const saved=summarySnapshot(events),signature=JSON.stringify(saved);if(signature===lastSaved)return;\n  lastSaved=signature;\n  try{const existing=window.openai.widgetState;Promise.resolve(window.openai.setWidgetState({...((existing&&typeof existing===\'object\'&&!Array.isArray(existing))?existing:{}),ccTaskSummary:saved})).catch(()=>{});}catch(_){}\n }\n function restoredSummary(next){\n  const saved=window.openai?.widgetState?.ccTaskSummary,t=saved?.task;\n  if(saved?.version!==1||t?.id!==next||!Number.isSafeInteger(t.total)||t.total<0||!Number.isSafeInteger(t.running)||t.running<0||!Number.isSafeInteger(t.failed)||t.failed<0||t.failed>t.total)return null;\n  if(t.ended!==null&&!(typeof t.ended===\'number\'&&Number.isFinite(t.ended)&&t.ended>0&&t.running===0))return null;\n  return {task:{id:next,total:t.total,running:t.running,failed:t.failed,ended:t.ended,last_tool:clean(t.last_tool,80),device:clean(t.device,80)},events:(Array.isArray(saved.events)?saved.events:[]).slice(0,3).map(row=>({tool:clean(row?.tool,80),status:clean(row?.status,32),device:clean(row?.device,80)}))};\n }\n function archived(){\n  failures=3;clearTimeout(timer);imageOff();root.dataset.state=task?.failed?\'error\':\'waiting\';\n  const count=Number.isSafeInteger(task?.total)?task.total:0;\n  by(\'cc-task-summary\').textContent=\'Saved task · \'+count+\' call\'+(count===1?\'\':\'s\')+(task?.failed?\' · \'+task.failed+\' need review\':\'\');\n  by(\'cc-task-retry\').hidden=true;by(\'cc-task-expand\').hidden=true;\n }\n\n function accept(raw){\n  const r=normalized(raw),p=data(r),next=p.task_id||p.task?.id;\n  const incoming=clean(r._meta?.[\'openai/widgetSessionId\']||raw?.[\'openai/widgetSessionId\'],160);\n  if(typeof next!==\'string\'||!/^[a-f0-9-]{36}$/i.test(next))return;\n  if(widgetId&&incoming&&widgetId!==incoming)return;\n  if(id&&id!==next){\n   // A host may explicitly reuse this mounted widget. Rebind only when its\n   // per-instance host ID matches; unrelated result replays stay isolated.\n   if(!widgetId||incoming!==widgetId)return;\n   generation++;clearTimeout(timer);imageOff();viewer=\'\';task=null;id=\'\';sequence=-1;frameMissing=false;browserActive=false;previewSession=\'\';\n  }\n  if(!widgetId&&incoming)widgetId=incoming;\n  const changed=!id;id=next;window.__ccTaskId=id;\n  if(p.session_available===true&&typeof p.session_ref===\'string\')viewer=p.session_ref;\n  if(changed){generation++;failures=0;renewed=false;}\n  if(p.task&&p.task.id===id&&!(task?.ended!=null&&p.task.ended==null)&&!(failures>=3&&p.task.ended==null)){\n   const saved=changed&&p.task.ended==null?restoredSummary(id):null;\n   if(p.task.ended!=null&&task?.ended==null){generation++;clearTimeout(timer);}\n   task=saved?.task||p.task;render(saved?.events||p.events||[]);\n  }\n  if(viewer&&window.__ccAcceptViewer)window.__ccAcceptViewer({session_available:true,session_ref:viewer});\n  if(changed){if(active())poll();else schedule(750);}\n }\n function render(events){\n  if(!task)return;\n  const total=Number.isInteger(task.total)?task.total:0,running=Number.isInteger(task.running)?task.running:0,failed=Number.isInteger(task.failed)?task.failed:0;\n  const last=clean(task.last_tool,80);\n  const browserStep=last.startsWith(\'browser.\')?last:(Array.isArray(events)?events:[]).find(x=>typeof x?.tool===\'string\'&&x.tool.startsWith(\'browser.\')&&x.tool!==\'browser.frame\')?.tool;\n  if(browserStep)browserActive=browserStep!==\'browser.close\';\n  kind=browserActive?\'browser\':\'activity\';\n  by(\'cc-task-expand\').hidden=false;by(\'cc-task-expand\').title=browserActive?\'Open Browser controls\':\'Show task details\';\n  root.dataset.state=running?\'running\':failed?\'error\':(task.ended!=null||total)?\'ok\':\'waiting\';\n  by(\'cc-task-title\').textContent=label(last);by(\'cc-task-title\').title=last;by(\'cc-task-device\').textContent=clean(task.device,80);\n  let summary=running?\'Running · \'+running+\' active\':task.ended!=null?(failed?\'Task ended\':\'Completed\'):\'Ready\';\n  summary+=\' · \'+total+\' call\'+(total===1?\'\':\'s\');if(failed)summary+=\' · \'+failed+\' need review\';\n  by(\'cc-task-summary\').textContent=summary;\n  const rows=Array.isArray(events)?events.filter(x=>x&&typeof x.tool===\'string\'&&![\'devices.list\',\'devices.select\',\'process.output\',\'process.status\',\'process.list\'].includes(x.tool)).slice(0,8):[];\n  const list=by(\'cc-task-list\');list.replaceChildren();\n  const status=s=>({ok:\'Completed\',completed:\'Completed\',started:\'Running\',running:\'Running\',timeout:\'Timed out\',agent_disconnected:\'Disconnected\',error:\'Failed\',canceled:\'Canceled\',stopped:\'Stopped\',interrupted:\'Interrupted\'})[s]||\'Returned\';\n  for(const row of rows){\n   const li=document.createElement(\'li\'),duration=Number.isFinite(row.duration_ms)&&row.duration_ms>=0\n    ?\' · \'+(row.duration_ms>=1000?(row.duration_ms/1000).toFixed(1)+\'s\':Math.round(row.duration_ms)+\'ms\'):\'\';\n   li.textContent=label(clean(row.tool,80))+\' · \'+status(row.status)+duration;\n   li.title=clean(row.tool,80);\n   const hint=document.createElement(\'small\'),d=row.detail||{};\n   const cmd=clean(d.command_display,240);\n   const context=cmd?\'$ \'+cmd:clean(d.command_structure||d.step||d.public_url||d.path||d.cwd||d.command_name,240);\n   hint.textContent=clean(row.device,80)+(context?\' · \'+context:\'\');\n   if(context)hint.setAttribute(\'aria-label\',\'Authorized operation details\');\n   li.append(hint);list.append(li);\n  }\n  by(\'cc-task-steps\').hidden=rows.length===0;\n  if(kind!==\'browser\'||task.ended!=null){imageOff();sequence=-1;previewSession=\'\';}\n  by(\'cc-task-retry\').hidden=true;saveSummary(events);\n }\n function failure(message){failures++;root.dataset.state=task?.failed?\'error\':\'waiting\';by(\'cc-task-summary\').textContent=\'Live updates paused\';by(\'cc-task-retry\').hidden=false;by(\'cc-task-steps\').hidden=false;imageOff();}\n async function call(name,args){\n  await window.__ccBridgeReady;\n  let deadline;let result;try{result=await Promise.race([window.__ccCallTool(name,args),new Promise((_,reject)=>{deadline=setTimeout(()=>reject(Error(\'viewer_timeout\')),12000);})]);}finally{clearTimeout(deadline);}\n  const payload=data(result);\n  if(result?.isError||payload?.error){\n   let code=clean(payload?.error,80);\n   if(!code){try{code=clean(JSON.parse((normalized(result).content||[]).find(x=>x.type===\'text\')?.text||\'{}\').error,80);}catch(_){}}\n   throw Error(code||\'viewer_unavailable\');\n  }\n  return result;\n }\n async function browserFrame(current){\n  if(kind!==\'browser\'||task?.ended!=null||(frameMissing&&Date.now()<frameMissing))return;\n  try{\n   const result=await call(\'browser.frame\',{session_ref:viewer,after_sequence:sequence});if(current!==generation||!active())return;\n   const p=data(result);\n   if([\'awaiting_human\',\'awaiting_human_control\'].includes(p.state)){\n    imageOff();sequence=-1;by(\'cc-task-caption\').textContent=\'Private human control · screen hidden\';by(\'cc-task-caption\').hidden=false;return;\n   }\n   if(typeof p.session_id===\'string\'&&p.session_id!==previewSession){imageOff();sequence=-1;previewSession=p.session_id;}\n   const image=(normalized(result).content||[]).find(x=>x.type===\'image\'&&x.mimeType===\'image/png\'&&typeof x.data===\'string\'&&/^[A-Za-z0-9+/=]+$/.test(x.data));\n   if(image){if(Number.isSafeInteger(p.sequence))sequence=p.sequence;by(\'cc-task-preview\').src=\'data:image/png;base64,\'+image.data;by(\'cc-task-preview\').hidden=false;by(\'cc-task-caption\').textContent=\'Live preview · expand for Browser controls\';by(\'cc-task-caption\').hidden=false;}\n   else if(by(\'cc-task-preview\').hidden){by(\'cc-task-caption\').textContent=\'Connecting to Browser preview…\';by(\'cc-task-caption\').hidden=false;}\n  }catch(_){if(current===generation){imageOff();sequence=-1;frameMissing=Date.now()+12000;by(\'cc-task-caption\').textContent=\'Browser preview unavailable · expand to check the session\';by(\'cc-task-caption\').hidden=false;}}\n }\n async function poll(){\n  clearTimeout(timer);if(busy||!active()||!id||task?.ended!=null||failures>=3)return;\n  busy=true;const current=generation;\n  try{\n   let result;\n   try{result=await call(\'activity.feed\',{view:\'conversation\',session_ref:viewer,task_id:id,include_details:true,limit:35});}\n   catch(err){\n    if(/insufficient_scope|invalid_include_details/.test(err.message))result=await call(\'activity.feed\',{view:\'conversation\',session_ref:viewer,task_id:id,include_details:false,limit:35});\n    else if(!renewed&&/invalid_session_view/.test(err.message)){\n     renewed=true;const fresh=data(await call(\'commandcore.viewer\',{}));if(fresh.session_available!==true||typeof fresh.session_ref!==\'string\')throw err;\n     viewer=fresh.session_ref;if(window.__ccAcceptViewer)window.__ccAcceptViewer(fresh);\n     result=await call(\'activity.feed\',{view:\'conversation\',session_ref:viewer,task_id:id,include_details:false,limit:35});\n    }else throw err;\n   }\n   if(current!==generation||!active())return;\n   const p=data(result);if(!p.task||p.task.id!==id)throw Error(\'invalid_task_view\');\n   task=p.task;failures=0;renewed=false;render(p.events||[]);await browserFrame(current);\n  }catch(err){if(current===generation&&active()){\n   if(err.message===\'invalid_task_view\'){archived();}\n   else failure(err.message===\'invalid_session_view\'?\'Task connection expired. Reconnect to verify this chat.\':\'Task connection unavailable. Reconnect to try again.\');\n  }}\n  finally{busy=false;schedule(failures?Math.min(15000,2500*2**failures):750);}\n }\n function mode(mode){if(typeof window.openai?.requestDisplayMode===\'function\')Promise.resolve(window.openai.requestDisplayMode({mode})).catch(()=>{});else window.parent.postMessage({jsonrpc:\'2.0\',id:\'task-mode-\'+Date.now(),method:\'ui/request-display-mode\',params:{mode}},\'*\');}\n by(\'cc-task-expand\').addEventListener(\'click\',()=>{generation++;clearTimeout(timer);document.body.dataset.ccTaskCompact=\'false\';document.body.dataset.ccOperationCompact=\'false\';document.body.dataset.ccMinimized=\'false\';by(kind===\'browser\'?\'browser-tab\':\'activity-tab\').click();queueSize();});\n const back=document.createElement(\'button\');back.id=\'cc-task-back\';back.type=\'button\';back.textContent=\'↙\';back.setAttribute(\'aria-label\',\'Back to live task\');document.querySelector(\'header\').append(back);\n function collapse(){\n  if(document.body.dataset.ccTaskCompact!==\'true\'){generation++;clearTimeout(timer);}\n  document.body.dataset.ccTaskCompact=\'true\';document.body.dataset.ccOperationCompact=\'true\';document.body.dataset.ccMinimized=\'false\';\n  by(\'cc-task-steps\').open=false;imageOff();sequence=-1;\n  const minimize=by(\'cc-minimize\');if(minimize){minimize.textContent=\'Minimize\';minimize.setAttribute(\'aria-expanded\',\'true\');minimize.setAttribute(\'aria-label\',\'Minimize CommandCore workspace\');}\n  mode(\'inline\');if(!busy)poll();else schedule(750);queueSize();\n }\n back.addEventListener(\'click\',collapse);\n // Task details stay inside the conversation. Full workspace is separate.\n by(\'cc-browser-enlarge\')?.remove();\n by(\'cc-minimize\')?.addEventListener(\'click\',collapse);\n by(\'cc-task-retry\').addEventListener(\'click\',()=>{failures=0;renewed=false;frameMissing=false;poll();});\n window.addEventListener(\'message\',e=>{if(e.source===window.parent&&e.data?.method===\'ui/notifications/tool-result\')accept(e.data.params);});\n window.addEventListener(\'openai:set_globals\',e=>{const g=e.detail?.globals||{};if(g.displayMode&&g.displayMode!==\'inline\')collapse();if(g.toolResponseMetadata)accept(g.toolResponseMetadata);if(g.toolOutput)accept(g.toolOutput);});\n window.addEventListener(\'pagehide\',()=>{generation++;clearTimeout(timer);imageOff();});\n window.addEventListener(\'pageshow\',e=>{if(e.persisted)collapse();else if(active())poll();});\n document.addEventListener(\'visibilitychange\',()=>{generation++;clearTimeout(timer);if(!document.hidden)collapse();else imageOff();});\n // Report the actual body height, not the iframe viewport height. This\n // prevents a compact mobile card from retaining an empty full-screen block.\n let sizeReady=false,lastHeight=-1,sizeFrame=0;\n function reportSize(){\n  sizeFrame=0;if(!sizeReady||document.hidden||window.__ccWorkspaceSuspended)return;\n  const height=Math.max(1,Math.ceil(document.body.getBoundingClientRect().height));\n  if(height===lastHeight)return;lastHeight=height;\n  let reported=false;\n  try{if(typeof window.openai?.notifyIntrinsicHeight===\'function\'){window.openai.notifyIntrinsicHeight(height);reported=true;}}catch(_){/* Hosts without the OpenAI height channel use MCP below. */}\n  if(!reported)window.parent.postMessage({jsonrpc:\'2.0\',method:\'ui/notifications/size-changed\',params:{height}},\'*\');\n }\n function queueSize(){if(!sizeFrame)sizeFrame=requestAnimationFrame(reportSize);}\n new ResizeObserver(queueSize).observe(document.body);\n Promise.resolve(window.__ccBridgeReady).then(()=>{sizeReady=true;collapse();}).catch(()=>{by(\'cc-task-summary\').textContent=\'Widget connection failed\';});\n window.addEventListener(\'pageshow\',()=>{lastHeight=-1;queueSize();});\n window.addEventListener(\'resize\',()=>{lastHeight=-1;queueSize();});\n document.addEventListener(\'visibilitychange\',()=>{lastHeight=-1;queueSize();});\n window.addEventListener(\'message\',e=>{if(e.source===window.parent&&e.data?.method===\'ui/notifications/host-context-changed\'){lastHeight=-1;queueSize();}});\n accept(window.openai?.toolResponseMetadata||{});accept(window.openai?.toolOutput||{});\n setTimeout(()=>{if(!id){root.dataset.state=\'error\';by(\'cc-task-summary\').textContent=\'Task details unavailable in this view. No command was rerun.\';}},5000);\n})();\n</script>'
+TASK_RUNTIME = "<script id=\"cc-task-runtime\">\n(()=>{\n 'use strict';\n const by=id=>document.getElementById(id),root=by('cc-task');\n let widgetId='',id='',viewer='',task=null,kind='activity',generation=0,busy=false,timer=null,failures=0,renewed=false,sequence=-1,frameMissing=false,browserActive=false,previewSession='';\n const clean=(x,n=160)=>typeof x==='string'?x.slice(0,n):'';\n const label=tool=>({'shell.exec':'Command','system.metrics':'Device resources','system.info':'Device information','fs.read':'Reading a file','fs.write':'File update','fs.list':'Files','process.start':'Starting a process','process.stop':'Stopping a process','git.status':'Git status','git.diff':'Reviewing changes','browser.search':'Web search','browser.open':'Browsing','browser.links':'Inspecting page links','browser.follow':'Opening a page link','browser.back':'Previous page','browser.forward':'Next page','browser.observe':'Page inspection','browser.close':'Browser closed'})[tool]||tool||'CommandCore';\n const normalized=raw=>{let v=raw||{};for(let i=0;i<4;i++){const next=v.call_tool_result||v.mcp_tool_result||(v.result?.structuredContent?v.result:null);if(!next)break;v=next;}return v;};\n const data=raw=>{const r=normalized(raw);return r.structuredContent||r;};\n const active=()=>document.body.dataset.ccTaskCompact==='true';\n function imageOff(){by('cc-task-preview').hidden=true;by('cc-task-preview').removeAttribute('src');by('cc-task-caption').hidden=true;}\n function schedule(delay=750){clearTimeout(timer);if(active()&&id&&task?.ended==null&&failures<3)timer=setTimeout(poll,(document.hidden||window.__ccWorkspaceSuspended)?Math.max(2000,delay):delay);}\n let lastSaved='';\n function summarySnapshot(events){\n  const total=Number.isSafeInteger(task?.total)&&task.total>=0?task.total:0;\n  return {version:1,task:{id,total,running:Number.isSafeInteger(task?.running)?Math.max(0,task.running):0,failed:Number.isSafeInteger(task?.failed)?Math.max(0,task.failed):0,ended:typeof task?.ended==='number'&&Number.isFinite(task.ended)?task.ended:null,last_tool:clean(task?.last_tool,80),device:clean(task?.device,80)},events:(Array.isArray(events)?events:[]).slice(0,3).map(row=>({tool:clean(row?.tool,80),status:clean(row?.status,32),device:clean(row?.device,80)}))};\n }\n function saveSummary(events){\n  if(typeof window.openai?.setWidgetState!=='function')return;\n  const saved=summarySnapshot(events),signature=JSON.stringify(saved);if(signature===lastSaved)return;\n  lastSaved=signature;\n  try{const existing=window.openai.widgetState;Promise.resolve(window.openai.setWidgetState({...((existing&&typeof existing==='object'&&!Array.isArray(existing))?existing:{}),ccTaskSummary:saved})).catch(()=>{});}catch(_){}\n }\n function restoredSummary(next){\n  const saved=window.openai?.widgetState?.ccTaskSummary,t=saved?.task;\n  if(saved?.version!==1||t?.id!==next||!Number.isSafeInteger(t.total)||t.total<0||!Number.isSafeInteger(t.running)||t.running<0||!Number.isSafeInteger(t.failed)||t.failed<0||t.failed>t.total)return null;\n  if(t.ended!==null&&!(typeof t.ended==='number'&&Number.isFinite(t.ended)&&t.ended>0&&t.running===0))return null;\n  return {task:{id:next,total:t.total,running:t.running,failed:t.failed,ended:t.ended,last_tool:clean(t.last_tool,80),device:clean(t.device,80)},events:(Array.isArray(saved.events)?saved.events:[]).slice(0,3).map(row=>({tool:clean(row?.tool,80),status:clean(row?.status,32),device:clean(row?.device,80)}))};\n }\n function archived(){\n  failures=3;clearTimeout(timer);imageOff();root.dataset.state=task?.failed?'error':'waiting';\n  const count=Number.isSafeInteger(task?.total)?task.total:0;\n  by('cc-task-summary').textContent='Saved task · '+count+' call'+(count===1?'':'s')+(task?.failed?' · '+task.failed+' need review':'');\n  by('cc-task-retry').hidden=true;by('cc-task-expand').hidden=true;\n }\n\n function accept(raw){\n  const r=normalized(raw),p=data(r),next=p.task_id||p.task?.id;\n  const incoming=clean(r._meta?.['openai/widgetSessionId']||raw?.['openai/widgetSessionId'],160);\n  if(typeof next!=='string'||!/^[a-f0-9-]{36}$/i.test(next))return;\n  if(widgetId&&incoming&&widgetId!==incoming)return;\n  if(id&&id!==next){\n   // A host may explicitly reuse this mounted widget. Rebind only when its\n   // per-instance host ID matches; unrelated result replays stay isolated.\n   if(!widgetId||incoming!==widgetId)return;\n   generation++;clearTimeout(timer);imageOff();viewer='';task=null;id='';sequence=-1;frameMissing=false;browserActive=false;previewSession='';\n  }\n  if(!widgetId&&incoming)widgetId=incoming;\n  const changed=!id;id=next;window.__ccTaskId=id;\n  if(p.session_available===true&&typeof p.session_ref==='string')viewer=p.session_ref;\n  if(changed){generation++;failures=0;renewed=false;}\n  if(p.task&&p.task.id===id&&!(task?.ended!=null&&p.task.ended==null)&&!(failures>=3&&p.task.ended==null)){\n   const saved=changed&&p.task.ended==null?restoredSummary(id):null;\n   if(p.task.ended!=null&&task?.ended==null){generation++;clearTimeout(timer);}\n   task=saved?.task||p.task;render(saved?.events||p.events||[]);\n  }\n  if(viewer&&window.__ccAcceptViewer)window.__ccAcceptViewer({session_available:true,session_ref:viewer});\n  if(changed){if(active())poll();else schedule(750);}\n }\n function render(events){\n  if(!task)return;\n  const total=Number.isInteger(task.total)?task.total:0,running=Number.isInteger(task.running)?task.running:0,failed=Number.isInteger(task.failed)?task.failed:0;\n  const last=clean(task.last_tool,80);\n  const browserStep=last.startsWith('browser.')?last:(Array.isArray(events)?events:[]).find(x=>typeof x?.tool==='string'&&x.tool.startsWith('browser.')&&x.tool!=='browser.frame')?.tool;\n  if(browserStep)browserActive=browserStep!=='browser.close';\n  kind=browserActive?'browser':'activity';\n  by('cc-task-expand').hidden=false;by('cc-task-expand').title=browserActive?'Open Browser controls':'Show task details';\n  root.dataset.state=running?'running':failed?'error':(task.ended!=null||total)?'ok':'waiting';\n  by('cc-task-title').textContent=label(last);by('cc-task-title').title=last;by('cc-task-device').textContent=clean(task.device,80);\n  let summary=running?'Running · '+running+' active':task.ended!=null?(failed?'Task ended':'Completed'):'Ready';\n  summary+=' · '+total+' call'+(total===1?'':'s');if(failed)summary+=' · '+failed+' need review';\n  by('cc-task-summary').textContent=summary;\n  const rows=Array.isArray(events)?events.filter(x=>x&&typeof x.tool==='string'&&!['devices.list','devices.select','process.output','process.status','process.list'].includes(x.tool)).slice(0,8):[];\n  const list=by('cc-task-list');list.replaceChildren();\n  const status=s=>({ok:'Completed',completed:'Completed',started:'Running',running:'Running',timeout:'Timed out',agent_disconnected:'Disconnected',error:'Failed',canceled:'Canceled',stopped:'Stopped',interrupted:'Interrupted'})[s]||'Returned';\n  for(const row of rows){\n   const li=document.createElement('li'),duration=Number.isFinite(row.duration_ms)&&row.duration_ms>=0\n    ?' · '+(row.duration_ms>=1000?(row.duration_ms/1000).toFixed(1)+'s':Math.round(row.duration_ms)+'ms'):'';\n   li.textContent=label(clean(row.tool,80))+' · '+status(row.status)+duration;\n   li.title=clean(row.tool,80);\n   const hint=document.createElement('small'),d=row.detail||{};\n   const cmd=clean(d.command_display,240);\n   const context=cmd?'$ '+cmd:clean(d.command_structure||d.step||d.public_url||d.path||d.cwd||d.command_name,240);\n   hint.textContent=clean(row.device,80)+(context?' · '+context:'');\n   if(context)hint.setAttribute('aria-label','Authorized operation details');\n   li.append(hint);list.append(li);\n  }\n  by('cc-task-steps').hidden=rows.length===0;\n  if(kind!=='browser'||task.ended!=null){imageOff();sequence=-1;previewSession='';}\n  by('cc-task-retry').hidden=true;saveSummary(events);\n }\n function failure(message){failures++;root.dataset.state=task?.failed?'error':'waiting';by('cc-task-summary').textContent='Live updates paused';by('cc-task-retry').hidden=false;by('cc-task-steps').hidden=false;imageOff();}\n async function call(name,args){\n  await window.__ccBridgeReady;\n  let deadline;let result;try{result=await Promise.race([window.__ccCallTool(name,args),new Promise((_,reject)=>{deadline=setTimeout(()=>reject(Error('viewer_timeout')),12000);})]);}finally{clearTimeout(deadline);}\n  const payload=data(result);\n  if(result?.isError||payload?.error){\n   let code=clean(payload?.error,80);\n   if(!code){try{code=clean(JSON.parse((normalized(result).content||[]).find(x=>x.type==='text')?.text||'{}').error,80);}catch(_){}}\n   throw Error(code||'viewer_unavailable');\n  }\n  return result;\n }\n async function browserFrame(current){\n  if(kind!=='browser'||task?.ended!=null||(frameMissing&&Date.now()<frameMissing))return;\n  try{\n   const result=await call('browser.frame',{session_ref:viewer,after_sequence:sequence});if(current!==generation||!active())return;\n   const p=data(result);\n   if(['awaiting_human','awaiting_human_control'].includes(p.state)){\n    imageOff();sequence=-1;by('cc-task-caption').textContent='Private human control · screen hidden';by('cc-task-caption').hidden=false;return;\n   }\n   if(typeof p.session_id==='string'&&p.session_id!==previewSession){imageOff();sequence=-1;previewSession=p.session_id;}\n   const image=(normalized(result).content||[]).find(x=>x.type==='image'&&x.mimeType==='image/png'&&typeof x.data==='string'&&/^[A-Za-z0-9+/=]+$/.test(x.data));\n   if(image){if(Number.isSafeInteger(p.sequence))sequence=p.sequence;by('cc-task-preview').src='data:image/png;base64,'+image.data;by('cc-task-preview').hidden=false;by('cc-task-caption').textContent='Live preview · expand for Browser controls';by('cc-task-caption').hidden=false;}\n   else if(by('cc-task-preview').hidden){by('cc-task-caption').textContent='Connecting to Browser preview…';by('cc-task-caption').hidden=false;}\n  }catch(_){if(current===generation){imageOff();sequence=-1;frameMissing=Date.now()+12000;by('cc-task-caption').textContent='Browser preview unavailable · expand to check the session';by('cc-task-caption').hidden=false;}}\n }\n async function poll(){\n  clearTimeout(timer);if(busy||!active()||!id||task?.ended!=null||failures>=3)return;\n  busy=true;const current=generation;\n  try{\n   let result;\n   try{result=await call('activity.feed',{view:'conversation',session_ref:viewer,task_id:id,include_details:true,limit:35});}\n   catch(err){\n    if(/insufficient_scope|invalid_include_details/.test(err.message))result=await call('activity.feed',{view:'conversation',session_ref:viewer,task_id:id,include_details:false,limit:35});\n    else if(!renewed&&/invalid_session_view/.test(err.message)){\n     renewed=true;const fresh=data(await call('commandcore.viewer',{}));if(fresh.session_available!==true||typeof fresh.session_ref!=='string')throw err;\n     viewer=fresh.session_ref;if(window.__ccAcceptViewer)window.__ccAcceptViewer(fresh);\n     result=await call('activity.feed',{view:'conversation',session_ref:viewer,task_id:id,include_details:false,limit:35});\n    }else throw err;\n   }\n   if(current!==generation||!active())return;\n   const p=data(result);if(!p.task||p.task.id!==id)throw Error('invalid_task_view');\n   task=p.task;failures=0;renewed=false;render(p.events||[]);await browserFrame(current);\n  }catch(err){if(current===generation&&active()){\n   if(err.message==='invalid_task_view'){archived();}\n   else failure(err.message==='invalid_session_view'?'Task connection expired. Reconnect to verify this chat.':'Task connection unavailable. Reconnect to try again.');\n  }}\n  finally{busy=false;schedule(failures?Math.min(15000,2500*2**failures):750);}\n }\n function mode(mode){if(typeof window.openai?.requestDisplayMode==='function')Promise.resolve(window.openai.requestDisplayMode({mode})).catch(()=>{});else window.parent.postMessage({jsonrpc:'2.0',id:'task-mode-'+Date.now(),method:'ui/request-display-mode',params:{mode}},'*');}\n by('cc-task-expand').addEventListener('click',()=>{generation++;clearTimeout(timer);document.body.dataset.ccTaskCompact='false';document.body.dataset.ccOperationCompact='false';document.body.dataset.ccMinimized='false';by(kind==='browser'?'browser-tab':'activity-tab').click();queueSize();});\n const back=document.createElement('button');back.id='cc-task-back';back.type='button';back.textContent='↙';back.setAttribute('aria-label','Back to live task');document.querySelector('header').append(back);\n function collapse(){\n  if(document.body.dataset.ccTaskCompact!=='true'){generation++;clearTimeout(timer);}\n  document.body.dataset.ccTaskCompact='true';document.body.dataset.ccOperationCompact='true';document.body.dataset.ccMinimized='false';\n  by('cc-task-steps').open=false;imageOff();sequence=-1;\n  const minimize=by('cc-minimize');if(minimize){minimize.textContent='Minimize';minimize.setAttribute('aria-expanded','true');minimize.setAttribute('aria-label','Minimize CommandCore workspace');}\n  mode('inline');if(!busy)poll();else schedule(750);queueSize();\n }\n back.addEventListener('click',collapse);\n // Task details stay inside the conversation. Full workspace is separate.\n by('cc-browser-enlarge')?.remove();\n by('cc-minimize')?.addEventListener('click',collapse);\n by('cc-task-retry').addEventListener('click',()=>{failures=0;renewed=false;frameMissing=false;poll();});\n window.addEventListener('message',e=>{if(e.source===window.parent&&e.data?.method==='ui/notifications/tool-result')accept(e.data.params);});\n window.addEventListener('openai:set_globals',e=>{const g=e.detail?.globals||{};if(g.displayMode&&g.displayMode!=='inline')collapse();if(g.toolResponseMetadata)accept(g.toolResponseMetadata);if(g.toolOutput)accept(g.toolOutput);});\n window.addEventListener('pagehide',()=>{generation++;clearTimeout(timer);imageOff();});\n window.addEventListener('pageshow',e=>{if(e.persisted)collapse();else if(active())poll();});\n document.addEventListener('visibilitychange',()=>{generation++;clearTimeout(timer);if(!document.hidden)collapse();else imageOff();});\n // Report the actual body height, not the iframe viewport height. This\n // prevents a compact mobile card from retaining an empty full-screen block.\n let sizeReady=false,lastHeight=-1,sizeFrame=0;\n function reportSize(){\n  sizeFrame=0;if(!sizeReady||document.hidden||window.__ccWorkspaceSuspended)return;\n  const height=Math.max(1,Math.ceil(document.body.getBoundingClientRect().height));\n  if(height===lastHeight)return;lastHeight=height;\n  let reported=false;\n  try{if(typeof window.openai?.notifyIntrinsicHeight==='function'){window.openai.notifyIntrinsicHeight(height);reported=true;}}catch(_){/* Hosts without the OpenAI height channel use MCP below. */}\n  if(!reported)window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{height}},'*');\n }\n function queueSize(){if(!sizeFrame)sizeFrame=requestAnimationFrame(reportSize);}\n new ResizeObserver(queueSize).observe(document.body);\n Promise.resolve(window.__ccBridgeReady).then(()=>{sizeReady=true;collapse();}).catch(()=>{by('cc-task-summary').textContent='Widget connection failed';});\n window.addEventListener('pageshow',()=>{lastHeight=-1;queueSize();});\n window.addEventListener('resize',()=>{lastHeight=-1;queueSize();});\n document.addEventListener('visibilitychange',()=>{lastHeight=-1;queueSize();});\n window.addEventListener('message',e=>{if(e.source===window.parent&&e.data?.method==='ui/notifications/host-context-changed'){lastHeight=-1;queueSize();}});\n accept(window.openai?.toolResponseMetadata||{});accept(window.openai?.toolOutput||{});\n setTimeout(()=>{if(!id){root.dataset.state='error';by('cc-task-summary').textContent='Task details unavailable in this view. No command was rerun.';}},5000);\n})();\n</script>"
 
 BROWSER_UX_STYLE = '<style id="cc-browser-usability">\n#browser-help,#browser-freshness,#browser-idle-countdown{margin:0 10px 7px;color:var(--cc-muted);font:11px/1.45 system-ui,sans-serif;overflow-wrap:anywhere}\n#browser-pane .browser-toolbar{flex-wrap:wrap!important;align-items:stretch!important;padding-top:0!important}\n#browser-pane .browser-toolbar button{min-height:42px!important;flex:1 1 110px;white-space:normal}\n#browser-pane .browser-toolbar #browser-take{flex:1 1 110px!important}\n#browser-stage{min-width:0;box-sizing:border-box;overscroll-behavior:contain}\nbody[data-cc-browser-zoom=true] #browser-stage{display:block!important;overflow:auto!important;max-height:300px!important}\nbody[data-cc-browser-zoom=true] #browser-stage img{display:block;width:200%!important;height:auto!important;max-width:none!important;max-height:none!important}\n#browser-zoom[aria-pressed=true]{border-color:var(--cc-cyan);background:var(--cc-card)}\n@media(max-width:540px){body[data-cc-browser-zoom=true] #browser-stage{max-height:280px!important}}\n</style>'
 BROWSER_UX_RUNTIME = "<script id=\"cc-browser-usability-runtime\">\n(()=>{\n 'use strict';\n const by=id=>document.getElementById(id),screen=by('browser-screen'),stage=by('browser-stage'),toolbar=by('browser-refresh').parentElement,take=by('browser-take'),auto=by('browser-auto');\n const help=document.createElement('p');help.id='browser-help';help.textContent='Live preview. Ask ChatGPT to search or browse. Use privately for website controls, sign-in and approvals.';\n const fresh=document.createElement('p');fresh.id='browser-freshness';fresh.setAttribute('role','status');fresh.textContent='Waiting for a preview';\n const zoom=document.createElement('button');zoom.id='browser-zoom';zoom.type='button';zoom.textContent='Zoom in';zoom.setAttribute('aria-label','Zoom browser preview');zoom.setAttribute('aria-pressed','false');zoom.title='Magnify the preview, then scroll inside it to see the page';zoom.disabled=true;\n toolbar.insertBefore(zoom,take);\n stage.before(help,toolbar,fresh);\n const clock=document.createElement('p');clock.id='browser-idle-countdown';clock.setAttribute('role','status');clock.textContent='Session timer unavailable';fresh.after(clock);\n const fmt=n=>{n=Math.max(0,Math.floor(n));return Math.floor(n/60)+'m '+String(n%60).padStart(2,'0')+'s';};\n window.addEventListener('commandcore:browser-frame',event=>{const f=event.detail||{};if(f.idle_timeout_paused===true){clock.textContent='Private control · auto-close paused';return;}if(Number.isFinite(f.session_elapsed_seconds)&&Number.isFinite(f.idle_remaining_seconds)){clock.textContent='Session '+fmt(f.session_elapsed_seconds)+' · idle auto-close in '+fmt(f.idle_remaining_seconds);}});\n let source='',updated='',zoomed=false;\n function resetZoom(){zoomed=false;document.body.dataset.ccBrowserZoom='false';zoom.setAttribute('aria-pressed','false');zoom.textContent='Zoom in';zoom.setAttribute('aria-label','Zoom browser preview');}\n zoom.addEventListener('click',()=>{if(zoom.disabled)return;zoomed=!zoomed;document.body.dataset.ccBrowserZoom=String(zoomed);zoom.setAttribute('aria-pressed',String(zoomed));zoom.textContent=zoomed?'Fit preview':'Zoom in';zoom.setAttribute('aria-label',zoomed?'Fit browser preview':'Zoom browser preview');if(!zoomed){stage.scrollLeft=0;stage.scrollTop=0;}window.dispatchEvent(new Event('resize'));});\n function sync(){\n  const visible=!screen.hidden&&!!screen.getAttribute('src');zoom.disabled=!visible;\n  if(!visible){source='';updated='';resetZoom();fresh.textContent=document.body.dataset.ccBrowserState==='awaiting_human'?'Private control · preview hidden':'No preview available';}\n  else{\n   const next=screen.getAttribute('src');if(next!==source){source=next;updated=new Date().toLocaleTimeString();}\n   const paused=auto.getAttribute('aria-pressed')==='false';fresh.textContent=(paused?'Preview paused':'Live preview')+' · updated '+updated;\n  }\n  if(take.textContent==='Take control'){take.textContent='Use privately';take.title='Open private browser control. The AI cannot see your private screen.';}\n }\n new MutationObserver(sync).observe(screen,{attributes:true,attributeFilter:['src','hidden']});\n new MutationObserver(sync).observe(auto,{attributes:true,attributeFilter:['aria-pressed']});\n new MutationObserver(sync).observe(take,{childList:true});\n document.addEventListener('visibilitychange',()=>{if(document.hidden)resetZoom();});\n sync();\n})();\n</script>"
@@ -1396,29 +1465,48 @@ class MCPHandler:
             "CommandCore workspace",
         )
         self.ui_specs["operation.render"] = (
-            RENDER_UI_URI, COMMANDCORE_UI_MIME,
-            "commandcore-widget.html", "CommandCore single operation",
+            RENDER_UI_URI,
+            COMMANDCORE_UI_MIME,
+            "commandcore-widget.html",
+            "CommandCore single operation",
         )
         self.ui_specs["shell.exec"] = (
-            SHELL_UI_URI, COMMANDCORE_UI_MIME,
-            "commandcore-widget.html", "CommandCore shell terminal",
+            SHELL_UI_URI,
+            COMMANDCORE_UI_MIME,
+            "commandcore-widget.html",
+            "CommandCore shell terminal",
         )
         self.ui_specs["execution.timeline.watch"] = (
-            TIMELINE_UI_URI, COMMANDCORE_UI_MIME,
-            "commandcore-widget.html", "CommandCore Live Execution",
+            TIMELINE_UI_URI,
+            COMMANDCORE_UI_MIME,
+            "commandcore-widget.html",
+            "CommandCore Live Execution",
         )
-        raw_definitions.append({
-            "name": "operation.render",
-            "title": "Render one authorized operation",
-            "description": "Read-only single-ID historical shell operation metadata. No stdout or command content. Requires same OAuth client, device grant and conversation.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"operation_id": {"type": "string", "minLength": 36, "maxLength": 36}},
-                "required": ["operation_id"], "additionalProperties": False,
-            },
-            "annotations": {"readOnlyHint": True, "destructiveHint": False},
-            "_meta": {"securitySchemes": [{"type": "oauth2", "scopes": ["commandcore:standard"]}]},
-        })
+        raw_definitions.append(
+            {
+                "name": "operation.render",
+                "title": "Render one authorized operation",
+                "description": "Read-only single-ID historical shell operation metadata. No stdout or command content. Requires same OAuth client, device grant and conversation.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "operation_id": {
+                            "type": "string",
+                            "minLength": 36,
+                            "maxLength": 36,
+                        }
+                    },
+                    "required": ["operation_id"],
+                    "additionalProperties": False,
+                },
+                "annotations": {"readOnlyHint": True, "destructiveHint": False},
+                "_meta": {
+                    "securitySchemes": [
+                        {"type": "oauth2", "scopes": ["commandcore:standard"]}
+                    ]
+                },
+            }
+        )
         raw_definitions = [dict(x) for x in raw_definitions]
         browser_open = next(
             (x for x in raw_definitions if x["name"] == "browser.open"), None
@@ -1565,10 +1653,14 @@ class MCPHandler:
             )
             entry["_meta"]["openai/widgetAccessible"] = True
             if tool_name in {"shell.exec", "shell.native"}:
-                entry["_meta"]["openai/toolInvocation/invoking"] = "Running command on authorized device"
+                entry["_meta"]["openai/toolInvocation/invoking"] = (
+                    "Running command on authorized device"
+                )
                 entry["_meta"]["openai/toolInvocation/invoked"] = "Command completed"
             if tool_name == "shell.native":
-                entry["description"] += " DEPRECATED compatibility alias: use shell.exec for new calls."
+                entry["description"] += (
+                    " DEPRECATED compatibility alias: use shell.exec for new calls."
+                )
             if tool_name == "shell.native":
                 # Leave the compatibility alias data-only; shell.exec receives its own UI.
                 entry["_meta"]["ui"] = {"visibility": ["model"]}
@@ -1762,21 +1854,32 @@ class MCPHandler:
                                     "openai/widgetHeightHint": 112,
                                 }
                                 if uri in TASK_UI_URIS
-                                else {"openai/widgetMinFrameHeight": 1,
-                                      "openai/widgetHeightHint": 180}
+                                else {
+                                    "openai/widgetMinFrameHeight": 1,
+                                    "openai/widgetHeightHint": 180,
+                                }
                                 if uri == RENDER_UI_URI
-                                else {"openai/widgetMinFrameHeight": 1,
-                                      "openai/widgetHeightHint": 520}
-                                if uri == TIMELINE_UI_URI else {}
+                                else {
+                                    "openai/widgetMinFrameHeight": 1,
+                                    "openai/widgetHeightHint": 520,
+                                }
+                                if uri == TIMELINE_UI_URI
+                                else {}
                             ),
                             "ui": {
                                 "prefersBorder": True,
                                 "csp": {"connectDomains": [], "resourceDomains": []},
                             },
-                            **({"openai/ui": {
-                                "availableDisplayModes": ["inline"],
-                                "preferredDisplayMode": "inline",
-                            }} if uri in {RENDER_UI_URI, TIMELINE_UI_URI, SHELL_UI_URI} else {}),
+                            **(
+                                {
+                                    "openai/ui": {
+                                        "availableDisplayModes": ["inline"],
+                                        "preferredDisplayMode": "inline",
+                                    }
+                                }
+                                if uri in {RENDER_UI_URI, TIMELINE_UI_URI, SHELL_UI_URI}
+                                else {}
+                            ),
                         },
                     }
                     for uri, spec in self.ui_resources.items()
@@ -1796,14 +1899,22 @@ class MCPHandler:
                     {
                         "uri": uri,
                         "mimeType": mime,
-                        "text": _cc_rich_shell_html() if uri == SHELL_UI_URI else TIMELINE_HTML if uri == TIMELINE_UI_URI else RENDER_HTML if uri == RENDER_UI_URI else _task_html(web_asset(asset).read_text(encoding="utf-8"))
+                        "text": _cc_rich_shell_html()
+                        if uri == SHELL_UI_URI
+                        else TIMELINE_HTML
+                        if uri == TIMELINE_UI_URI
+                        else RENDER_HTML
+                        if uri == RENDER_UI_URI
+                        else _task_html(web_asset(asset).read_text(encoding="utf-8"))
                         if uri in TASK_UI_URIS
                         else _operation_html(
                             web_asset(asset).read_text(encoding="utf-8")
                         )
                         if uri in OPERATION_UI_URIS
-                        else _cc_standalone_view_html(asset, "browser") if uri == BROWSER_WIDGET_URI
-                        else _cc_standalone_view_html(asset, "activity") if uri == ACTIVITY_UI_URI
+                        else _cc_standalone_view_html(asset, "browser")
+                        if uri == BROWSER_WIDGET_URI
+                        else _cc_standalone_view_html(asset, "activity")
+                        if uri == ACTIVITY_UI_URI
                         else web_asset(asset).read_text(encoding="utf-8"),
                         "_meta": {
                             **(
@@ -1812,24 +1923,33 @@ class MCPHandler:
                                     "openai/widgetHeightHint": 112,
                                 }
                                 if uri in TASK_UI_URIS
-                                else {"openai/widgetMinFrameHeight": 1,
-                                      "openai/widgetHeightHint": 180}
+                                else {
+                                    "openai/widgetMinFrameHeight": 1,
+                                    "openai/widgetHeightHint": 180,
+                                }
                                 if uri == RENDER_UI_URI
-                                else {"openai/widgetMinFrameHeight": 1,
-                                      "openai/widgetHeightHint": 520}
-                                if uri == TIMELINE_UI_URI else {}
+                                else {
+                                    "openai/widgetMinFrameHeight": 1,
+                                    "openai/widgetHeightHint": 520,
+                                }
+                                if uri == TIMELINE_UI_URI
+                                else {}
                             ),
                             "ui": {
                                 "prefersBorder": True,
                                 "csp": {"connectDomains": [], "resourceDomains": []},
                             },
                             "openai/ui": (
-                                {"availableDisplayModes": ["inline"],
-                                 "preferredDisplayMode": "inline"}
+                                {
+                                    "availableDisplayModes": ["inline"],
+                                    "preferredDisplayMode": "inline",
+                                }
                                 if uri in {RENDER_UI_URI, TIMELINE_UI_URI, SHELL_UI_URI}
-                                else {"availableDisplayModes": ["inline"]
-                                      if uri in TASK_UI_URIS
-                                      else ["inline", "fullscreen"]}
+                                else {
+                                    "availableDisplayModes": ["inline"]
+                                    if uri in TASK_UI_URIS
+                                    else ["inline", "fullscreen"]
+                                }
                             ),
                         },
                     }
@@ -1949,9 +2069,14 @@ class MCPHandler:
                     exc.code == "insufficient_scope"
                     and principal.auth_kind == "oauth2"
                     and self.scope_challenge is not None
-                    and (name == "shell.native" or any(tool["name"] == name for tool in TOOL_DEFINITIONS))
+                    and (
+                        name == "shell.native"
+                        or any(tool["name"] == name for tool in TOOL_DEFINITIONS)
+                    )
                 ):
-                    required = self.tools._required_scope("shell.exec" if name == "shell.native" else name)
+                    required = self.tools._required_scope(
+                        "shell.exec" if name == "shell.native" else name
+                    )
                     result["_meta"] = {
                         "mcp/www_authenticate": [self.scope_challenge(required)]
                     }
@@ -2173,16 +2298,24 @@ class MCPHandler:
         if name == "operation.render":
             from .auth import STANDARD_SCOPE, scope_allows
             from .tools import ToolError
+
             if not isinstance(args, dict) or set(args) != {"operation_id"}:
-                raise ToolError("invalid_arguments", "One immutable operation ID required")
+                raise ToolError(
+                    "invalid_arguments", "One immutable operation ID required"
+                )
             if not (
-                principal.auth_kind == "oauth2" and principal.issuer
-                and principal.subject and principal.client_id
+                principal.auth_kind == "oauth2"
+                and principal.issuer
+                and principal.subject
+                and principal.client_id
                 and scope_allows(principal.scopes, STANDARD_SCOPE)
             ):
                 raise ToolError("operation_unavailable", "Operation unavailable")
             row = _cc_lookup_operation(
-                self.tools.live_activity, principal, args["operation_id"], host_session,
+                self.tools.live_activity,
+                principal,
+                args["operation_id"],
+                host_session,
                 self.tools.db.list_accessible_devices(principal.subject),
             )
             if row is None:
@@ -2383,7 +2516,11 @@ class MCPHandler:
                             result["_meta"] = {
                                 "mcp/www_authenticate": [
                                     self.scope_challenge(
-                                        self.tools._required_scope("shell.exec" if name == "shell.native" else name)
+                                        self.tools._required_scope(
+                                            "shell.exec"
+                                            if name == "shell.native"
+                                            else name
+                                        )
                                     )
                                 ]
                             }

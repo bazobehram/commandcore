@@ -110,9 +110,16 @@ visible_tools = (
 )
 visible_core_tools = CORE_TOOL_DEFINITIONS + (
     [
-        {**t, "description": "CommandCore canonical endpoint /mcp/core. " + t["description"]}
-        for t in TOOL_DEFINITIONS if t["name"] in BROWSER_TOOL_NAMES
-    ] if browser else []
+        {
+            **t,
+            "description": "CommandCore canonical endpoint /mcp/core. "
+            + t["description"],
+        }
+        for t in TOOL_DEFINITIONS
+        if t["name"] in BROWSER_TOOL_NAMES
+    ]
+    if browser
+    else []
 )
 fleet = FleetRolloutService(db, agents)
 branding_icons = [
@@ -406,6 +413,7 @@ async def browser_idle_monitor():
             await tools.reap_idle_browsers(600)
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception("Browser idle cleanup failed")
 
 

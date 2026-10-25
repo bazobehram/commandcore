@@ -25,23 +25,37 @@ def test_idle_reaper_expiration_and_active_guards():
         entry.paused_for_human = False
         entry.action_running = True
         assert await worker.reap_idle(600) == []
+
     asyncio.run(run())
 
 
 def test_viewer_polling_does_not_keep_browser_alive():
     async def run():
-        worker = BrowserGateway(base_url="http://steel:3000",
-                                cdp_url="ws://steel:3000",
-                                allow_hosts=("example.com",))
+        worker = BrowserGateway(
+            base_url="http://steel:3000",
+            cdp_url="ws://steel:3000",
+            allow_hosts=("example.com",),
+        )
         owner = ("issuer", "subject", "client")
         entry = OwnedSession("a" * 36)
         worker.sessions[owner] = entry
         entry.last_meaningful_activity = time.monotonic() - 601
         before = entry.last_meaningful_activity
-        await worker.call(issuer=owner[0], subject=owner[1], client_id=owner[2],
-                          name="browser.frame", args={})
-        await worker.call(issuer=owner[0], subject=owner[1], client_id=owner[2],
-                          name="browser.watch", args={})
+        await worker.call(
+            issuer=owner[0],
+            subject=owner[1],
+            client_id=owner[2],
+            name="browser.frame",
+            args={},
+        )
+        await worker.call(
+            issuer=owner[0],
+            subject=owner[1],
+            client_id=owner[2],
+            name="browser.watch",
+            args={},
+        )
         assert entry.last_meaningful_activity == before
         assert worker._frame(entry, {})["idle_remaining_seconds"] == 0
+
     asyncio.run(run())

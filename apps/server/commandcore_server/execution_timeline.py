@@ -5,6 +5,7 @@ unbounded output. Every read is bound to verified issuer/subject/client/session,
 STANDARD OAuth scope and *current* device grants. This module never reads the
 OS, infers paths, executes commands, or changes permissions.
 """
+
 from __future__ import annotations
 
 from collections import deque
@@ -19,14 +20,38 @@ from .auth import STANDARD_SCOPE, scope_allows
 from .models import Principal
 
 _TERMINAL_TOOLS = {"shell.exec", "process.start", "process.output"}
-_FILE_TOOLS = {"fs.write", "fs.patch", "fs.copy", "fs.move", "fs.delete", "git.diff", "git.run"}
+_FILE_TOOLS = {
+    "fs.write",
+    "fs.patch",
+    "fs.copy",
+    "fs.move",
+    "fs.delete",
+    "git.diff",
+    "git.run",
+}
 # Default-deny for printing raw output. Explicitly structured, non-shell-interpreted
 # read-only commands only. This is display policy, not execution permission.
-_SAFE_OUTPUT_COMMANDS = {"hostname", "pwd", "uname", "uname -sr", "uname -m", "whoami", "date"}
+_SAFE_OUTPUT_COMMANDS = {
+    "hostname",
+    "pwd",
+    "uname",
+    "uname -sr",
+    "uname -m",
+    "whoami",
+    "date",
+}
 _SECRET_PATTERN = re.compile(
     r"(?i)(?:bearer\s+\S+|(?:api[_-]?key|token|password|secret)\s*[:=]\s*\S+)"
 )
-_ALLOWED_STATUSES = {"running", "ok", "completed", "error", "timeout", "canceled", "started"}
+_ALLOWED_STATUSES = {
+    "running",
+    "ok",
+    "completed",
+    "error",
+    "timeout",
+    "canceled",
+    "started",
+}
 _MAX_EVENTS = 512
 _MAX_AGE = 900
 _MAX_CHUNK = 1024
@@ -37,12 +62,18 @@ def _safe_display(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     metadata = safe_operation_detail(tool, args)
     if tool not in _TERMINAL_TOOLS:
         return {
-            "path": metadata.get("path") or metadata.get("source") or metadata.get("destination"),
-            "effect": "attempted_write" if metadata.get("effect") == "write" else "read",
+            "path": metadata.get("path")
+            or metadata.get("source")
+            or metadata.get("destination"),
+            "effect": "attempted_write"
+            if metadata.get("effect") == "write"
+            else "read",
             "patch_count": metadata.get("patch_count"),
-            "diff": ("Patch requested; file contents hidden."
-                     if tool == "fs.patch" else
-                     "Diff content requires a separate authorized read."),
+            "diff": (
+                "Patch requested; file contents hidden."
+                if tool == "fs.patch"
+                else "Diff content requires a separate authorized read."
+            ),
         }
     command_name = metadata.get("command_name", "[hidden]")
     raw = args.get("command")
@@ -53,14 +84,20 @@ def _safe_display(tool: str, args: dict[str, Any]) -> dict[str, Any]:
         and isinstance(raw, str)
         and raw.strip() in _SAFE_OUTPUT_COMMANDS
     )
-    return {"command": raw.strip() if is_safe else command_name,
-            "output_policy": "bounded_visible" if is_safe else "hidden"}
+    return {
+        "command": raw.strip() if is_safe else command_name,
+        "output_policy": "bounded_visible" if is_safe else "hidden",
+    }
 
 
 def _sanitized_chunk(value: Any) -> str:
     if not isinstance(value, str):
         return ""
-    text = "".join(char for char in value[:_MAX_CHUNK] if char == "\n" or char == "\t" or ord(char) >= 32)
+    text = "".join(
+        char
+        for char in value[:_MAX_CHUNK]
+        if char == "\n" or char == "\t" or ord(char) >= 32
+    )
     return _SECRET_PATTERN.sub("[REDACTED]", text)
 
 
@@ -97,10 +134,16 @@ class LiveExecutionTimeline:
         self._managed_processes: dict[str, str] = {}
         self._process_offsets: dict[tuple[str, str], int] = {}
 
-    def _identity(self, principal: Principal, session: str | None) -> tuple[str, str, str, str] | None:
-        if not (principal.auth_kind == "oauth2" and principal.subject and principal.issuer
-                and principal.client_id not in ("", "unknown", "oauth-client")
-                and scope_allows(principal.scopes, STANDARD_SCOPE)):
+    def _identity(
+        self, principal: Principal, session: str | None
+    ) -> tuple[str, str, str, str] | None:
+        if not (
+            principal.auth_kind == "oauth2"
+            and principal.subject
+            and principal.issuer
+            and principal.client_id not in ("", "unknown", "oauth-client")
+            and scope_allows(principal.scopes, STANDARD_SCOPE)
+        ):
             return None
         tag = self._session_tag(session)
         if not tag:
@@ -112,14 +155,19 @@ class LiveExecutionTimeline:
         while self._events and now - self._events[0][0] > _MAX_AGE:
             self._events.popleft()
         for key, row in tuple(self._rows.items()):
-            if now - (row.finished if row.finished is not None else row.started) > _MAX_AGE:
+            if (
+                now - (row.finished if row.finished is not None else row.started)
+                > _MAX_AGE
+            ):
                 self._rows.pop(key, None)
         self._managed_processes = {
-            process_id: op for process_id, op in self._managed_processes.items()
+            process_id: op
+            for process_id, op in self._managed_processes.items()
             if op in self._rows
         }
         self._process_offsets = {
-            key: pos for key, pos in self._process_offsets.items()
+            key: pos
+            for key, pos in self._process_offsets.items()
             if key[0] in self._managed_processes
         }
         while len(self._rows) > _MAX_EVENTS:
@@ -143,8 +191,14 @@ class LiveExecutionTimeline:
         self._events.append((event["at"], event))
         self._expire()
 
-    def begin(self, principal: Principal, host_session: str | None, operation_id: str,
-              tool: str, args: dict[str, Any] | None = None) -> bool:
+    def begin(
+        self,
+        principal: Principal,
+        host_session: str | None,
+        operation_id: str,
+        tool: str,
+        args: dict[str, Any] | None = None,
+    ) -> bool:
         identity = self._identity(principal, host_session)
         if identity is None or not isinstance(operation_id, str):
             return False
@@ -156,8 +210,13 @@ class LiveExecutionTimeline:
         if operation_id in self._rows:
             return False
         self._expire()
-        row = _Row(operation_id, *identity, tool, self._clock(),
-                   summary=_safe_display(tool, args or {}))
+        row = _Row(
+            operation_id,
+            *identity,
+            tool,
+            self._clock(),
+            summary=_safe_display(tool, args or {}),
+        )
         self._rows[operation_id] = row
         self._emit(row, "started", summary=row.summary)
         return True
@@ -170,16 +229,29 @@ class LiveExecutionTimeline:
 
     def attach_process(self, operation_id: str | None, process_id: str) -> None:
         row = self._rows.get(operation_id or "")
-        if row and row.tool == "process.start" and row.status in {"ok", "started", "completed"}:
+        if (
+            row
+            and row.tool == "process.start"
+            and row.status in {"ok", "started", "completed"}
+        ):
             if isinstance(process_id, str) and len(process_id) == 36:
                 self._managed_processes[process_id] = row.operation_id
 
-    def output(self, operation_id: str | None, stream: str, chunk: Any,
-               *, source_process: str | None = None) -> None:
+    def output(
+        self,
+        operation_id: str | None,
+        stream: str,
+        chunk: Any,
+        *,
+        source_process: str | None = None,
+    ) -> None:
         row = self._rows.get(operation_id or "")
         if not row or stream not in {"stdout", "stderr"}:
             return
-        if source_process and self._managed_processes.get(source_process) != row.operation_id:
+        if (
+            source_process
+            and self._managed_processes.get(source_process) != row.operation_id
+        ):
             return
         if row.summary.get("output_policy") != "bounded_visible":
             return
@@ -197,32 +269,50 @@ class LiveExecutionTimeline:
         setattr(row, stream, prior + retained)
         if len(sanitized) > room or len(chunk) > _MAX_CHUNK:
             row.output_truncated = True
-        self._emit(row, "output", stream=stream, chunk=retained, truncated=row.output_truncated)
+        self._emit(
+            row, "output", stream=stream, chunk=retained, truncated=row.output_truncated
+        )
 
-    def process_output(self, principal: Principal, host_session: str | None,
-                       process_id: str, stream: str, chunk: Any, *,
-                       offset: int = 0) -> None:
+    def process_output(
+        self,
+        principal: Principal,
+        host_session: str | None,
+        process_id: str,
+        stream: str,
+        chunk: Any,
+        *,
+        offset: int = 0,
+    ) -> None:
         op = self._managed_processes.get(process_id)
         row = self._rows.get(op or "")
         if not row or self._identity(principal, host_session) != (
-            row.issuer, row.subject, row.client_id, row.session_tag
+            row.issuer,
+            row.subject,
+            row.client_id,
+            row.session_tag,
         ):
             return
         if type(offset) is not int or offset < 0 or not isinstance(chunk, str):
             return
-        key=(process_id,stream)
-        old=self._process_offsets.get(key,0)
+        key = (process_id, stream)
+        old = self._process_offsets.get(key, 0)
         if offset < old:
             # A repeat poll must not replay overlapping output.
-            chunk=chunk[old-offset:]
-            offset=old
+            chunk = chunk[old - offset :]
+            offset = old
         if not chunk:
             return
-        self._process_offsets[key]=offset+len(chunk)
-        self.output(op,stream,chunk,source_process=process_id)
+        self._process_offsets[key] = offset + len(chunk)
+        self.output(op, stream, chunk, source_process=process_id)
 
-    def finish(self, operation_id: str | None, *, status: str,
-               exit_code: int | None, duration_ms: int | None) -> None:
+    def finish(
+        self,
+        operation_id: str | None,
+        *,
+        status: str,
+        exit_code: int | None,
+        duration_ms: int | None,
+    ) -> None:
         row = self._rows.get(operation_id or "")
         if row is None or row.finished is not None:
             return
@@ -243,44 +333,97 @@ class LiveExecutionTimeline:
                     )
             else:
                 row.summary["effect"] = "failed_or_unverified"
-        self._emit(row, "finished", exit_code=row.exit_code, duration_ms=row.duration_ms,
-                   summary=row.summary, truncated=row.output_truncated)
+        self._emit(
+            row,
+            "finished",
+            exit_code=row.exit_code,
+            duration_ms=row.duration_ms,
+            summary=row.summary,
+            truncated=row.output_truncated,
+        )
 
-    def read(self, principal: Principal, host_session: str | None,
-             devices: list[dict[str, Any]], *, after_seq: int = 0,
-             limit: int = 50) -> dict[str, Any]:
-        return self._read_authorized(principal, self._identity(principal, host_session),
-                                     devices, after_seq=after_seq, limit=limit)
+    def read(
+        self,
+        principal: Principal,
+        host_session: str | None,
+        devices: list[dict[str, Any]],
+        *,
+        after_seq: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        return self._read_authorized(
+            principal,
+            self._identity(principal, host_session),
+            devices,
+            after_seq=after_seq,
+            limit=limit,
+        )
 
-    def read_verified_viewer(self, principal: Principal, session_tag: str | None,
-                             devices: list[dict[str, Any]], *, after_seq: int = 0,
-                             limit: int = 50) -> dict[str, Any]:
+    def read_verified_viewer(
+        self,
+        principal: Principal,
+        session_tag: str | None,
+        devices: list[dict[str, Any]],
+        *,
+        after_seq: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
         # Only the server should call this with a tag previously verified
         # by LiveActivity.resolve_viewer(principal, session_ref).
-        if not (session_tag and isinstance(session_tag, str) and len(session_tag)==64
-                and principal.auth_kind == "oauth2" and principal.issuer
-                and principal.subject and principal.client_id not in ("", "unknown", "oauth-client")
-                and scope_allows(principal.scopes, STANDARD_SCOPE)):
+        if not (
+            session_tag
+            and isinstance(session_tag, str)
+            and len(session_tag) == 64
+            and principal.auth_kind == "oauth2"
+            and principal.issuer
+            and principal.subject
+            and principal.client_id not in ("", "unknown", "oauth-client")
+            and scope_allows(principal.scopes, STANDARD_SCOPE)
+        ):
             raise PermissionError("Verified STANDARD OAuth viewer required")
-        identity=(principal.issuer,principal.subject,principal.client_id,session_tag)
-        return self._read_authorized(principal, identity, devices,
-                                     after_seq=after_seq, limit=limit)
+        identity = (
+            principal.issuer,
+            principal.subject,
+            principal.client_id,
+            session_tag,
+        )
+        return self._read_authorized(
+            principal, identity, devices, after_seq=after_seq, limit=limit
+        )
 
-    def _read_authorized(self, principal: Principal, identity,
-                         devices: list[dict[str, Any]], *, after_seq: int,
-                         limit: int) -> dict[str, Any]:
+    def _read_authorized(
+        self,
+        principal: Principal,
+        identity,
+        devices: list[dict[str, Any]],
+        *,
+        after_seq: int,
+        limit: int,
+    ) -> dict[str, Any]:
         if identity is None:
             raise PermissionError("Verified STANDARD OAuth conversation required")
-        if type(after_seq) is not int or after_seq < 0 or type(limit) is not int or not 1 <= limit <= 100:
+        if (
+            type(after_seq) is not int
+            or after_seq < 0
+            or type(limit) is not int
+            or not 1 <= limit <= 100
+        ):
             raise ValueError("Invalid timeline cursor or limit")
         self._expire()
-        ids = {item["id"] for item in devices if not item.get("revoked_at") and "id" in item}
+        ids = {
+            item["id"]
+            for item in devices
+            if not item.get("revoked_at") and "id" in item
+        }
         result = []
         for _, event in self._events:
             if event["seq"] <= after_seq:
                 continue
             row = self._rows.get(event["operation_id"])
-            if row is None or (row.issuer, row.subject, row.client_id, row.session_tag) != identity:
+            if (
+                row is None
+                or (row.issuer, row.subject, row.client_id, row.session_tag) != identity
+            ):
                 continue
             if row.device_id:
                 if row.device_id not in ids:
@@ -298,4 +441,3 @@ class LiveExecutionTimeline:
             "retention_seconds": _MAX_AGE,
             "output_policy": "Only simple allowlisted read-only commands display bounded, redacted output.",
         }
-

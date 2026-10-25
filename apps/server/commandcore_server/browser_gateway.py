@@ -284,7 +284,7 @@ class BrowserGateway:
         self._unverified_recovery = None
         # Expiry first observed after a restart gets a grace period. Never
         # convert a private handoff back into AI control automatically.
-        self._expired_handoff_seen: dict[tuple[str,str,str], float] = {}
+        self._expired_handoff_seen: dict[tuple[str, str, str], float] = {}
         self._cleanup_task = None
         self._session_store = (
             BrowserSessionStore(worker_binding) if worker_binding else None
@@ -336,8 +336,9 @@ class BrowserGateway:
                 if now - first < 90:
                     continue
                 try:
-                    await self._release(owner, expected_session_id=entry.id,
-                                        allow_expired_human=True)
+                    await self._release(
+                        owner, expected_session_id=entry.id, allow_expired_human=True
+                    )
                     self._expired_handoff_seen.pop(owner, None)
                 except Exception:
                     # Keep the owner-bound session and retry on next sweep;
@@ -381,9 +382,13 @@ class BrowserGateway:
             "changed": bool(entry.frame_image and entry.frame_sequence != since),
             "action": entry.last_action[:72],
             "busy": entry.action_running,
-            "session_elapsed_seconds": int(max(0, time.monotonic() - entry.created_monotonic)),
+            "session_elapsed_seconds": int(
+                max(0, time.monotonic() - entry.created_monotonic)
+            ),
             "idle_timeout_seconds": 600,
-            "idle_remaining_seconds": max(0, int(600 - (time.monotonic() - entry.last_meaningful_activity))),
+            "idle_remaining_seconds": max(
+                0, int(600 - (time.monotonic() - entry.last_meaningful_activity))
+            ),
         }
         if entry.cursor_x is not None and entry.cursor_y is not None:
             result["cursor"] = {"x": entry.cursor_x, "y": entry.cursor_y}
@@ -841,12 +846,17 @@ class BrowserGateway:
                 {"behavior": "deny", "eventsEnabled": True},
             )
 
-    async def reap_idle(self, idle_seconds: float = 600.0) -> list[tuple[str, str, str]]:
+    async def reap_idle(
+        self, idle_seconds: float = 600.0
+    ) -> list[tuple[str, str, str]]:
         """Reap only provably idle sessions; never interrupt private handoff."""
         closed = []
         for owner, entry in list(self.sessions.items()):
-            if (entry.action_running or entry.paused_for_human
-                or time.monotonic() - entry.last_meaningful_activity < idle_seconds):
+            if (
+                entry.action_running
+                or entry.paused_for_human
+                or time.monotonic() - entry.last_meaningful_activity < idle_seconds
+            ):
                 continue
             try:
                 result = await self._release(owner, idle_seconds=idle_seconds)
@@ -858,8 +868,12 @@ class BrowserGateway:
         return closed
 
     async def _release(
-        self, owner: tuple[str, str, str], *, expected_session_id: str | None = None,
-        allow_expired_human: bool = False, idle_seconds: float | None = None
+        self,
+        owner: tuple[str, str, str],
+        *,
+        expected_session_id: str | None = None,
+        allow_expired_human: bool = False,
+        idle_seconds: float | None = None,
     ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
@@ -871,7 +885,8 @@ class BrowserGateway:
                         "Browser session changed; refresh before stopping"
                     )
                 if idle_seconds is not None and (
-                    entry.action_running or entry.paused_for_human
+                    entry.action_running
+                    or entry.paused_for_human
                     or time.monotonic() - entry.last_meaningful_activity < idle_seconds
                 ):
                     return {"closed": False}
@@ -1279,10 +1294,18 @@ class BrowserGateway:
                 else None,
                 "mode": "read_only",
                 "refresh": "live_1s_read_only_frames",
-                "session_elapsed_seconds": int(max(0, time.monotonic() - entry.created_monotonic)),
+                "session_elapsed_seconds": int(
+                    max(0, time.monotonic() - entry.created_monotonic)
+                ),
                 "idle_timeout_seconds": 600,
-                "idle_remaining_seconds": (None if entry.paused_for_human else
-                    max(0, int(600 - (time.monotonic() - entry.last_meaningful_activity)))),
+                "idle_remaining_seconds": (
+                    None
+                    if entry.paused_for_human
+                    else max(
+                        0,
+                        int(600 - (time.monotonic() - entry.last_meaningful_activity)),
+                    )
+                ),
             }
         if name == "browser.handoff":
             if human:

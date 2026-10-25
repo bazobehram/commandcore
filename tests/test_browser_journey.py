@@ -342,7 +342,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "acf1c6c2036c28d4d9f5b873e1a0b767338a588ae168c9cfd52062d69da64163",
+            "b0c2050c3f0978c355b6985709363382dd20587150f8d76e20b5d3da9c32a2a2",
         )
 
 

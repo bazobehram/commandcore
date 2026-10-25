@@ -151,8 +151,13 @@ async def main():
     for name in m.OPERATION_TOOLS:
         if name in defs:
             expected_uri = approved_inline.get(name)
-            assert defs[name].get("_meta", {}).get("ui", {}).get("resourceUri") == expected_uri, name
-            assert defs[name].get("_meta", {}).get("openai/outputTemplate") == expected_uri, name
+            assert (
+                defs[name].get("_meta", {}).get("ui", {}).get("resourceUri")
+                == expected_uri
+            ), name
+            assert (
+                defs[name].get("_meta", {}).get("openai/outputTemplate") == expected_uri
+            ), name
     assert defs["commandcore.watch"]["_meta"]["ui"]["resourceUri"] == m.TASK_UI_URI
     assert (
         defs["commandcore.workspace"]["_meta"]["ui"]["resourceUri"]
