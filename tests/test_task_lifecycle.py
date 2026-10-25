@@ -1,4 +1,5 @@
 import asyncio, tempfile, json, uuid, hashlib, concurrent.futures
+from types import SimpleNamespace
 from pathlib import Path
 from commandcore_server.models import Principal
 from commandcore_server.metrics import Metrics
@@ -64,6 +65,7 @@ class DB:
 class Tools:
     def __init__(self):
         self.live_activity = Live()
+        self.timeline = SimpleNamespace(finish=lambda *args, **kwargs: None)
         self.db = DB()
         self.pause = None
         self.failure = None
@@ -142,12 +144,20 @@ async def main():
     tools = Tools()
     h = m.MCPHandler(tools, Metrics(), "test")
     defs = {x["name"]: x for x in h.definitions}
+    approved_inline = {
+        "shell.exec": m.SHELL_UI_URI,
+        "execution.timeline.watch": m.TIMELINE_UI_URI,
+    }
     for name in m.OPERATION_TOOLS:
         if name in defs:
-            assert not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri"), (
-                name
-            )
-            assert not defs[name].get("_meta", {}).get("openai/outputTemplate"), name
+            expected_uri = approved_inline.get(name)
+            assert (
+                defs[name].get("_meta", {}).get("ui", {}).get("resourceUri")
+                == expected_uri
+            ), name
+            assert (
+                defs[name].get("_meta", {}).get("openai/outputTemplate") == expected_uri
+            ), name
     assert defs["commandcore.watch"]["_meta"]["ui"]["resourceUri"] == m.TASK_UI_URI
     assert (
         defs["commandcore.workspace"]["_meta"]["ui"]["resourceUri"]

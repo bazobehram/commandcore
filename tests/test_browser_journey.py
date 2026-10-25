@@ -325,7 +325,8 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
 
     def test_toolservice_isolation_implementation_unchanged(self):
         # Port the b10 candidate isolation gate without /test/ fixture paths.
-        # A changed ToolService requires an explicit baseline review.
+        # Source guard reviewed and rebaselined for Issue #40 lifecycle/transfer protections.
+        # Any future change still requires an explicit isolation review.
         import hashlib
 
         path = (
@@ -341,7 +342,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "5c5e34137fbc54cda2dcc6ebb9d24bd15c2b40fc840fec27d22b514aa826b52e",
+            "b0c2050c3f0978c355b6985709363382dd20587150f8d76e20b5d3da9c32a2a2",
         )
 
 

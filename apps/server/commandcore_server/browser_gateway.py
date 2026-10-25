@@ -89,6 +89,8 @@ BROWSER_TOOL_NAMES = {
     "browser.keypress",
     "browser.scroll",
     "browser.close",
+    "browser.takeover",
+    "browser.takeover.prepare",
     "browser.handoff",
     "browser.watch",
 }
@@ -212,6 +214,8 @@ class OwnedSession:
     cursor_x: int | None = None
     cursor_y: int | None = None
     action_running: bool = False
+    created_monotonic: float = field(default_factory=time.monotonic)
+    last_meaningful_activity: float = field(default_factory=time.monotonic)
     # Short-lived, owner-scoped navigation state. Never written to recovery journals.
     link_targets: dict[str, dict[str, Any]] = field(default_factory=dict)
     navigation_pages: list[dict[str, str]] = field(default_factory=list)
@@ -278,6 +282,10 @@ class BrowserGateway:
         # reuse; operator replacement is required rather than silent retry.
         self._quarantined_download_policy = False
         self._unverified_recovery = None
+        # Expiry first observed after a restart gets a grace period. Never
+        # convert a private handoff back into AI control automatically.
+        self._expired_handoff_seen: dict[tuple[str, str, str], float] = {}
+        self._cleanup_task = None
         self._session_store = (
             BrowserSessionStore(worker_binding) if worker_binding else None
         )
@@ -307,6 +315,36 @@ class BrowserGateway:
                 # before permitting any further AI/human interaction.
                 self._unverified_recovery = owner
 
+    def _start_expired_cleanup(self):
+        if self._cleanup_task is not None and not self._cleanup_task.done():
+            return
+        self._cleanup_task = asyncio.create_task(self._expired_cleanup_loop())
+
+    async def _expired_cleanup_loop(self):
+        while True:
+            await asyncio.sleep(30)
+            for owner, entry in list(self.sessions.items()):
+                if not entry.paused_for_human:
+                    self._expired_handoff_seen.pop(owner, None)
+                    continue
+                # Never close an unexpired handoff and never resume AI.
+                if entry.handoff_token and time.monotonic() < entry.handoff_until:
+                    self._expired_handoff_seen.pop(owner, None)
+                    continue
+                now = time.monotonic()
+                first = self._expired_handoff_seen.setdefault(owner, now)
+                if now - first < 90:
+                    continue
+                try:
+                    await self._release(
+                        owner, expected_session_id=entry.id, allow_expired_human=True
+                    )
+                    self._expired_handoff_seen.pop(owner, None)
+                except Exception:
+                    # Keep the owner-bound session and retry on next sweep;
+                    # never seize/reassign a private worker on failure.
+                    pass
+
     def _save_session(self, owner, entry):
         if self._session_store:
             try:
@@ -334,6 +372,7 @@ class BrowserGateway:
                 "reason": entry.handoff_reason,
                 "can_renew": not self._active_handoff(entry),
                 "busy": False,
+                "idle_timeout_paused": True,
             }
         result: dict[str, Any] = {
             "session_id": entry.id,
@@ -343,6 +382,13 @@ class BrowserGateway:
             "changed": bool(entry.frame_image and entry.frame_sequence != since),
             "action": entry.last_action[:72],
             "busy": entry.action_running,
+            "session_elapsed_seconds": int(
+                max(0, time.monotonic() - entry.created_monotonic)
+            ),
+            "idle_timeout_seconds": 600,
+            "idle_remaining_seconds": max(
+                0, int(600 - (time.monotonic() - entry.last_meaningful_activity))
+            ),
         }
         if entry.cursor_x is not None and entry.cursor_y is not None:
             result["cursor"] = {"x": entry.cursor_x, "y": entry.cursor_y}
@@ -800,16 +846,59 @@ class BrowserGateway:
                 {"behavior": "deny", "eventsEnabled": True},
             )
 
-    async def _release(self, owner: tuple[str, str, str]) -> dict[str, Any]:
+    async def reap_idle(
+        self, idle_seconds: float = 600.0
+    ) -> list[tuple[str, str, str]]:
+        """Reap only provably idle sessions; never interrupt private handoff."""
+        closed = []
+        for owner, entry in list(self.sessions.items()):
+            if (
+                entry.action_running
+                or entry.paused_for_human
+                or time.monotonic() - entry.last_meaningful_activity < idle_seconds
+            ):
+                continue
+            try:
+                result = await self._release(owner, idle_seconds=idle_seconds)
+                if result.get("closed"):
+                    closed.append(owner)
+            except Exception:
+                # A failed release must retain the owner lease.
+                continue
+        return closed
+
+    async def _release(
+        self,
+        owner: tuple[str, str, str],
+        *,
+        expected_session_id: str | None = None,
+        allow_expired_human: bool = False,
+        idle_seconds: float | None = None,
+    ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
             if not entry:
                 return {"closed": False}
             async with entry.lock:
+                if expected_session_id is not None and entry.id != expected_session_id:
+                    raise BrowserError(
+                        "Browser session changed; refresh before stopping"
+                    )
+                if idle_seconds is not None and (
+                    entry.action_running
+                    or entry.paused_for_human
+                    or time.monotonic() - entry.last_meaningful_activity < idle_seconds
+                ):
+                    return {"closed": False}
                 # An agent cannot terminate a browser while the operator is
                 # typing credentials or approving a sensitive action.
                 if entry.paused_for_human:
-                    raise BrowserError("browser paused for human; cannot close")
+                    if not allow_expired_human:
+                        raise BrowserError("browser paused for human; cannot close")
+                    if entry.handoff_token and time.monotonic() < entry.handoff_until:
+                        raise BrowserError("private human control is still valid")
+                    # Expired: release the exact owner session without
+                    # revealing private frames or granting AI control.
                 async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
                     r = await client.post(
                         self.base_url + "/v1/sessions/" + entry.id + "/release"
@@ -1173,6 +1262,7 @@ class BrowserGateway:
         if name not in BROWSER_TOOL_NAMES and not (human and name == "browser.reload"):
             raise BrowserError("unknown browser tool")
         owner = (issuer, subject, client_id)
+        self._start_expired_cleanup()
         # Revalidate durable ownership on every existing-session access, not
         # just at open time. A deleted or replaced binding file invalidates
         # the live session instead of retaining access in gateway memory.
@@ -1204,6 +1294,18 @@ class BrowserGateway:
                 else None,
                 "mode": "read_only",
                 "refresh": "live_1s_read_only_frames",
+                "session_elapsed_seconds": int(
+                    max(0, time.monotonic() - entry.created_monotonic)
+                ),
+                "idle_timeout_seconds": 600,
+                "idle_remaining_seconds": (
+                    None
+                    if entry.paused_for_human
+                    else max(
+                        0,
+                        int(600 - (time.monotonic() - entry.last_meaningful_activity)),
+                    )
+                ),
             }
         if name == "browser.handoff":
             if human:
@@ -1214,7 +1316,9 @@ class BrowserGateway:
             async with entry.lock:
                 return self._handoff(owner, args.get("reason", "login_or_approval"))
         if name == "browser.close":
-            return await self._release(owner)
+            return await self._release(
+                owner, expected_session_id=args.get("expected_session_id")
+            )
         if name == "browser.open":
             check_url(args.get("url", ""), self.allow_hosts)
             entry = await self._new_session(owner)
@@ -1223,6 +1327,8 @@ class BrowserGateway:
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
         async with entry.lock:
+            if self.sessions.get(owner) is not entry:
+                raise BrowserError("browser session replaced; retry with a new session")
             # Recheck authority *inside* the lock. An agent action can be
             # waiting behind human handoff; the previous pre-lock check
             # let it execute after the handoff was granted.
@@ -1240,6 +1346,8 @@ class BrowserGateway:
                     raise BrowserError("handoff not found or expired")
             elif entry.paused_for_human:
                 raise BrowserError("browser paused for human; wait for explicit resume")
+            if name not in {"browser.frame", "browser.watch"}:
+                entry.last_meaningful_activity = time.monotonic()
 
             if name == "browser.elements":
                 if human:

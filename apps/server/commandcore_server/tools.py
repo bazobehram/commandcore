@@ -1,31 +1,32 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import os
 import re
+import secrets
 import time
 import uuid
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
-
 from cryptography.fernet import Fernet, InvalidToken
-
-from .collaboration_approval import Approval, ApprovalLedger, action_digest
+from typing import Any
 
 operation_ui_context = ContextVar("operation_ui_context", default=None)
 
-from .activity import argument_summary, source
+from .collaboration_approval import Approval, ApprovalLedger, action_digest
 from .agent_gateway import AgentManager
-from .auth import FULL_SCOPE, READ_SCOPE, STANDARD_SCOPE, scope_allows
-from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
-from .browser_worker_pool import OwnerBrowserWorkerPool
+from .auth import READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE, scope_allows
 from .db import Database
-from .live_activity import LiveActivity
 from .models import Principal
 from .permissions import allowed, risk_class
+from .activity import argument_summary, source
+from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
+from .browser_worker_pool import OwnerBrowserWorkerPool
+from .live_activity import LiveActivity
+from .execution_timeline import LiveExecutionTimeline
 
 
 def _device_ref_schema() -> dict[str, Any]:
@@ -908,10 +909,46 @@ TOOL_DEFINITIONS.extend(
             ),
         },
         {
+            "name": "browser.takeover.prepare",
+            "title": "Request Browser transfer confirmation",
+            "description": "Non-destructive: issue a short-lived, owner- and conversation-bound transfer challenge. Present the confirmation question to the user. Do not proceed unless the user explicitly agrees in this conversation.",
+            "inputSchema": _obj({}),
+        },
+        {
+            "name": "browser.takeover",
+            "title": "Transfer Browser after confirmation",
+            "description": "Destructive to the old Browser. Use ONLY after the user explicitly agreed in this conversation to close it. Requires the one-time prepare challenge, exact old session ID and confirmed=true. Open a new session, never adopt old frames.",
+            "inputSchema": _obj(
+                {
+                    "expected_session_id": {
+                        "type": "string",
+                        "minLength": 36,
+                        "maxLength": 36,
+                    },
+                    "challenge": {"type": "string", "minLength": 32, "maxLength": 128},
+                    "confirmed": {
+                        "type": "boolean",
+                        "description": "Must be true and user explicitly agreed in this conversation",
+                    },
+                    "url": {"type": "string", "minLength": 12, "maxLength": 2048},
+                },
+                ["expected_session_id", "challenge", "confirmed", "url"],
+            ),
+        },
+        {
             "name": "browser.close",
             "title": "Close visual browser session",
-            "description": "Release only this authenticated caller's browser session.",
-            "inputSchema": _obj({}),
+            "description": "Release only this authenticated caller's Browser in this verified conversation. The embedded Stop control supplies a viewer reference and expected session ID so an old card cannot close a replacement Browser. Private human control must be resumed before closing.",
+            "inputSchema": _obj(
+                {
+                    "session_ref": {"type": "string", "maxLength": 128},
+                    "expected_session_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                }
+            ),
         },
     ]
 )
@@ -982,7 +1019,40 @@ TOOL_DEFINITIONS.extend(
     ]
 )
 
+TOOL_DEFINITIONS.append(
+    {
+        "name": "execution.timeline.watch",
+        "title": "Watch live execution timeline",
+        "description": (
+            "Open one conversation-scoped live operation timeline with verified "
+            "device activity, bounded authorized terminal output and file summaries. "
+            "Activity and Browser existing views remain available."
+        ),
+        "inputSchema": _obj({}),
+    }
+)
+TOOL_DEFINITIONS.append(
+    {
+        "name": "execution.timeline",
+        "title": "Read live execution timeline",
+        "description": (
+            "Read bounded, conversation-specific ordered execution events. "
+            "Only authenticated STANDARD OAuth and current device grants may "
+            "see details. No filesystem payloads, arbitrary shell arguments or "
+            "unapproved command output are exposed."
+        ),
+        "inputSchema": _obj(
+            {
+                "session_ref": {"type": "string", "maxLength": 128},
+                "after_seq": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            }
+        ),
+    }
+)
+
 # MCP annotations are UX/risk hints for clients, never security boundaries.
+
 _READ_ONLY_HINTS = {
     "auth.whoami",
     "devices.list",
@@ -1080,6 +1150,8 @@ for _tool in TOOL_DEFINITIONS:
         "agents.deliver",
     }:
         _scope = FULL_SCOPE
+    elif _name in {"execution.timeline", "execution.timeline.watch"}:
+        _scope = STANDARD_SCOPE
     elif _name in _READ_ONLY_HINTS or _name in {"devices.select"}:
         _scope = READ_SCOPE
     else:
@@ -1092,6 +1164,21 @@ for _tool in TOOL_DEFINITIONS:
         "openai/toolInvocation/invoking": f"{_tool['title']}…"[:64],
         "openai/toolInvocation/invoked": f"{_tool['title']}: complete"[:64],
     }
+
+# Per-call shell widget metadata. The host owns final iframe placement.
+for _shell_definition in TOOL_DEFINITIONS:
+    if _shell_definition["name"] == "shell.exec":
+        _shell_definition["_meta"]["ui"] = {
+            "resourceUri": "ui://commandcore/shell-premium-v3-20261024.html",
+            "visibility": ["model", "app"],
+        }
+        _shell_definition["_meta"]["openai/outputTemplate"] = (
+            "ui://commandcore/shell-premium-v3-20261024.html"
+        )
+        _shell_definition["_meta"]["ui/resourceUri"] = (
+            "ui://commandcore/shell-premium-v3-20261024.html"
+        )
+        _shell_definition["_meta"]["openai/widgetAccessible"] = True
 
 TOOL_NAMES = {x["name"] for x in TOOL_DEFINITIONS}
 CORE_TOOL_NAMES = {
@@ -1124,6 +1211,8 @@ CORE_TOOL_NAMES = {
     "transfer.upload",
     "transfer.download",
     "activity.feed",
+    "execution.timeline",
+    "execution.timeline.watch",
     "activity.watch",
     "commandcore.watch",
     "agents.sessions",
@@ -1201,7 +1290,12 @@ class ToolService:
         self.browser = browser
         self.public_base_url = public_base_url.rstrip("/")
         self.live_activity = LiveActivity()
+        self.timeline = LiveExecutionTimeline(self.live_activity.session_tag)
         self._browser_conversation_leases: dict[tuple[str, str, str], str] = {}
+        self._browser_takeover_lock = asyncio.Lock()
+        self._browser_takeover_challenges: dict[
+            tuple[str, str, str], dict[str, Any]
+        ] = {}
         self._browser_lease_cipher = None
         self._browser_lease_file = None
         self._browser_lease_worker = None
@@ -1240,6 +1334,18 @@ class ToolService:
                     binding.worker_id + ".conversation.enc"
                 )
         self._collaboration_ledger: ApprovalLedger | None = None
+
+    async def reap_idle_browsers(self, idle_seconds: float = 600.0):
+        if self.browser is None:
+            return []
+        async with self._browser_takeover_lock:
+            removed = await self.browser.reap_idle(idle_seconds)
+            for owner in removed:
+                self._browser_conversation_leases.pop(owner, None)
+                self._browser_takeover_challenges.pop(owner, None)
+                if self._browser_lease_read(owner) is not None:
+                    self._browser_lease_delete()
+            return removed
 
     def _browser_lease_read(self, owner):
         if self._browser_lease_cipher is None or self._browser_lease_file is None:
@@ -1366,10 +1472,16 @@ class ToolService:
             if entry is not None and recovered is not None and recovered[1] == entry.id:
                 bound = recovered[0]
                 self._browser_conversation_leases[owner] = bound
+        if (
+            bound is not None
+            and bound != host_tag
+            and name in {"browser.takeover", "browser.takeover.prepare"}
+        ):
+            return dict(args)
         if bound is not None and bound != host_tag:
             raise ToolError(
                 "browser_conversation_in_use",
-                "Another conversation owns the current Browser session; close it there before starting here",
+                "Another conversation owns the Browser. Ask the user: 'Close the previous Browser session and open a new one here?' If approved, first use browser.takeover.prepare then browser.takeover.",
             )
         if bound is None:
             # Closing an owner-scoped orphan exposes no page, frame or control.
@@ -1501,6 +1613,8 @@ class ToolService:
             "agents.deliver",
         }:
             return FULL_SCOPE
+        if name in {"execution.timeline", "execution.timeline.watch"}:
+            return STANDARD_SCOPE
         if name in _READ_ONLY_HINTS or name in {"devices.select"}:
             return READ_SCOPE
         return STANDARD_SCOPE
@@ -1566,6 +1680,48 @@ class ToolService:
         live_key: str | None = None
         try:
             self._require_scope(principal, name)
+            if name == "execution.timeline.watch":
+                # Model-side watch mints a short-lived viewer. The widget never
+                # receives a raw conversation identifier from the model.
+                if not (
+                    principal.auth_kind == "oauth2"
+                    and principal.issuer
+                    and principal.subject
+                    and principal.client_id
+                    and scope_allows(principal.scopes, STANDARD_SCOPE)
+                ):
+                    raise ToolError("insufficient_scope")
+                return {
+                    "state": "timeline_ready",
+                    **self.live_activity.issue_viewer(principal, host_session),
+                    "mode": "read_only",
+                }
+            if name == "execution.timeline":
+                cursor = args.get("after_seq", 0)
+                limit = args.get("limit", 50)
+                ref = args.get("session_ref")
+                devices = self.db.list_accessible_devices(principal.subject)
+                try:
+                    if ref is not None:
+                        if not isinstance(ref, str):
+                            raise ValueError("Invalid viewer reference")
+                        verified_tag = self.live_activity.resolve_viewer(principal, ref)
+                        return self.timeline.read_verified_viewer(
+                            principal,
+                            verified_tag,
+                            devices,
+                            after_seq=cursor,
+                            limit=limit,
+                        )
+                    return self.timeline.read(
+                        principal,
+                        host_session,
+                        devices,
+                        after_seq=cursor,
+                        limit=limit,
+                    )
+                except (PermissionError, ValueError) as exc:
+                    raise ToolError("invalid_timeline_view", str(exc)) from exc
             if name == "activity.feed":
                 limit = args.get("limit", 25)
                 if type(limit) is not int or not 1 <= limit <= 50:
@@ -1666,12 +1822,15 @@ class ToolService:
                 "browser.frame",
                 "browser.watch",
                 "activity.feed",
+                "execution.timeline",
+                "execution.timeline.watch",
                 "activity.watch",
                 "commandcore.watch",
             }:
                 live_key = self.live_activity.begin(
                     principal, name, args, host_session=host_session
                 )
+                self.timeline.begin(principal, host_session, live_key, name, args)
                 source.get()["operation_id"] = live_key
                 ui_sink = operation_ui_context.get()
                 if isinstance(ui_sink, dict):
@@ -1752,6 +1911,7 @@ class ToolService:
                 except (KeyError, ValueError, PermissionError) as exc:
                     raise ToolError(str(exc).strip("'")) from exc
                 self.live_activity.set_device(live_key, device["id"])
+                self.timeline.device(live_key, device["id"])
                 sel = self.db.create_selection(
                     principal.subject, device["id"], self.selection_ttl_seconds
                 )
@@ -1782,61 +1942,172 @@ class ToolService:
                         "browser_identity_required",
                         "Browser requires an explicit verified OAuth issuer, subject and client",
                     )
-                verified_args = self._browser_scope_args(
-                    principal, name, args, host_session
-                )
-                try:
-                    result = await self.browser.call(
-                        subject=principal.subject,
-                        issuer=principal.issuer,
-                        client_id=principal.client_id,
-                        name=name,
-                        args=verified_args,
+                if name in {"browser.takeover.prepare", "browser.takeover"}:
+                    from .browser_gateway import check_url
+
+                    owner = (principal.issuer, principal.subject, principal.client_id)
+                    host_tag = self.live_activity.session_tag(host_session)
+                    if not host_tag:
+                        raise ToolError("browser_conversation_required")
+                    async with self._browser_takeover_lock:
+                        worker = (
+                            self.browser._find_worker(owner)
+                            if isinstance(self.browser, OwnerBrowserWorkerPool)
+                            else self.browser
+                        )
+                        old = worker.sessions.get(owner)
+                        if old is None:
+                            raise ToolError("browser_takeover_stale_session")
+                        bound = self._browser_conversation_leases.get(owner)
+                        if bound is None:
+                            recovered = self._browser_lease_read(owner)
+                            if recovered is None or recovered[1] != old.id:
+                                raise ToolError("browser_takeover_ownership_unverified")
+                            bound = recovered[0]
+                        if bound == host_tag:
+                            raise ToolError("browser_takeover_same_conversation")
+                        if old.paused_for_human or old.action_running:
+                            raise ToolError("browser_takeover_busy")
+                        if name == "browser.takeover.prepare":
+                            challenge = secrets.token_urlsafe(32)
+                            self._browser_takeover_challenges[owner] = {
+                                "tag": host_tag,
+                                "session_id": old.id,
+                                "digest": hashlib.sha256(challenge.encode()).digest(),
+                                "expires": time.monotonic() + 300,
+                            }
+                            return {
+                                "requires_user_confirmation": True,
+                                "prompt": "Close the Browser in the other conversation and open a new one here?",
+                                "expected_session_id": old.id,
+                                "challenge": challenge,
+                                "expires_in_seconds": 300,
+                            }
+                        if args.get("confirmed") is not True:
+                            raise ToolError("browser_takeover_confirmation_required")
+                        if old.id != args.get("expected_session_id"):
+                            raise ToolError("browser_takeover_stale_session")
+                        token = args.get("challenge")
+                        challenge = self._browser_takeover_challenges.get(owner)
+                        if (
+                            not isinstance(token, str)
+                            or challenge is None
+                            or challenge["tag"] != host_tag
+                            or challenge["session_id"] != old.id
+                            or time.monotonic() > challenge["expires"]
+                            or not secrets.compare_digest(
+                                challenge["digest"],
+                                hashlib.sha256(token.encode()).digest(),
+                            )
+                        ):
+                            raise ToolError("browser_takeover_challenge_invalid")
+                        try:
+                            check_url(args.get("url", ""), worker.allow_hosts)
+                        except (BrowserError, ValueError) as exc:
+                            raise ToolError("invalid_browser_url", str(exc)) from exc
+                        # Consume before any remote side effect: no replay.
+                        self._browser_takeover_challenges.pop(owner, None)
+                        try:
+                            closed = await self.browser.call(
+                                subject=principal.subject,
+                                issuer=principal.issuer,
+                                client_id=principal.client_id,
+                                name="browser.close",
+                                args={},
+                            )
+                        except BrowserError as exc:
+                            raise ToolError("browser_error", str(exc)) from exc
+                        if closed.get("closed") is not True:
+                            raise ToolError("browser_takeover_release_unverified")
+                        self._browser_lease_delete()
+                        self._browser_conversation_leases.pop(owner, None)
+                        self._browser_conversation_leases[owner] = host_tag
+                        try:
+                            result = await self.browser.call(
+                                subject=principal.subject,
+                                issuer=principal.issuer,
+                                client_id=principal.client_id,
+                                name="browser.open",
+                                args={"url": args["url"]},
+                            )
+                            self._browser_lease_save(owner, host_tag)
+                        except Exception:
+                            self._browser_conversation_leases.pop(owner, None)
+                            raise
+                        return {
+                            "taken_over": True,
+                            "session_id": result.get("session_id"),
+                            "page": result,
+                        }
+                async with self._browser_takeover_lock:
+                    verified_args = self._browser_scope_args(
+                        principal, name, args, host_session
                     )
-                    if name == "browser.open":
-                        self._browser_lease_save(
-                            (principal.issuer, principal.subject, principal.client_id),
-                            self._browser_conversation_leases[
+                    try:
+                        result = await self.browser.call(
+                            subject=principal.subject,
+                            issuer=principal.issuer,
+                            client_id=principal.client_id,
+                            name=name,
+                            args=verified_args,
+                        )
+                        if name == "browser.open":
+                            self._browser_lease_save(
                                 (
                                     principal.issuer,
                                     principal.subject,
                                     principal.client_id,
+                                ),
+                                self._browser_conversation_leases[
+                                    (
+                                        principal.issuer,
+                                        principal.subject,
+                                        principal.client_id,
+                                    )
+                                ],
+                            )
+                        if name == "browser.close":
+                            self._browser_lease_delete()
+                            self._browser_conversation_leases.pop(
+                                (
+                                    principal.issuer,
+                                    principal.subject,
+                                    principal.client_id,
+                                ),
+                                None,
+                            )
+                        if name in {"browser.watch", "browser.frame"}:
+                            label = os.getenv(
+                                "COMMANDCORE_BROWSER_HOST_LABEL",
+                                "Operator-managed worker",
+                            )
+                            result["host"] = (
+                                label
+                                if re.fullmatch(
+                                    r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}", label
                                 )
-                            ],
-                        )
-                    if name == "browser.close":
-                        self._browser_lease_delete()
-                        self._browser_conversation_leases.pop(
-                            (principal.issuer, principal.subject, principal.client_id),
-                            None,
-                        )
-                    if name in {"browser.watch", "browser.frame"}:
-                        label = os.getenv(
-                            "COMMANDCORE_BROWSER_HOST_LABEL", "Operator-managed worker"
-                        )
-                        result["host"] = (
-                            label
-                            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}", label)
-                            else "Operator-managed worker"
-                        )
-                    if name == "browser.watch":
-                        result.update(
-                            self.live_activity.issue_viewer(principal, host_session)
-                        )
-                    if name == "browser.watch" and self.public_base_url:
-                        result = {
-                            **result,
-                            "dashboard_url": self.public_base_url + "/?view=browser",
-                        }
-                    return result
-                except BrowserError as exc:
-                    raise ToolError("browser_error", str(exc)) from exc
+                                else "Operator-managed worker"
+                            )
+                        if name == "browser.watch":
+                            result.update(
+                                self.live_activity.issue_viewer(principal, host_session)
+                            )
+                        if name == "browser.watch" and self.public_base_url:
+                            result = {
+                                **result,
+                                "dashboard_url": self.public_base_url
+                                + "/?view=browser",
+                            }
+                        return result
+                    except BrowserError as exc:
+                        raise ToolError("browser_error", str(exc)) from exc
 
             if name not in DEVICE_TOOLS:
                 raise ToolError("unknown_tool")
             device = self._resolve_device(principal, args)
             device_id = device["id"]
             self.live_activity.set_device(live_key, device_id)
+            self.timeline.device(live_key, device_id)
             if device["status"] != "online":
                 raise ToolError("device_offline")
             access_max = str(
@@ -1945,6 +2216,29 @@ class ToolService:
                 )
             if result.error:
                 payload["error"] = result.error
+            if name == "process.output" and result.status in {"ok", "completed"}:
+                # Native process output is read as bounded explicit chunks. It
+                # must refer to a previously started managed process owned by
+                # this exact verified conversation, never to an arbitrary PID.
+                process_id = forwarded.get("process_id")
+                chunks = result.result if isinstance(result.result, dict) else {}
+                if isinstance(process_id, str):
+                    offset = forwarded.get("offset", 0)
+                    for stream in ("stdout", "stderr"):
+                        self.timeline.process_output(
+                            principal,
+                            host_session,
+                            process_id,
+                            stream,
+                            chunks.get(stream),
+                            offset=offset,
+                        )
+            if name == "shell.exec" and result.status in {"ok", "completed", "started"}:
+                # The execution transport currently returns output on completion.
+                # Real-time chunking requires process.start/process.output or
+                # streaming-capable agent dispatch, never fabricated progress.
+                self.timeline.output(live_key, "stdout", result.stdout)
+                self.timeline.output(live_key, "stderr", result.stderr)
             if result.status not in {"ok", "completed", "started"}:
                 raise ToolError("remote_execution_failed", str(payload))
             return payload
@@ -1985,3 +2279,11 @@ class ToolService:
                     exit_code=exit_code,
                     managed_process_id=managed_process_id,
                 )
+                self.timeline.finish(
+                    live_key,
+                    status=status,
+                    exit_code=exit_code,
+                    duration_ms=duration_ms,
+                )
+                if managed_process_id:
+                    self.timeline.attach_process(live_key, managed_process_id)
