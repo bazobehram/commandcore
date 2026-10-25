@@ -212,6 +212,7 @@ class OwnedSession:
     cursor_x: int | None = None
     cursor_y: int | None = None
     action_running: bool = False
+    last_interaction_mono: float = field(default_factory=time.monotonic)
     # Short-lived, owner-scoped navigation state. Never written to recovery journals.
     link_targets: dict[str, dict[str, Any]] = field(default_factory=dict)
     navigation_pages: list[dict[str, str]] = field(default_factory=list)
@@ -282,6 +283,8 @@ class BrowserGateway:
         # convert a private handoff back into AI control automatically.
         self._expired_handoff_seen: dict[tuple[str, str, str], float] = {}
         self._cleanup_task = None
+        # Browser worker capacity is scarce; never expire active/private operations.
+        self.idle_timeout_seconds = 600
         self._session_store = (
             BrowserSessionStore(worker_binding) if worker_binding else None
         )
@@ -320,6 +323,12 @@ class BrowserGateway:
         while True:
             await asyncio.sleep(30)
             for owner, entry in list(self.sessions.items()):
+                if not entry.paused_for_human and self._idle_expired(entry):
+                    try:
+                        await self._release(owner, expected_session_id=entry.id)
+                    except Exception:
+                        pass  # Keep owner binding and retry; never transfer the worker.
+                    continue
                 if not entry.paused_for_human:
                     self._expired_handoff_seen.pop(owner, None)
                     continue
@@ -340,6 +349,11 @@ class BrowserGateway:
                     # Keep the owner-bound session and retry on next sweep;
                     # never seize/reassign a private worker on failure.
                     pass
+
+    def _idle_expired(self, entry: OwnedSession) -> bool:
+        return (not entry.paused_for_human and not entry.action_running
+                and not entry.lock.locked() and
+                time.monotonic() - entry.last_interaction_mono >= self.idle_timeout_seconds)
 
     def _save_session(self, owner, entry):
         if self._session_store:
@@ -1275,6 +1289,7 @@ class BrowserGateway:
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
         async with entry.lock:
+            entry.last_interaction_mono = time.monotonic()
             # Recheck authority *inside* the lock. An agent action can be
             # waiting behind human handoff; the previous pre-lock check
             # let it execute after the handoff was granted.
