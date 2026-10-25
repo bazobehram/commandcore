@@ -1,31 +1,30 @@
 from __future__ import annotations
 
-import base64
-import hashlib
+import time
 import json
+import uuid
+from .collaboration_approval import Approval, ApprovalLedger, action_digest
 import os
 import re
-import time
-import uuid
-from contextvars import ContextVar
+import hashlib
+import base64
 from pathlib import Path
-from typing import Any
-
 from cryptography.fernet import Fernet, InvalidToken
-
-from .collaboration_approval import Approval, ApprovalLedger, action_digest
+from typing import Any
+from contextvars import ContextVar
 
 operation_ui_context = ContextVar("operation_ui_context", default=None)
 
-from .activity import argument_summary, source
 from .agent_gateway import AgentManager
-from .auth import FULL_SCOPE, READ_SCOPE, STANDARD_SCOPE, scope_allows
-from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
-from .browser_worker_pool import OwnerBrowserWorkerPool
+from .auth import READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE, scope_allows
 from .db import Database
-from .live_activity import LiveActivity
 from .models import Principal
 from .permissions import allowed, risk_class
+from .activity import argument_summary, source
+from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
+from .browser_worker_pool import OwnerBrowserWorkerPool
+from .live_activity import LiveActivity
+from .execution_timeline import LiveExecutionTimeline
 
 
 def _device_ref_schema() -> dict[str, Any]:
@@ -910,8 +909,17 @@ TOOL_DEFINITIONS.extend(
         {
             "name": "browser.close",
             "title": "Close visual browser session",
-            "description": "Release only this authenticated caller's browser session.",
-            "inputSchema": _obj({}),
+            "description": "Release only this authenticated caller's Browser in this verified conversation. The embedded Stop control supplies a viewer reference and expected session ID so an old card cannot close a replacement Browser. Private human control must be resumed before closing.",
+            "inputSchema": _obj(
+                {
+                    "session_ref": {"type": "string", "maxLength": 128},
+                    "expected_session_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                }
+            ),
         },
     ]
 )
@@ -982,7 +990,40 @@ TOOL_DEFINITIONS.extend(
     ]
 )
 
+TOOL_DEFINITIONS.append(
+    {
+        "name": "execution.timeline.watch",
+        "title": "Watch live execution timeline",
+        "description": (
+            "Open one conversation-scoped live operation timeline with verified "
+            "device activity, bounded authorized terminal output and file summaries. "
+            "Activity and Browser existing views remain available."
+        ),
+        "inputSchema": _obj({}),
+    }
+)
+TOOL_DEFINITIONS.append(
+    {
+        "name": "execution.timeline",
+        "title": "Read live execution timeline",
+        "description": (
+            "Read bounded, conversation-specific ordered execution events. "
+            "Only authenticated STANDARD OAuth and current device grants may "
+            "see details. No filesystem payloads, arbitrary shell arguments or "
+            "unapproved command output are exposed."
+        ),
+        "inputSchema": _obj(
+            {
+                "session_ref": {"type": "string", "maxLength": 128},
+                "after_seq": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            }
+        ),
+    }
+)
+
 # MCP annotations are UX/risk hints for clients, never security boundaries.
+
 _READ_ONLY_HINTS = {
     "auth.whoami",
     "devices.list",
@@ -1080,6 +1121,8 @@ for _tool in TOOL_DEFINITIONS:
         "agents.deliver",
     }:
         _scope = FULL_SCOPE
+    elif _name in {"execution.timeline", "execution.timeline.watch"}:
+        _scope = STANDARD_SCOPE
     elif _name in _READ_ONLY_HINTS or _name in {"devices.select"}:
         _scope = READ_SCOPE
     else:
@@ -1092,6 +1135,21 @@ for _tool in TOOL_DEFINITIONS:
         "openai/toolInvocation/invoking": f"{_tool['title']}…"[:64],
         "openai/toolInvocation/invoked": f"{_tool['title']}: complete"[:64],
     }
+
+# Per-call shell widget metadata. The host owns final iframe placement.
+for _shell_definition in TOOL_DEFINITIONS:
+    if _shell_definition["name"] == "shell.exec":
+        _shell_definition["_meta"]["ui"] = {
+            "resourceUri": "ui://commandcore/shell-premium-v3-20261024.html",
+            "visibility": ["model", "app"],
+        }
+        _shell_definition["_meta"]["openai/outputTemplate"] = (
+            "ui://commandcore/shell-premium-v3-20261024.html"
+        )
+        _shell_definition["_meta"]["ui/resourceUri"] = (
+            "ui://commandcore/shell-premium-v3-20261024.html"
+        )
+        _shell_definition["_meta"]["openai/widgetAccessible"] = True
 
 TOOL_NAMES = {x["name"] for x in TOOL_DEFINITIONS}
 CORE_TOOL_NAMES = {
@@ -1124,6 +1182,8 @@ CORE_TOOL_NAMES = {
     "transfer.upload",
     "transfer.download",
     "activity.feed",
+    "execution.timeline",
+    "execution.timeline.watch",
     "activity.watch",
     "commandcore.watch",
     "agents.sessions",
@@ -1201,6 +1261,7 @@ class ToolService:
         self.browser = browser
         self.public_base_url = public_base_url.rstrip("/")
         self.live_activity = LiveActivity()
+        self.timeline = LiveExecutionTimeline(self.live_activity.session_tag)
         self._browser_conversation_leases: dict[tuple[str, str, str], str] = {}
         self._browser_lease_cipher = None
         self._browser_lease_file = None
@@ -1501,6 +1562,8 @@ class ToolService:
             "agents.deliver",
         }:
             return FULL_SCOPE
+        if name in {"execution.timeline", "execution.timeline.watch"}:
+            return STANDARD_SCOPE
         if name in _READ_ONLY_HINTS or name in {"devices.select"}:
             return READ_SCOPE
         return STANDARD_SCOPE
@@ -1566,6 +1629,48 @@ class ToolService:
         live_key: str | None = None
         try:
             self._require_scope(principal, name)
+            if name == "execution.timeline.watch":
+                # Model-side watch mints a short-lived viewer. The widget never
+                # receives a raw conversation identifier from the model.
+                if not (
+                    principal.auth_kind == "oauth2"
+                    and principal.issuer
+                    and principal.subject
+                    and principal.client_id
+                    and scope_allows(principal.scopes, STANDARD_SCOPE)
+                ):
+                    raise ToolError("insufficient_scope")
+                return {
+                    "state": "timeline_ready",
+                    **self.live_activity.issue_viewer(principal, host_session),
+                    "mode": "read_only",
+                }
+            if name == "execution.timeline":
+                cursor = args.get("after_seq", 0)
+                limit = args.get("limit", 50)
+                ref = args.get("session_ref")
+                devices = self.db.list_accessible_devices(principal.subject)
+                try:
+                    if ref is not None:
+                        if not isinstance(ref, str):
+                            raise ValueError("Invalid viewer reference")
+                        verified_tag = self.live_activity.resolve_viewer(principal, ref)
+                        return self.timeline.read_verified_viewer(
+                            principal,
+                            verified_tag,
+                            devices,
+                            after_seq=cursor,
+                            limit=limit,
+                        )
+                    return self.timeline.read(
+                        principal,
+                        host_session,
+                        devices,
+                        after_seq=cursor,
+                        limit=limit,
+                    )
+                except (PermissionError, ValueError) as exc:
+                    raise ToolError("invalid_timeline_view", str(exc)) from exc
             if name == "activity.feed":
                 limit = args.get("limit", 25)
                 if type(limit) is not int or not 1 <= limit <= 50:
@@ -1666,12 +1771,15 @@ class ToolService:
                 "browser.frame",
                 "browser.watch",
                 "activity.feed",
+                "execution.timeline",
+                "execution.timeline.watch",
                 "activity.watch",
                 "commandcore.watch",
             }:
                 live_key = self.live_activity.begin(
                     principal, name, args, host_session=host_session
                 )
+                self.timeline.begin(principal, host_session, live_key, name, args)
                 source.get()["operation_id"] = live_key
                 ui_sink = operation_ui_context.get()
                 if isinstance(ui_sink, dict):
@@ -1702,12 +1810,24 @@ class ToolService:
                         oauth_ceiling,
                     ]
                     effective = min(profiles, key=lambda p: rank.get(p, 0))
+                    sources = (
+                        "device_permission_profile",
+                        "device_grant_ceiling",
+                        "device_local_maximum",
+                        "oauth_scope_ceiling",
+                    )
+                    limiting_policies = [
+                        source
+                        for source, level in zip(sources, profiles)
+                        if rank.get(level, 0) == rank.get(effective, 0)
+                    ]
                     grants.append(
                         {
                             "device_id": d["id"],
                             "display_name": d["display_name"],
                             "grant_ceiling": d["access_max_permission_profile"],
                             "effective_permission": effective,
+                            "limiting_policies": limiting_policies,
                         }
                     )
                 return {
@@ -1752,6 +1872,7 @@ class ToolService:
                 except (KeyError, ValueError, PermissionError) as exc:
                     raise ToolError(str(exc).strip("'")) from exc
                 self.live_activity.set_device(live_key, device["id"])
+                self.timeline.device(live_key, device["id"])
                 sel = self.db.create_selection(
                     principal.subject, device["id"], self.selection_ttl_seconds
                 )
@@ -1837,6 +1958,7 @@ class ToolService:
             device = self._resolve_device(principal, args)
             device_id = device["id"]
             self.live_activity.set_device(live_key, device_id)
+            self.timeline.device(live_key, device_id)
             if device["status"] != "online":
                 raise ToolError("device_offline")
             access_max = str(
@@ -1945,6 +2067,29 @@ class ToolService:
                 )
             if result.error:
                 payload["error"] = result.error
+            if name == "process.output" and result.status in {"ok", "completed"}:
+                # Native process output is read as bounded explicit chunks. It
+                # must refer to a previously started managed process owned by
+                # this exact verified conversation, never to an arbitrary PID.
+                process_id = forwarded.get("process_id")
+                chunks = result.result if isinstance(result.result, dict) else {}
+                if isinstance(process_id, str):
+                    offset = forwarded.get("offset", 0)
+                    for stream in ("stdout", "stderr"):
+                        self.timeline.process_output(
+                            principal,
+                            host_session,
+                            process_id,
+                            stream,
+                            chunks.get(stream),
+                            offset=offset,
+                        )
+            if name == "shell.exec" and result.status in {"ok", "completed", "started"}:
+                # The execution transport currently returns output on completion.
+                # Real-time chunking requires process.start/process.output or
+                # streaming-capable agent dispatch, never fabricated progress.
+                self.timeline.output(live_key, "stdout", result.stdout)
+                self.timeline.output(live_key, "stderr", result.stderr)
             if result.status not in {"ok", "completed", "started"}:
                 raise ToolError("remote_execution_failed", str(payload))
             return payload
@@ -1985,3 +2130,11 @@ class ToolService:
                     exit_code=exit_code,
                     managed_process_id=managed_process_id,
                 )
+                self.timeline.finish(
+                    live_key,
+                    status=status,
+                    exit_code=exit_code,
+                    duration_ms=duration_ms,
+                )
+                if managed_process_id:
+                    self.timeline.attach_process(live_key, managed_process_id)

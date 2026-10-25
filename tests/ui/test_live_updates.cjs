@@ -1,0 +1,21 @@
+const {chromium}=require('playwright'),{startServer}=require('./graphite-server.cjs'),assert=require('node:assert/strict');
+(async()=>{
+const local=await startServer(),browser=await chromium.launch({headless:true,executablePath:process.env.COMMANDCORE_CHROME_BIN,args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:390,height:850}});
+let added=false,online=true,pending=[];
+const d=n=>({id:n,display_name:n,hostname:n,platform:'Linux',architecture:'x86_64',connected:n==='home'&&online,permission_profile:'FULL_CONTROL',access_max_permission_profile:'FULL_CONTROL',agent_version:'0.9.0',capabilities:{local_max_permission_profile:'FULL_CONTROL'}});
+await page.route('**/api/**',route=>{let p=new URL(route.request().url()).pathname,v=p==='/api/session'?{subject:'owner',auth_kind:'oauth',scopes:['commandcore:read','commandcore:standard','commandcore:full']}:p==='/api/devices'?{devices:added?[d('home'),d('new')]:[d('home')]}:p==='/api/managed-devices'?{devices:[]}:p==='/api/enrollment/pending'?{enrollments:pending}:{events:[]};return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(v)})});
+await page.goto(local.url);await page.locator('#add').click();
+pending=[{id:'one',metadata:{display_name:'new',hostname:'new',platform:'Linux',architecture:'x86_64',local_ceiling:'STANDARD'}}];
+await page.waitForFunction(()=>document.querySelector('#enrollmentLive')?.textContent.includes('1 enrollment'),null,{timeout:6500});
+await page.locator('#reviewEnrollments').click();
+await page.locator('input[name=code]').fill('ABCDEFGHI');
+pending=[{...pending[0],metadata:{...pending[0].metadata,display_name:'new-host'}}];
+await page.waitForFunction(()=>document.querySelector('#pending h2')?.textContent==='new-host',null,{timeout:6500});
+assert.equal(await page.locator('input[name=code]').inputValue(),'ABCDEFGHI');
+added=true;await page.waitForFunction(()=>document.querySelectorAll('.device-card').length===2,null,{timeout:6500});
+await page.locator('#devicesTab').click();await page.locator('.permission-effective').first().click();online=false;
+await page.waitForFunction(()=>document.querySelector('#detailLiveStatus')?.textContent.includes('Offline'),null,{timeout:6500});
+console.log('LIVE_UPDATE_PASS device-add enrollment form-preserved offline-status');
+await browser.close();await local.close();
+})().catch(e=>{console.error('LIVE_UPDATE_FAIL',e.message);process.exit(1)});

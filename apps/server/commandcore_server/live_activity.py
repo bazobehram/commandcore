@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import time
+import uuid
+import secrets
 import hashlib
 import hmac
 import re
-import secrets
 import shlex
-import time
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from .activity_trace import safe_trace
-from .auth import STANDARD_SCOPE, scope_allows
 from .models import Principal
+from .auth import scope_allows, STANDARD_SCOPE
+from .activity_trace import safe_trace
+from .activity_visibility import safe_path
+
 
 # Only confirm effects explicitly represented by a successfully completed
 # device tool. Shell, Git, or Docker side effects require separate evidence.
@@ -97,7 +99,12 @@ def _enrich_request(
             "manager",
         ):
             value = args.get(key)
-            if isinstance(value, str) and _SAFE_LABEL.fullmatch(value):
+            if (
+                isinstance(value, str)
+                and _SAFE_LABEL.fullmatch(value)
+                and safe_path(value.replace(":", "/"))
+                not in (None, "[restricted path]")
+            ):
                 detail[key] = value
         if tool == "package.install" and isinstance(args.get("packages"), list):
             detail["package_count"] = min(1000, len(args["packages"]))
@@ -112,7 +119,7 @@ def _enrich_request(
 
 
 def _iso(epoch: float) -> str:
-    return datetime.fromtimestamp(epoch, tz=UTC).isoformat()
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
 
 
 class LiveActivity:
@@ -147,7 +154,13 @@ class LiveActivity:
         self, principal: Principal, host_session: str | None
     ) -> dict[str, Any]:
         tag = self.session_tag(host_session)
-        if not tag or principal.auth_kind != "oauth2" or not principal.issuer:
+        if (
+            not tag
+            or principal.auth_kind != "oauth2"
+            or not principal.issuer
+            or not principal.subject
+            or not principal.client_id
+        ):
             return {"session_available": False}
         self._expire_viewers()
         ref = secrets.token_urlsafe(24)
@@ -162,7 +175,14 @@ class LiveActivity:
 
     def resolve_viewer(self, principal: Principal, ref: str) -> str | None:
         self._expire_viewers()
-        if not isinstance(ref, str) or len(ref) > 128:
+        if (
+            principal.auth_kind != "oauth2"
+            or not principal.issuer
+            or not principal.subject
+            or not principal.client_id
+            or not isinstance(ref, str)
+            or len(ref) > 128
+        ):
             return None
         row = self._viewers.get(ref)
         if not row or (row["issuer"], row["owner"], row["client"]) != (
@@ -266,6 +286,22 @@ class LiveActivity:
         device_filter: str | None = None,
         session_tag: str | None = None,
     ) -> dict[str, Any]:
+        if type(include_details) is not bool or type(panel_details) is not bool:
+            raise ValueError("Activity detail flags must be boolean")
+        if (
+            include_details
+            and not panel_details
+            and not (
+                principal.auth_kind == "oauth2"
+                and principal.issuer
+                and principal.subject
+                and principal.client_id
+                and scope_allows(principal.scopes, STANDARD_SCOPE)
+            )
+        ):
+            raise ValueError(
+                "Activity details require verified STANDARD OAuth identity"
+            )
         # The first-party dashboard may bridge OAuth clients only for the
         # SAME verified issuer/subject with STANDARD authority. MCP detailed
         # feeds retain their existing client boundary.
@@ -386,7 +422,7 @@ class LiveActivity:
             device_id = e.get("device_id")
             if device_id and device_id not in authorized:
                 continue
-            if (  # noqa: SIM102 - maintain the nested privacy-gate layout
+            if (
                 include_details
                 or stable_summary
                 or panel_details
@@ -440,7 +476,8 @@ class LiveActivity:
             "refreshed_at": _iso(now),
             "privacy": (
                 "Owner-scoped, 15-minute in-memory operation metadata; "
-                "no raw command arguments, file contents or output."
+                "validated command grammar or redacted structure only. "
+                "No raw output, file contents or diff text. HTTPS origins only."
                 if include_details or panel_details
                 else "Only tool, device, time and status. No arguments or output."
             ),

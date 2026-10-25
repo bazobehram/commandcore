@@ -1,0 +1,36 @@
+{
+  "id": "/",
+  "name": "CommandCore",
+  "short_name": "CommandCore",
+  "description": "Secure device control and private browser workspace",
+  "start_url": "/#devices",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#191a18",
+  "theme_color": "#20221f",
+  "icons": [
+    {
+      "src": "/commandcore-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Devices",
+      "short_name": "Devices",
+      "url": "/#devices"
+    },
+    {
+      "name": "Browser",
+      "short_name": "Browser",
+      "url": "/#browser"
+    },
+    {
+      "name": "Activity",
+      "short_name": "Activity",
+      "url": "/#activity"
+    }
+  ]
+}

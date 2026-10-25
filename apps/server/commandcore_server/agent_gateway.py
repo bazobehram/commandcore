@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import json
+import hmac
 import secrets
 import time
 import uuid
@@ -132,7 +132,7 @@ class AgentManager:
             )
             try:
                 await conn.websocket.close(code=4001)
-            except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+            except Exception:
                 pass
         async with self._lock:
             if device_id not in self.connections:
@@ -165,7 +165,7 @@ class AgentManager:
         )
         try:
             hello = await asyncio.wait_for(websocket.receive_json(), timeout=10)
-        except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
+        except Exception:
             await websocket.close(code=4408)
             return
         if hello.get("type") != "hello" or hello.get("device_id") != device_id:
@@ -235,13 +235,13 @@ class AgentManager:
                 ),
                 timeout=15,
             )
-        except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
+        except Exception:
             async with self._lock:
                 if device_id not in self.connections:
                     self.db.mark_offline(device_id)
             try:
                 await asyncio.wait_for(websocket.close(code=4408), timeout=5)
-            except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+            except Exception:
                 pass
             return
         # A connection is dispatchable only after hello.ack is on the wire.
@@ -256,7 +256,7 @@ class AgentManager:
             )
             try:
                 await asyncio.wait_for(old.websocket.close(code=4002), timeout=5)
-            except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+            except Exception:
                 pass
 
         try:
@@ -296,7 +296,7 @@ class AgentManager:
                     continue
         except WebSocketDisconnect:
             pass
-        except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+        except Exception:
             pass
         finally:
             self._fail_connection_jobs(conn, "agent disconnected while job was running")
@@ -366,7 +366,7 @@ class AgentManager:
             prepared = self.db.prepare_device_key_rotation(
                 device_id, str(row["public_key_b64"]), new_public_key, ttl_seconds=300
             )
-        except Exception as exc:  # noqa: BLE001 - return a key-rotation error instead of crashing
+        except Exception as exc:
             await self._send_connection_json(
                 conn,
                 {
@@ -440,7 +440,7 @@ class AgentManager:
             generation = self.db.confirm_device_key_rotation(
                 device_id, rotation_id, new_public_key
             )
-        except Exception as exc:  # noqa: BLE001 - return a key-rotation error instead of crashing
+        except Exception as exc:
             await self._send_connection_json(
                 conn,
                 {
@@ -579,7 +579,7 @@ class AgentManager:
                     await asyncio.wait_for(
                         conn.websocket.send_json(payload), timeout=15
                     )
-            except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
+            except Exception:
                 # The connection can disappear after lookup but before the frame
                 # is written. Convert that transport race into the same durable
                 # job result used when a running Agent disconnects, instead of
@@ -602,7 +602,7 @@ class AgentManager:
                 result = await asyncio.wait_for(
                     pending.future, timeout=max(1.0, timeout_ms / 1000 + 5.0)
                 )
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 try:
                     async with conn.send_lock:
                         await asyncio.wait_for(
@@ -611,7 +611,7 @@ class AgentManager:
                             ),
                             timeout=5,
                         )
-                except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
+                except Exception:
                     pass
                 result = JobResult(
                     execution_id=execution_id,

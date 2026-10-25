@@ -1,0 +1,74 @@
+const {chromium}=require('playwright');
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const {startServer}=require('./graphite-server.cjs');
+const root=path.resolve(__dirname,'../../apps');
+(async()=>{
+  const local=await startServer();
+  const browser=await chromium.launch({headless:true,...(process.env.COMMANDCORE_CHROME_BIN?{executablePath:process.env.COMMANDCORE_CHROME_BIN}:{}),args:['--no-sandbox']});
+  const py=fs.readFileSync(path.join(root,'server/commandcore_server/browser_console.py'),'utf8');
+  const match=py.match(/HTML = """([\s\S]*?)"""/);
+  assert.ok(match,'private Browser HTML template missing');
+  const privHtml=match[1];
+  const privCss=path.join(root,'web/browser-console.css');
+  for(const width of [375,768,1440,1920]){
+    const page=await browser.newPage({viewport:{width,height:920},deviceScaleFactor:1,reducedMotion:'no-preference'});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const device=(name,permission)=>({id:name,display_name:name,hostname:name,platform:'Linux',architecture:'x86_64',connected:permission==='FULL_CONTROL',permission_profile:permission,access_max_permission_profile:permission,capabilities:{local_max_permission_profile:permission,agent_implementation:'rust'},agent_version:'0.9.0',last_seen:1792912000});
+    await page.route('**/api/**',route=>{
+      const p=new URL(route.request().url()).pathname;
+      const body=p==='/api/session'?{subject:'test',scopes:['commandcore:read','commandcore:standard','commandcore:full'],auth_kind:'oauth'}:p==='/api/devices'?{devices:[device('homeserver','FULL_CONTROL'),device('ortamzeka','STANDARD')]}:p==='/api/managed-devices'?{devices:[]}:p==='/api/enrollment/pending'?{enrollments:[]}:{events:[]};
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+    });
+    await page.goto(local.url,{waitUntil:'domcontentloaded'});
+    await page.locator('.device-card').first().waitFor();
+    const identity=await page.locator('.device-card').first().getAttribute('data-device-id');
+    await page.evaluate(()=>{window.__savedCard=document.querySelector('.device-card');});
+    await page.locator('#refresh').click();
+    await page.waitForTimeout(250);
+    assert.equal(await page.evaluate(()=>document.querySelector('.device-card')===window.__savedCard),true,'refresh replaced unchanged device card');
+    assert.equal(identity,'homeserver');
+    await page.evaluate(()=>{
+      window.__installPromptCalls=0;
+      const ev=new Event('beforeinstallprompt',{cancelable:true});
+      ev.prompt=()=>{window.__installPromptCalls++;return Promise.resolve();};
+      ev.userChoice=Promise.resolve({outcome:'dismissed'});
+      dispatchEvent(ev);
+    });
+    assert.equal(await page.locator('#installApp').isVisible(),true);
+    await page.locator('#installApp').click();
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(()=>window.__installPromptCalls),1);
+    assert.equal(await page.locator('#installApp').isVisible(),false);
+    await page.locator('#browserTab').click();
+    assert.equal(new URL(page.url()).hash,'#browser');
+    await page.goBack();
+    await page.waitForTimeout(180);
+    assert.equal(await page.locator('#panelTitle').innerText(),'Devices');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    const manifest=await page.evaluate(async()=>{const r=await fetch('/commandcore.webmanifest');return {ok:r.ok,contentType:r.headers.get('content-type'),data:r.ok?await r.json():{}}});
+    assert.equal(manifest.ok,true,'PWA manifest missing');
+    assert.equal(manifest.data.display,'standalone');
+    await page.waitForTimeout(1000);
+    await page.screenshot({path:'/tmp/cc-new-dashboard-'+width+'.png',fullPage:true});
+    assert.deepEqual(errors,[]);
+    await page.close();
+    const preview=await browser.newPage({viewport:{width,height:920},deviceScaleFactor:1});
+    await preview.setContent(privHtml,{waitUntil:'domcontentloaded'});
+    await preview.addStyleTag({path:privCss});
+    const layout=await preview.evaluate(()=>{
+      const box=sel=>{const r=document.querySelector(sel).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,b:r.bottom,r:r.right}};
+      return {stage:box('#viewport-stage'),input:box('#text'),keyboard:box('.control-sidebar>.sidebar-card:nth-child(3)'),other:box('.control-sidebar>.sidebar-card:nth-child(1)'),overflow:document.documentElement.scrollWidth>innerWidth,inputType:document.querySelector('#text').type};
+    });
+    assert.equal(layout.overflow,false,'private browser overflows '+width);
+    assert.equal(layout.inputType,'password');
+    if(width<=875)assert.ok(layout.keyboard.y>=layout.stage.b-2&&layout.keyboard.y-layout.stage.b<190,'keyboard not adjacent to viewport');
+    else assert.ok(layout.keyboard.x>=layout.stage.r-1,'keyboard not on right of viewport');
+    await preview.waitForTimeout(650);
+    await preview.screenshot({path:'/tmp/cc-new-private-'+width+'.png',fullPage:true});
+    console.log('RESPONSIVE_PASS',width,'private_keyboard='+JSON.stringify(layout.keyboard),'stage='+JSON.stringify(layout.stage),'no_horizontal_overflow');
+    await preview.close();
+  }
+  await browser.close();await local.close();
+})().catch(e=>{console.error('RESPONSIVE_FAIL',e.stack);process.exit(1)});

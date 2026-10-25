@@ -36,3 +36,21 @@ button,input,select{font:inherit}.hidden{display:none!important}.app{max-width:1
 .legacy-inline-13{margin-top:8px}
 
 .brand-lockup{display:inline-flex;align-items:center;gap:10px;white-space:nowrap}.brand-lockup-login{margin-bottom:18px}.brand-logo{display:block;width:52px;height:52px;object-fit:contain;flex:none}.brand-name{font-size:25px;font-weight:750;letter-spacing:-.04em;color:#edf2f7}.brand-name span{color:#3294ff}.brand{align-items:center}.brand .sub{margin-top:0}
+
+
+/* CommandCore premium design system */
+:root{color-scheme:dark;--bg:#0b111a;--panel:#111c2b;--panel2:#162338;--line:#2b3c53;--line2:#39506a;--text:#f1f6ff;--muted:#a3b3cc;--faint:#7287a4;--accent:#348dff;--accent2:#65b0ff;--purple:#6ba6ff;--cyan:#5ebaff;--ok:#59d9aa;--warn:#ffc65e;--radius:14px}
+html,body{background:radial-gradient(ellipse 58% 25% at 55% 0%,#14263d,transparent),#0b111a;color:#eff5ff}
+button,.btn,.button{border-color:#3a5170;border-radius:10px;background:#152238;color:#eaf4ff}
+button.primary,.btn.primary,.button.primary{background:linear-gradient(120deg,#389cff,#236bf5);color:#fff;border-color:#4a9aff;font-weight:700}
+button:hover,.btn:hover,.button:hover{background:#223853}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #6badff;outline-offset:3px}
+input,select,textarea{background:#0d1827;border-color:#425772;color:#f1f6ff;border-radius:10px}
+a{color:#80baff}
+.card,.panel,.sidebar-card,main{border-color:#30425c}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+.app,.login-shell{color:#edf5ff}.topbar,.header{background:#111c2b;border-color:#2b3c53}
+.brand-name span{color:#348dff}.btn.primary{box-shadow:0 5px 20px #1266ef22}
+.card,.panel,.device-card{background:linear-gradient(145deg,#172337,#101a29);border-color:#2b3c53}
+.status.online,.badge.online{color:#59d9aa}

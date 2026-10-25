@@ -8,6 +8,7 @@ from pathlib import Path
 def web_asset(name: str) -> Path:
     if name not in {
         "index.html",
+        "commandcore.webmanifest",
         "onboarding.html",
         "legacy-admin.html",
         "legacy-admin.css",

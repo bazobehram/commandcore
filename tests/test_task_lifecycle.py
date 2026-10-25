@@ -64,6 +64,9 @@ class DB:
 class Tools:
     def __init__(self):
         self.live_activity = Live()
+        self.timeline = type(
+            "TimelineFixture", (), {"finish": lambda self, *args, **kwargs: None}
+        )()
         self.db = DB()
         self.pause = None
         self.failure = None
@@ -144,6 +147,9 @@ async def main():
     defs = {x["name"]: x for x in h.definitions}
     for name in m.OPERATION_TOOLS:
         if name in defs:
+            if name in {"execution.timeline.watch", "shell.exec"}:
+                assert defs[name].get("_meta", {}).get("ui", {}).get("resourceUri")
+                continue
             assert not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri"), (
                 name
             )
