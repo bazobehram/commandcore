@@ -141,3 +141,60 @@ def test_idle_cleanup_never_closes_replaced_session():
         assert g.sessions[owner] is replacement
 
     asyncio.run(check())
+
+
+def test_real_http_idle_release_and_owner_isolation():
+    """Exercise release over an actual loopback HTTP server, not a mocked client."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    requests = []
+
+    class Worker(BaseHTTPRequestHandler):
+        def do_POST(self):
+            requests.append(self.path)
+            data = json.dumps({"status": "released"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Worker)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        async def check():
+            g = BrowserGateway(
+                base_url=f"http://127.0.0.1:{server.server_port}",
+                cdp_url="ws://127.0.0.1:9999",
+                allow_hosts=("example.com",),
+            )
+            g.idle_timeout_seconds = 2
+            owner_a = ("issuer", "user", "conversation-A")
+            owner_b = ("issuer", "user", "conversation-B")
+            old = OwnedSession("worker-test")
+            old.last_interaction_mono = time.monotonic() - 3
+            other = OwnedSession("other-test")
+            other.last_interaction_mono = time.monotonic()
+            g.sessions[owner_a] = old
+            g.sessions[owner_b] = other
+            g._bound_owner = owner_a
+            released = await g._release(
+                owner_a, expected_session_id=old.id, require_idle=True
+            )
+            assert released == {"closed": True}
+            assert owner_a not in g.sessions
+            assert g.sessions[owner_b] is other
+            assert g._bound_owner == owner_a
+            assert requests == ["/v1/sessions/worker-test/release"]
+
+        asyncio.run(check())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
