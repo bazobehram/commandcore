@@ -375,8 +375,37 @@
       image.hidden = true;
       image.removeAttribute("src");
       if (empty) empty.hidden = true;
-      const complete = document.getElementById("resume-complete");
-      if (complete) complete.hidden = false;
+      let complete = document.getElementById("resume-complete");
+      if (!complete) {
+        // Support the older, already-running private console HTML without
+        // restarting the API server or altering the Browser session.
+        complete = document.createElement("div");
+        complete.id = "resume-complete";
+        complete.className = "resume-complete";
+        complete.setAttribute("role", "status");
+        complete.setAttribute("aria-live", "polite");
+        const icon = document.createElement("div");
+        icon.className = "resume-complete-icon";
+        icon.textContent = "✓";
+        icon.setAttribute("aria-hidden", "true");
+        const heading = document.createElement("h2");
+        heading.textContent = "Control returned to AI";
+        const message = document.createElement("p");
+        message.textContent = "Your private control has ended. The Browser is still active, and your AI assistant can continue working.";
+        const guide = document.createElement("div");
+        guide.className = "resume-return-guide";
+        const guideTitle = document.createElement("strong");
+        guideTitle.textContent = "Return to your AI conversation";
+        const guideText = document.createElement("span");
+        guideText.textContent = "Switch back to the AI app or close this tab to continue where you left off.";
+        guide.append(guideTitle, guideText);
+        const note = document.createElement("span");
+        note.className = "resume-complete-note";
+        note.textContent = "Private input is no longer available here. No Browser session was closed.";
+        complete.append(icon, heading, message, guide, note);
+        document.getElementById("viewport-stage").appendChild(complete);
+      }
+      complete.hidden = false;
       document.body.classList.add("resume-finished");
       const hint = document.querySelector(".viewer-hint");
       if (hint) hint.textContent = "Browser remains active · Continue in your AI app";
