@@ -80,3 +80,64 @@ def test_handoff_cannot_be_closed_by_idle_sweeper():
         assert result["closed"] is False
         assert owner in g.sessions
     asyncio.run(check())
+
+
+def test_idle_release_calls_worker_only_for_expired_owner(monkeypatch):
+    from unittest.mock import patch
+
+    class Reply:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"status": "released"}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def post(self, url):
+            requests.append(url)
+            return Reply()
+
+    async def check():
+        g = gateway()
+        g.idle_timeout_seconds = 1
+        owner = ("issuer", "user", "conversation-A")
+        other = ("issuer", "user", "conversation-B")
+        entry = OwnedSession("session-a")
+        entry.last_interaction_mono = time.monotonic() - 3
+        g.sessions[owner] = entry
+        g._bound_owner = owner
+        with patch("commandcore_server.browser_gateway.httpx.AsyncClient", FakeClient):
+            closed = await g._release(owner, expected_session_id="session-a", require_idle=True)
+            assert closed["closed"] is True
+            assert owner not in g.sessions
+            assert g._bound_owner == owner
+            assert requests == ["http://127.0.0.1:9999/v1/sessions/session-a/release"]
+            assert other not in g.sessions
+
+    requests = []
+    asyncio.run(check())
+
+
+def test_idle_cleanup_never_closes_replaced_session():
+    from commandcore_server.browser_gateway import BrowserError
+
+    async def check():
+        g = gateway()
+        owner = ("issuer", "user", "conversation-A")
+        replacement = OwnedSession("new")
+        replacement.last_interaction_mono = time.monotonic() - 1200
+        g.sessions[owner] = replacement
+        try:
+            await g._release(owner, expected_session_id="old", require_idle=True)
+        except BrowserError as exc:
+            assert "session changed" in str(exc)
+        else:
+            raise AssertionError("stale cleanup unexpectedly authorized")
+        assert g.sessions[owner] is replacement
+
+    asyncio.run(check())
