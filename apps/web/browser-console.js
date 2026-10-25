@@ -373,7 +373,17 @@
       const field = document.getElementById("text");
       if (field) field.value = "";
       image.hidden = true;
+      image.removeAttribute("src");
       if (empty) empty.hidden = true;
+      const complete = document.getElementById("resume-complete");
+      if (complete) complete.hidden = false;
+      document.body.classList.add("resume-finished");
+      const hint = document.querySelector(".viewer-hint");
+      if (hint) hint.textContent = "Browser remains active · Continue in your AI app";
+      const title = document.querySelector(".introduction h1");
+      if (title) title.textContent = "Control returned to AI.";
+      const description = document.querySelector(".introduction-copy");
+      if (description) description.textContent = "Private control is finished. Continue in your original AI conversation.";
     } catch (err) {
       if (err?.name === "AbortError") {
         setStatus("Resume response timed out. Control may have returned to AI; check ChatGPT before retrying.", true);

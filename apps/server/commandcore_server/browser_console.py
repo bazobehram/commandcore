@@ -85,6 +85,15 @@ HTML = """<!doctype html>
           <span>Loading an authenticated, private Chromium frame…</span>
         </div>
         <img id="viewport" alt="Live remote Chromium viewport. Click the image to interact with the page." draggable="false" hidden>
+        <div id="resume-complete" class="resume-complete" role="status" aria-live="polite" hidden>
+          <div class="resume-complete-icon" aria-hidden="true">✓</div>
+          <h2>Control returned to AI</h2>
+          <p>Your private control has ended. The Browser is still active, and your AI assistant can continue working.</p>
+          <div class="resume-return-guide"><strong>Return to your AI conversation</strong>
+            <span>Switch back to the AI app or close this tab to continue where you left off.</span>
+          </div>
+          <span class="resume-complete-note">Private input is no longer available here. No Browser session was closed.</span>
+        </div>
       </div>
       <div class="viewer-footer">
         <div class="viewer-live"><span class="live-indicator" aria-hidden="true"></span><span id="connection-status">Connecting</span></div>
