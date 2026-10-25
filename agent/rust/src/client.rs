@@ -119,8 +119,8 @@ pub async fn run_agent(state_path: PathBuf, once: bool) -> i32 {
         &initial.device_id,
     ) {
         Ok(executor) => executor,
-        Err(_) => {
-            eprintln!("Unsafe managed-job state directory");
+        Err(e) => {
+            eprintln!("Unsafe managed-job state directory: {e:#}");
             return 1;
         }
     };

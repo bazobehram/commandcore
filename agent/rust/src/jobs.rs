@@ -238,7 +238,12 @@ impl JobStore {
                 || ![0, nix::unistd::geteuid().as_raw()].contains(&m.uid())
                 || (m.mode() & 0o022 != 0 && !(m.uid() == 0 && m.mode() & 0o1000 != 0))
             {
-                return Err(anyhow!("untrusted job parent"));
+                return Err(anyhow!(
+                    "untrusted job parent: {} (uid={}, mode={:o})",
+                    ancestor.display(),
+                    m.uid(),
+                    m.mode() & 0o7777
+                ));
             }
         }
         let base = parent.join("managed-jobs");

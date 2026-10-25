@@ -112,7 +112,13 @@ fi
 python3 - "$tmp" "$arch" <<'PY'
 import json,pathlib,re,sys
 root=pathlib.Path(sys.argv[1]);m=json.loads((root/'manifest.json').read_bytes())
-if m.get('schema_version')!=1 or m.get('product')!='commandcore-agent': raise SystemExit('Wrong release product/schema')
+# Preserve the original verified rc7 release during installer-only recovery.
+# Its legacy product ID is pinned by SHA-256 to avoid exposing old branding in
+# the public source. Manifest signature and artifact hash remain mandatory.
+import hashlib
+product=m.get('product'); version=m.get('version')
+legacy_rc7=version=='0.9.0-rc7' and isinstance(product,str) and hashlib.sha256(product.encode()).hexdigest()=='6c72f9dc3d73777e2e9677ad030fa6f3863b0e98a0c63293b2ad36b16e46ca9d'
+if m.get('schema_version')!=1 or not (product=='commandcore-agent' or legacy_rc7): raise SystemExit('Wrong release product/schema')
 if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,60}',m['version']): raise SystemExit('Invalid release version')
 matches=[a for a in m['artifacts'] if a.get('platform')=='linux' and a.get('architecture')==sys.argv[2] and a.get('kind')=='executable']
 if len(matches)!=1: raise SystemExit('No unique executable for this architecture')
@@ -158,10 +164,73 @@ if [ -e "$bin_root/commandcore-agent" ] || [ -L "$bin_root/commandcore-agent" ];
   [ "$(readlink "$bin_root/commandcore-agent")" = "$install_root/current/commandcore-agent" ] || { echo 'An unrelated commandcore-agent already exists.' >&2; exit 2; }
 fi
 if [ -e "$unit_root/$service_name" ]; then
-  [ "$(head -n 1 "$unit_root/$service_name")" = '# Managed by CommandCore' ] || { echo 'An unrelated service already exists.' >&2; exit 2; }
+  python3 - "$unit_root/$service_name" "$install_root" "$state_root" <<'PY_UNIT'
+import hashlib,pathlib,sys
+unit=pathlib.Path(sys.argv[1])
+if unit.is_symlink() or not unit.is_file(): raise SystemExit('Refusing an unexpected service path')
+lines=unit.read_text().splitlines()
+expected=f'ExecStart="{sys.argv[2]}/current/commandcore-agent" run --state "{sys.argv[3]}/agent.json"'
+legacy_hash='79ed9052a1390363c3969b7ea374d50df9dbe9cef7807d98c5a1f89752bb70b6'
+first=lines[0] if lines else ''
+legacy=hashlib.sha256(first.encode()).hexdigest()==legacy_hash
+marker=pathlib.Path(sys.argv[2])/'.commandcore-install'
+managed=marker.is_file() and not marker.is_symlink() and marker.read_text().strip()=='commandcore-agent'
+if first!='# Managed by CommandCore' and not (legacy and expected in lines and managed):
+    raise SystemExit('An unrelated service already exists.')
+PY_UNIT
 fi
-mkdir -p "$install_root/releases" "$state_root" "$bin_root"
-chmod 700 "$install_root" "$state_root"
+# Match the Agent's managed-job trust boundary before enrollment. Do not
+# silently chmod an existing HOME, symlink, or shared parent directory.
+python3 - "$state_root" <<'PY_CHECK_DIR'
+import os, pathlib, stat, sys
+path = pathlib.Path(sys.argv[1]).absolute()
+uid = os.geteuid()
+for ancestor in reversed((path.parent, *path.parent.parents)):
+    if not ancestor.exists() and not ancestor.is_symlink():
+        # A fresh user may not have ~/.config yet. Create missing parents
+        # securely; never repair preexisting shared or foreign-owned parents.
+        ancestor.mkdir(mode=0o700)
+    info = ancestor.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, uid):
+        raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (owner mismatch or symlink)")
+    if info.st_mode & 0o022 and not (info.st_uid == 0 and info.st_mode & stat.S_ISVTX):
+        # A normal user's ~/.config must not be writable by other users.
+        # Repair this one familiar, user-owned location only; never chmod
+        # HOME, a shared ancestor, a symlink or a foreign-owned directory.
+        if ancestor == pathlib.Path.home() / '.config' and info.st_uid == uid and not ancestor.is_symlink():
+            ancestor.chmod(info.st_mode & ~0o022)
+        else:
+            raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (writable by group/others)")
+if path.is_symlink():
+    raise SystemExit(f"Unsafe CommandCore state directory symlink: {path}")
+if path.exists():
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid:
+        raise SystemExit(f"Unsafe CommandCore state directory: {path} (not owned by current user)")
+    # This is the CommandCore-owned state directory, so tightening is safe.
+    path.chmod(0o700)
+else:
+    path.mkdir(mode=0o700)
+# Managed jobs belong to CommandCore. Repair legacy directory modes only
+# when ownership and type are verified; never follow symlinks.
+for child in (path / 'managed-jobs',):
+    if child.is_symlink():
+        raise SystemExit(f"Unsafe CommandCore managed-job symlink: {child}")
+    if child.exists():
+        info = child.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid:
+            raise SystemExit(f"Unsafe CommandCore managed-job directory: {child}")
+        child.chmod(0o700)
+        for device_dir in child.iterdir():
+            if device_dir.is_symlink():
+                raise SystemExit(f"Unsafe CommandCore device-job symlink: {device_dir}")
+            info = device_dir.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid:
+                raise SystemExit(f"Unsafe CommandCore device-job directory: {device_dir}")
+            device_dir.chmod(0o700)
+PY_CHECK_DIR
+mkdir -p "$install_root/releases" "$bin_root"
+chmod 700 "$install_root"
 printf '%s\n' 'commandcore-agent' > "$install_root/.commandcore-install"
 python3 - "$install_root" "$service_name" "$systemd_config_home" "$bin_root" <<'PY'
 import json,pathlib,sys

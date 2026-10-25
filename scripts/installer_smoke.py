@@ -29,8 +29,11 @@ def main():
         base = Path(temp)
         os.chmod(base, 0o755)
         installer = base / "linux.sh"
+        uninstaller = base / "uninstall-linux.sh"
         shutil.copyfile(root / "install/linux.sh", installer)
+        shutil.copyfile(root / "install/uninstall-linux.sh", uninstaller)
         installer.chmod(0o755)
+        uninstaller.chmod(0o755)
         web = base / "web"
         web.mkdir(mode=0o755)
 
@@ -112,7 +115,7 @@ def main():
                 os.setuid(65534)
 
             command = (
-                ["sh", str(root / "install/uninstall-linux.sh")]
+                ["sh", str(uninstaller)]
                 if uninstall
                 else [
                     "sh",
