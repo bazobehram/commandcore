@@ -246,6 +246,12 @@ body[data-cc-browser-state="unavailable"] #cc-browser-recovery .cc-recovery-desc
  body[data-cc-browser-state="awaiting_human"] #browser-stage{min-height:100px;max-height:120px}
 }
 
+#feed .summary-line .heading{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;min-width:0}
+#feed details[open] .summary-line .heading{white-space:normal;overflow-wrap:anywhere}
+#feed details[open] .trace-value{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}
+#feed .cc-audit-primary{padding:8px 0 14px}
+#feed .cc-command-steps code{white-space:pre-wrap;overflow-wrap:anywhere}
+#feed .timestamp{font-variant-numeric:tabular-nums}
 </style><style id="cc-tab-alignment-styles">
 /* 0.7.1: visible selected state, equal touch targets and compact ChatGPT header */
 nav[role="tablist"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:9px 16px 11px;background:#000;border-bottom:1px solid #26262b}
@@ -550,6 +556,32 @@ body[data-cc-activity-stale=true] #feed{opacity:.6}
  .overview .metric small{font-size:10px!important}.overview .metric strong{font-size:11px!important}
  button,summary{touch-action:manipulation}
 }
+#feed .cc-command-steps{display:block;grid-column:1/-1;margin:4px 0;padding-left:24px;min-width:0}
+#feed .cc-command-steps li{padding:5px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+#feed .cc-command-steps code{font:11px/1.5 monospace}
+#cc-developer-view{width:auto;min-height:24px;flex:none}
+<style id="cc-b38-loading">@media(prefers-reduced-motion:reduce){.cc-skeleton-bar{animation:none!important}}<style id="cc-b39-activity-loading">
+#cc-activity-loading{display:flex;gap:10px;align-items:center;margin:4px 12px 8px;padding:9px 12px;border:1px solid #303238;border-radius:9px;background:#1a1c20;min-height:24px}
+#cc-activity-loading .cc-skeleton-bar{height:8px;flex:1;min-width:18px}
+#cc-activity-loading .cc-skeleton-bar.short{flex:0 0 22%}
+#cc-activity-loading small{color:#a5a8b0;font-size:10px;white-space:nowrap}
+#feed .trace-value,#feed .cc-audit-primary .trace-value,#feed .cc-technical .trace-value{
+background:#151c1b!important;color:#d8e3dc!important;border:1px solid #2a3934!important;
+border-radius:8px!important;padding:8px 10px!important;
+font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;
+font-size:12px!important;line-height:1.6!important;white-space:pre-wrap!important;
+overflow-wrap:anywhere!important;max-height:220px!important;overflow-y:auto!important;
+-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
+#feed .cc-technical .trace-label,#feed .trace-label{color:#8ad4a8!important}
+#feed .cc-technical>summary{list-style:none}
+#feed .cc-technical>summary::before{content:"›";font-size:17px;margin-right:8px}
+#feed .cc-technical[open]>summary::before{content:"⌄"}
+
+@media(prefers-reduced-motion:reduce){#cc-activity-loading .cc-skeleton-bar{animation:none}}
+/* b42 terminal details */
+#feed .trace-line:has(>.trace-label:first-child) .trace-value{font-variant-ligatures:none}
+#feed .trace-value{tab-size:2}
+#feed article .cc-audit-primary{gap:8px}
 </style></head><body>
 <header><img class="cc-logo" alt="CommandCore" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAUj0lEQVR42u2be5DcVZXHP+fe+/v1TJJBQQXUFVch4EaXJIQIAmtAV4tVKASdiE8o18ciQpJJAmR59DQhISaZhMAiEgXF92ZK1FVKEdgli6iER4SC8F4QQRQ1kGQmM9O/e+/ZP36/6enu6SETwF2tmlvVNdM9v76Pc8/je77nDEyMiTExJsbEmBgTY2Ls1pAJEUyMiTEx/gJ8hdC5wfDMffk6G4lQiS9qxrIawNTedxMQ0b8+0XdusM/z+Qu4GBU6tfWcG9SCyl+HBnV2Wnp7AwAHL5yMs+81aqZGic+g4ads7vl1TVC9c8P45lRLr+TPnjGwP2nyPkRfi8ojZAPf5dKO34967i9PQOVC7SsRysbMHDhFhSXYdGptGV/dDqzTHTtX88hl2/Nb75Yxza6shm4UEeUM3YM0LgJdQGqn1Hafxd+DrmLb769g/Wt35pqGeakEJS+JYDq3SE1rZi48Xow7F5McRgwQvUdFEQEjCbYEYfAR1djNXau+OUrrWmnNAv9RrJRJzQFUI2jMGPY61iUkQDXeTzTLWCPfrPNVUJH4/yQgFeZ0WzZWPADT5x8pkpyHS45FyQWDSO5QtfhVFCEgNkEMhOwmlfiv3LlyU8slFlYPQ+wyEvNOPBB8BlgUqe1cUQwB6xIM4OMtmLiUlckNNf/USXyhjlxe0HfmlEcE8/fzDhKbnIuxH8M4CNUAAoIZmb5uGRFQIqhiU0f0ioav6qtfv5BTTtsOwF3swZBfgzWn4gxUvS8mMY13VHyaTx9RlNS5/ILidwl+GWtKmwuNclQIsHuCkt2OTMOOddqifaUkCxE5DZNMJlQjSsSIHdm8tFhCij+iiATEICJL4u0X9TQ8Nr+6CGuWAULUkcgnTQIa/VlAEFJnCSHDyJfBrODz8kRNo+YSxysoeSGRyVg5XZEuXGkfQhVi9EghmFFCGXOJgE2dxqyLOy9ey8rBE6UtOUMVpRovYXHyQ+ZV59OerGXIe8DWmdXoJbTpb7mgLO1OyOJWol5KZtexTp7bnYgnuxeZdpyq2LOx6YHEDKJmGCya201rjQGQAEjN7FQV4wzEZ/SOW1/LihveyuTkVkxxwAAMZrN5NLmbSf63OPtKYoi1yZWIoIAdJSRtMkIhYGxCSWAoPo7q59nxq6tYf2iGqjD3+SOeeV6toRKhEu3MhcfLzP5fqCldhZgD8dUMjRHBoZI7zFHC0cLXEDGJw1hL1ACqIBExgDwOGz1OO8UR2BkGGPADOAJGTmS9ZChPYGT4sLn4EmdJnYNi/mZzG3kJ4IghMuAzxPwtqb2Cl8/YxMLsA4govRJyANoaaLoxNau3NzBz3ttE0guimGNBIFTzyCTiCkecn7fmb2q6nztMmzhEwA/dBrwc134QsQpEj0ZQfWVhlg9gsIgmIGCxqDxYXOGexeEDmJQ2Yxjw9wPPkrgjcizkfSEMU9MiaTqP4gg+4FFSN4OEXhaF/ySEC1krG8erQZLjmk4jM7rWiqQ/R9yxBB8IPiDGYsTUachIZMo/U1Q9xlqSNoeGzRqzubp55eEawiyJ1fOB7bi2lOg9xr6emWe/ncXtV+q27IcYY8SKYUf8Lme5r7EgO4bE7If3npJLEd3OQDiffncoa5Mj8f4EYtxEyTmcyzVU0VFWrnXnFSxVHxjyHmfeQZrczMKwnrKmOXZq1CRp5Yxletdy0ilLyPp9IQC7CzemIAFjE7EpGrJHRHVl7Ei/ksMBlVrUmLVof8FdhNiTC1jwoLr0WG6rPC6rsp+pSGSRezvzB96ITX9CyUwlU4j6LcRcwGp5tAYEKxKhbFh4/sfEyDmamDeRK2hWOHVpqVEj5hgQYIpz9PnL6Uk+1+y8TYND7u0NzDz9NYjMxw+EwpzssHI0OsAC+CkexOBKCaJPE7OzdCCZGe+6+EtsrPjcl4kW+Mlx5+pH9c4VH9KoxxKqt1F6+UES/OdyEw6DKEOggkk/y15mKkPhF4TwbnrsR1gtj1JWBypUJOa+oxLpcdeoN4cwFLrQ8CQllyDWoOIL3zXWsCiG/uhB/oUFAwfQK6GGwhsE1LmliBD2zVjbnvvSkQcRqcN9AmgADC5NMLKNWL1Yq9mMeMfyVWyp9NWy9pEUQnNtKhs6Oy13Lb9e70yPkGr/WeJKd1GOpvAhhk4MonewLSymxx3JmuQGOtUWWuNr2jh80xvUslYG6HFriXY61bgU0a2UbAJiipDfdLc1TRJihMRacNOb5dLCSdsERXOVoaXHQ1VxbY5QHSIMXaVBV3NPz2MAzCk7NlbC2Jl6JdI7bM6VEO9gFcbCLy+AVX4AQYuDf6dlXtZqzJUAKpSxVGQrcAFn65epxrMQPknqSgz5WDO5Ztw0kj3ZcYR5U0yhrXBFbmtiDLHaqyKzdfPq07mn57FcY1SKFGTXKLW3N+TmAsQAawf/DisHYuQgenR6XUbv6GUcCadorl0qlNXxeXmCHvs5MnsoWfw2zpr84lt4X6lJQ8cR5jOp4a+64JTnUBqwqSMMXau/WjN3RGOI4+Z2anBfAhXxLNdXMCkuFtUzVMyk/IbDJi4JXySaFXTJ0w3fGZeg8KgKvRjmyr3Ah5mfCW3uZIa8R4sD1oSkeZqk2HEIyDaJtc73IFrkTpuUsmEajo2V6vgJABW6EeYW4OyI8GkkLJHUvk53RlBfaIokUjJnajV+0KzTlREuZ64M5c6zGyrjoG3z7D1Q1hTwPJf9AuHkwsjq41nAJikOqGqehrx55BnX8hDDRloXnfOvSDFlLEEl8qrybnAtKsWmlZ7sPeJityZ2NoNAX8gQtbV4I6ju9B7r9tGEHvHxFL0k62a+fK821/iz8khFIl0+bdAyNGBcQophKDxMP0t5mbsRVUFahvmatkmDC2kGgwKYps11qn0+uE65yOnKT+3Hv+m1WHcdmNn0e0/wUUVdQzBWzVOE4KP2hww1B4tz18rl+kPOffwNYLQ251jcdav95Lv2gKHkEmJ4hmo4m4E/HcIl7utUxDfzRmYMU6gxEg2/j+whf9P3mlzbeiXkUUa0ONzoMafbys//49/lD386USBTT0CjrWVY0sDtFAFChRgcgaCRjCcePU5+vHYDs76Y0N2tY2i/Nuzn6VqCmz+fuHaMDDDk1xIHZ7DareQL+/SNVRBoYWJiGtx7YRX5ZWht5wDc+ZkcaZ9TnY2lhEt+jkikrI4tKJ3AfQgQSdZPpv+5A7l+feBvDrQy7R9E99obqhGiB2saNVYjuBRS4HdPGLn9WnjktoBL9qf0qynMZTvl/xLefLTSC0xDEPF0brAc0HkEhsAy+Tnr8cV8FmthIH4dyVawpm1LA5E2Boxwu2ZB6kxr2OOIyU/z6a17sOce3yKx7ykI9NtYosdTkT/kobxumlkroM1kJCXLb+6P/O4x5IBZ8KbD0LZJkHmIOmLO7SnStw1+8SO490YY6hfaOgzEgNmpLQ/Upa8kjT/EcTgAZ/ubkG2drOBZ0uRb7MxuZm26qYmK9c/nwOoE1JmfyGBGQ3MdcdJAzuUAHek8Oux76PcZoExyh9EfrmBJdiWCwzpPwGCzndx2zX30PyuoQtKea8iWW+HJ+5GDDkffMB2cKy4iIPfcBHd8H557GkpT8tewerlXOJZU56BxMtgIzmAIhOyTtCeHM+DzyNrh3klfx3ygzEp5EniylkbMHV/Vo05AxXXHqDlWHCNIKESJhS7ZQ8jICvtO6PdVSu79CO+vebc2YKf5E22vOpj+Z/PqxvDXS+2wcwfcfh3y+D0w872Q7VRuuRKeflhwbdD+slyYGkEsaIzsOS0Va3spJa9SX4eMXQI7fbXgqTxVMqLOzLVdE54lUtm9cpDbzUrGsJ8qwrH+NwknMEQAAlNcSl92NaLrEByBPF8z6QCDfxiERv+mMSLGQtsUeOYxuPsW2PoIPHmvMHnvPN3T0IjFRAx9vxlUmx3FTmmDNCJVhydDzel0uNPo9wHUkmIZiDnX84/EGv7ajZpZCxMzUgvpw9FLZBhJF1qW5Xb7619dgZ19MEY+jIqhL1xHf7KAy2T7qJWOunhPisximFyr1W5iANcGsYpqhpSmFIJphhtFgOh/WKm0PTS6TKSL6Qv7InIcIpHt/ltMSi4vAGpdgjv+4qJriSOGNyZ1fkdjDXcZYu6ve68fgiNOZdHAUhJJuLjtgRoumlZMcvPNhqOPjty0Il9Pm1ViOPXLmS4xtlhLGmFH/jMgpDU+aEuvMK0z/+MWhB7pB07iHD2AjECPfYyyGkSUhf7jLAnzycyFrJbv0UsYT3FxREDDHRgapbah+tRXW0S4Wa+xHKdQKUgs1VwpGm8msrFsmMMO4pQHSaYcTnWHLyCEzX/mLzEG1WGSu6kCAkLSbskG7mavp3ZQ6QYqYdTl5vTvIzUhPo0FIjHuS5rMIHIti8PNhHgRFbmp4UJbCMqNkceMCEO1jj+Rke0CTPltPunwTchYN9GtbJSgh/d8QLL+ZRh7CsaArxZcshikuBeNdb6ueGMTR4yBUL1cNe1m48YAG1snqtJUdh4hvzxVIt5XSdzRiDmaReH7aFhOj9w+csGNSHoME6NFUVTGBku7rH8Xi/5y4VMKp3Lkqq8KLMW1H4Vmw7V2O5Lsoajm5RqxoOEGNXIeW67aNC7P2nI/xiAYFFtUag0l9z4yPZ5F4RqGzHJEHm3O88zY2XxT8NL60C857mnfane/x2eD5dbFN+stXf+gMTuVqI9h2hOIBi1KQorBtSUoD2sMH9L7r343W67alNO3u1kN3jp8oJjVfTOfZ8h7ohpS8wna42YWVmc3ND60FJApNEjr8rCRupegATW8C4CfXDaUFxfLZpyVbqV3bqgd9Jaua3SHOYRQXQqmT0Jm8JlFZIeo71ZlFg9c/Z3aGjl9O74svqyGTrVcJkPFwd5J0GZTyIU35AdJTQfRTC20x4yDD2J0JBOxxCxi3btkxqKNKnIhmys3jVREpum4WuyGeepp5ZS7FzyncAGzy9+QV+9/nezZEfWPdxynW77zcNEPkNI7d/ycU1kNW5AaIFyQHYOVMmLnMORj7YDSUJF1eBTs0K6ddFTbinqkviMhhoBxbxe4kZkLf6DKMnp7bh9pcOjcRXPAcE9RQbaV702pvOUhTu5+GEfg2yc8zKfvmMT6Q3fSO7c6rl6fHOvYnHYF5lcPxdglOHMSBhjKIiKN/lWbK7LBjS2gvbcUj5ptLVj65o8MwXtEBJeeIMEfx8yFX1fvV9A798EG8r6JJ6n1FPUC0xfNkLRUkR9/+6exc8MXdWhwEpmJdG6wdBz8GZaEkwnxAipy/djhuCDr86TTc+bgVFJ7DiqnkBhbkPVxVG1PW2ToqjuaGcXRafv0eS8TeBCT7E3wGUZcY/ivQ9TDjQmCxZSEmPWj8UrVuIa71z7VoFH1zVYzzzlATDwb1Y/RtlcJ33+RbrrofJYP3ohznrPcsSzMunm5K7Md0PgjTFjKyrpM/D6UNxf0LcAi3Rd8FyKnkdgpDHpFCQ1dIa1Vz+OShMz/kZI7kBU8Vx95W1ZW7cFnvl9d2quIEDJfqKapgboG6F9rigqIOGwKIfujqF4aNbuMu9c9V5v/LWfuI0lpPiKnY1wHqhDjJh3oew8fXKbsMXmjiGRatcfweywmXIeVt2KNwYeI6jXEsII1dWnGYu1Aw2lAF212HwYjxJC34+gYTI4WABZV0sQRYqSadbKu7drmXE1at7xUIjPOmCPiliPuCDTmrS458q3L1bQRWKoqKgFjEmwKsfq4xLAyit5gojlRje3CJvsSqqBaxTirPpvBitVPsCW7A5dMzSFduJcOexgPVPfHuc1Ejaha2pwhi/0EvoBkXyW6t+FYQmr3r5Wca3iq6YTa1BJjXYIFfLiVweq5XDZp40g5e5f9QYWQAA6e9wkx5jxxbW/Q+mYpkSY7bn4jOSkuAiEbwqYlYshBIQjGOdQ/pJtXH8TK6rl0JBfR56sowh4uoT/MY6G7lAXZQyRuKt7nrTPGOVKBIZ+3wUQghAzqutB0DIghmvdHpgLV+BDql9NTuqax1j+u/qBKhAKr3LPuatV4iPqhiwTdgSu5oosjNHDINfMr8JLgiD4UJlrCVz3q856iYcQ8zOYZaSsiSoA84KK01VKEkUNaYogMeg9iyYIn+ICqGyWcRn47z+DbXILErQxm57LTzKKndA1agNcxIuSuUWl9+92MM6eKuPNAPl50ZtR1stLkn543DObvja1qNnAAn71U6c82Mzl5FQA7w29wdhaPDrSTpg8RJckJs/ruVlGkrkDQUmvyL5G6XJjol8iyFVw66YnxFiPHC9sbO1tnznu7YLsxyTG5oy3aTSgScR2DaGuUUV6lJXxP71x1Ehc/90bapnwUCPRVv8b5k35Dl/8uiT2pyJ1sU9MBLdca7niNRccrgI8/IPgLuaR01+52vO5mG3BT0/iMrg8JcgEufVPezKlZYUKtp1atP1hAxJLuIWQ7vqybV3+qqct1PS9LPsWOIlxLHQLW56E8hx2wA6rhNlQr9CQ/biLqx90K/AIbyTstbMjR8qxPTzKhYx4ii9Qme+EHtXb41kcICAZbMsSsD9V1KnyJPY57ioM6hFmzYE8itw6+Duc+g8gZJHZykSbEltm0Fs1QxrrCAf8PqsvpWfoVqMQX03X/4v4Vod4/zTpzP9HkXKL+Mzax+GoobrRIXCSH+iaxqAfVb2jUpdyz5qHnXWPe4EE4ez7GfgQr9U3lUiPkwNLmhGrYhrKGHdvXsX6vbbvT7vvnEVAr/zTjzNkiroLYfwLJi4IomKQoifjrVXUpd19y69gpSV0KMZxbdVWPwpgKzr4DBbKQ1wBSgSxERL5CNMvokcd2rxvkzy+gOq5nrhnxT/NPEJWzQA8ubOAeRVdx97rv71b2P5ydD2tBl/8ghkUEpgEZws/QeGGtIPgC/+Xg/3A08UMzT38N0xe8tpGxHC9/1CSo+rr/mbofn+3bt6GBoo7o+ssfo9k/KT57kfM2NRmU1fx1CWZXGvWSTdukURNjYkyMiTExJsbEmBgT4yUd/wvhkVNdoV3ItgAAAABJRU5ErkJggg=="><div class="cc-title"><strong>CommandCore</strong><span class="cc-subtitle">AI execution workspace</span></div><span class="live-dot" aria-hidden="true"></span><span id="state" role="status">Connecting…</span></header>
 <nav role="tablist" aria-label="Workspace tabs"><button id="activity-tab" role="tab" type="button" aria-selected="true" aria-controls="activity-pane">Activity</button><button id="browser-tab" role="tab" type="button" aria-selected="false" aria-controls="browser-pane">Browser</button></nav><section id="activity-pane" role="tabpanel" aria-labelledby="activity-tab">
@@ -562,7 +594,7 @@ body[data-cc-activity-stale=true] #feed{opacity:.6}
 <div class="cc-approval-footer"><button type="button" id="cc-approval-refresh">Refresh requests</button></div>
 </div></details>
 <div id="scope-hint" role="status">Checking conversation attribution…</div>
-</details><div class="overview" aria-label="Live execution summary">
+</details><input type="checkbox" id="cc-developer-view" checked hidden aria-hidden="true"><div class="controls" id="cc-developer-policy" hidden>Command details require verified access. Raw output and file diffs are unavailable.</div><div class="overview" aria-label="Live execution summary">
 <div class="metric"><small>Execution</small><strong id="metric-running">Connecting…</strong></div>
 <div class="metric"><small id="metric-device-label">Device</small><strong id="metric-device">—</strong></div>
 <div class="metric"><small>Operations</small><strong id="metric-count">—</strong></div>
@@ -587,7 +619,7 @@ body[data-cc-activity-stale=true] #feed{opacity:.6}
 <section id="browser-stage" aria-label="Browser viewport"><img id="browser-screen" alt="Current remote Chromium screenshot" hidden>
 <div id="browser-message">Ask ChatGPT to open a website to begin.</div><div id="cc-browser-loading" hidden aria-hidden="true"><span class="cc-loading-screen"></span><span class="cc-loading-screen shorter"></span><span class="cc-loading-screen small"></span></div><div id="browser-pointer" hidden aria-hidden="true"></div></section>
 <div class="controls browser-toolbar"><button id="browser-refresh" type="button">Refresh now</button>
-<button id="browser-auto" type="button" aria-pressed="true">Pause live view</button><button id="browser-monitor" type="button" disabled>Open separate monitor ↗</button><button id="browser-take" type="button">Take control</button><button id="browser-continue" type="button" hidden>Continue in ChatGPT →</button></div>
+<button id="browser-auto" type="button" aria-pressed="true">Pause live view</button><button id="browser-stop" type="button" disabled title="Close only this conversation’s Browser. This does not stop the ChatGPT response.">Stop Browser</button><button id="browser-monitor" type="button" disabled>Open separate monitor ↗</button><button id="browser-take" type="button">Take control</button><button id="browser-continue" type="button" hidden>Continue in ChatGPT →</button></div>
 <div id="browser-state" role="status" aria-live="polite">Connecting to your owner-bound Browser…</div>
 <div id="browser-trail" aria-label="Recent AI browser actions"></div>
 </section><div id="cc-release-footer" aria-label="CommandCore UI version">UI 0.12.0 · build 1</div><script id="workspace-runtime">(()=>{"use strict";
@@ -595,19 +627,6 @@ const activity=document.getElementById("activity-pane"),browser=document.getElem
 const activityTab=document.getElementById("activity-tab"),browserTab=document.getElementById("browser-tab");
 let manualTabChoice=false, lastBrowserTaskKey=null;
 window.__ccWorkspaceSuspended=false;
-const minimize=document.createElement("button");
-minimize.id="cc-minimize";minimize.type="button";minimize.textContent="Minimize";
-minimize.setAttribute("aria-expanded","true");minimize.setAttribute("aria-label","Minimize CommandCore workspace");
-document.querySelector("header").append(minimize);
-if(typeof window.openai?.requestClose==="function"){
- const close=document.createElement("button");close.id="cc-close-view";close.type="button";close.textContent="×";
- close.setAttribute("aria-label","Close CommandCore view");close.title="Close this view. Running tasks are not stopped.";
- document.querySelector("header").append(close);
- close.addEventListener("click",async()=>{
-  try{await window.openai.requestClose();}
-  catch(_){close.textContent="Use × above";}
- });
-}
 if(typeof window.openai?.requestDisplayMode==="function"){
  const enlarge=document.createElement("button");enlarge.id="cc-browser-enlarge";enlarge.type="button";enlarge.textContent="Enlarge";
  enlarge.title="Open a larger browser preview";
@@ -617,14 +636,6 @@ if(typeof window.openai?.requestDisplayMode==="function"){
   catch(_){enlarge.textContent="Use expand above";}
  });
 }
-minimize.addEventListener("click",()=>{
- const minimized=document.body.dataset.ccMinimized!=="true";
- document.body.dataset.ccMinimized=String(minimized);
- minimize.textContent=minimized?"Expand":"Minimize";
- minimize.setAttribute("aria-expanded",String(!minimized));
- minimize.setAttribute("aria-label",minimized?"Expand CommandCore workspace":"Minimize CommandCore workspace");
- if(!minimized)window.dispatchEvent(new Event("commandcore:"+document.body.dataset.ccWorkspaceView+"-active"));
-});
 window.addEventListener("pagehide",()=>{window.__ccWorkspaceSuspended=true;});
 window.addEventListener("pageshow",()=>{window.__ccWorkspaceSuspended=false;});
 function select(view){
@@ -677,7 +688,12 @@ output(window.openai?.toolOutput||window.openai?.toolResponseMetadata?.mcp_tool_
 const by=id=>document.getElementById(id);
 let busy=false,paused=false,number=0,sessionRef="",sessionAvailable=false,refreshPending=false;
 let previousActivityIds=null,lastHiddenActivityPoll=0,lastFailureAt=0,attributionBlocked=false,lastRenewedRef=null;
-const scopeKey=()=>JSON.stringify([scopeEl.value,deviceEl.value,sessionRef]);
+const scopeKey=()=>JSON.stringify([scopeEl.value,deviceEl.value,sessionRef,by("cc-developer-view").checked]);
+function setActivityState(label,className){
+ window.__ccActivityBadge={label,className};
+ if(!by("activity-pane").hidden){by("state").textContent=label;by("state").className=className;}
+ window.dispatchEvent(new Event("commandcore:activity-state"));
+}
 let deviceChoices=[],scopeTouched=false;
 const scopeEl=by("activity-scope"),deviceEl=by("activity-device");
 function initScope(fromHost){
@@ -730,6 +746,8 @@ deviceEl.addEventListener("change",()=>{rowCache.clear();refresh(true);});
 const waiting=new Map(),expanded=new Set(),collapsedRunning=new Set();
 const rowCache=new Map();
 window.addEventListener("commandcore:viewer-changed",()=>{
+ setActivityState("Connecting","cc-badge-unavailable");
+ by("cc-developer-view").checked=true;
  previousActivityIds=null;rowCache.clear();expanded.clear();collapsedRunning.clear();
  by("feed").replaceChildren(text("div","Connecting to this conversation…","empty"));
  by("metric-device").textContent="—";by("metric-count").textContent="—";
@@ -747,23 +765,41 @@ function rpc(method,params){
 }
 window.addEventListener("message",e=>{
  if(e.source!==window.parent||e.data?.jsonrpc!=="2.0")return;
+ if(typeof e.data.method==="string"||(!("result" in e.data)&&!("error" in e.data)))return;
  const p=waiting.get(e.data.id);if(!p)return;
  waiting.delete(e.data.id);clearTimeout(p.timer);
- if(e.data.error)p.reject(Error(e.data.error.message||"MCP error"));
+ if(e.data.error)p.reject(Object.assign(Error(e.data.error.message||"MCP error"),{code:e.data.error.code}));
  else p.resolve(e.data.result);
 });
-const bridgeReady=(typeof window.openai?.callTool==="function")
- ?Promise.resolve()
- :rpc("ui/initialize",{
-  protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
-  appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
- }).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"));
+let bridgeMode="mcp";
+const bridgeReady=rpc("ui/initialize",{
+ protocolVersion:"2026-01-26",appInfo:{name:"CommandCore Chat Activity",version:"0.9.0"},
+ appCapabilities:{}
+}).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized",params:{}},"*")).catch(error=>{
+ // A native alias does not establish MCP Apps readiness. Only an explicit
+ // unsupported-method response permits the legacy native bridge fallback.
+ if(error.code===-32601&&typeof window.openai?.callTool==="function"){bridgeMode="native";return;}
+ throw error;
+});
 window.__ccBridgeReady=bridgeReady;window.__ccCallTool=callTool;window.__ccAcceptViewer=initScope;
 async function callTool(name,args){
- await bridgeReady;
- return typeof window.openai?.callTool==="function"
-  ?window.openai.callTool(name,args)
-  :rpc("tools/call",{name,arguments:args});
+ // Some hosts leave callTool pending when a mounted card loses its bridge.
+ // Bound both initialization and the request so viewers can leave loading,
+ // unlock their controls and offer recovery. Never retry a mutation here.
+ let deadline,expired=false;
+ const hostTimeout=()=>Object.assign(Error("CommandCore connection timed out. Refresh to reconnect."),{code:"host_timeout"});
+ try{
+  return await Promise.race([
+   (async()=>{
+    await bridgeReady;
+    if(expired)throw hostTimeout();
+    return bridgeMode==="native"
+     ?window.openai.callTool(name,args)
+     :rpc("tools/call",{name,arguments:args});
+   })(),
+   new Promise((_,reject)=>{deadline=setTimeout(()=>{expired=true;reject(hostTimeout());},15000);})
+  ]);
+ }finally{clearTimeout(deadline);}
 }
 const statusText=x=>({
  running:"Running",started:"Started",ok:"Completed",completed:"Completed",
@@ -791,7 +827,7 @@ function render(list){
  const summary=hasRunningOperation?"Now working":target?"Last used":"No device operation";
  by("cc-current-target").textContent=summary+" · "+(target?.device || "—")+(operation?.tool?" · "+String(operation.tool).slice(0,48):"")+(hasRunningOperation?" · Running":" · Idle");
  by("cc-current-target").classList.toggle("is-running",hasRunningOperation);
- const detail=operation?.detail && typeof operation.detail==="object" ? operation.detail : {};
+ const detail=by("cc-developer-view").checked && operation?.detail && typeof operation.detail==="object" ? operation.detail : {};
  const reportedPath=[detail.cwd,detail.root,detail.repo,detail.path,detail.destination,detail.source].find(v=>typeof v==="string"&&v.trim());
  const reportedEffect=[detail.verified_effect,detail.effect_summary].find(v=>typeof v==="string"&&v.trim());
  by("cc-context-heading").textContent=hasRunningOperation?"Running · "+String(operation?.tool||"Operation").slice(0,60):operation?"Last operation · "+String(operation.tool||"Operation").slice(0,60):"No active operation";
@@ -806,7 +842,10 @@ function render(list){
   return;
  }
  const ordered=[],seen=new Set();
- for(const x of list){
+ for(const raw of list){
+  // Discard detail locally too: a late response or host-supplied payload must
+  // never bypass the explicit per-widget opt-in.
+  const x=by("cc-developer-view").checked?raw:{...raw,detail:null};
   // Exit -15 from a managed process stop is a termination outcome, not a
   // normal command success; scope this display correction to process tools.
   const stoppedBySignal=x.status==="error" && x.exit_code===-15 &&
@@ -816,7 +855,7 @@ function render(list){
   // Deliberately exclude duration from identity: running time changes on
   // every poll but must not destroy keyboard focus or an open detail row.
   const signature=JSON.stringify([
-   x.tool,x.device,x.started_at,status,x.detail||null
+   x.tool,x.device,x.started_at,status,x.exit_code,x.finished_at,x.detail||null
   ]);
   const prior=rowCache.get(id);
   const ms=x.duration_ms;
@@ -843,26 +882,27 @@ function render(list){
   });
   const summary=document.createElement("summary");
   const line=document.createElement("div");line.className="summary-line";
-  line.append(text("span","▾","chevron"),text("span",x.detail?.workflow||x.detail?.action||x.tool||"Operation","heading"),
+  line.append(text("span","▾","chevron"),text("span",x.detail?.command_display ? ("$ "+x.detail.command_display) : (x.detail?.workflow||x.detail?.action||x.tool||"Operation"),"heading"),
    text("span",x.device||"Control plane","device"));
   if(x.detail?.category)line.append(text("span",x.detail.category,"kind-chip"));
-  summary.append(line,text("div",String(x.started_at||"").slice(0,19).replace("T"," "), "timestamp"));
-  if(x.detail?.path||x.detail?.cwd||x.detail?.command_name||x.detail?.image||x.detail?.service){
-   const target=x.detail.path||x.detail.cwd||x.detail.image||x.detail.service||x.detail.command_name;
-   summary.append(text("div",String(target).slice(0,175),"cc-preview"));
+  const clock=String(x.started_at||"").slice(11,19);
+  line.prepend(text("time",clock,"timestamp"));
+  summary.append(line);
+  if(x.detail?.command_display||x.detail?.public_url||x.detail?.path||x.detail?.cwd||x.detail?.command_name||x.detail?.image||x.detail?.service){
+   const target=x.detail.command_display||x.detail.public_url||x.detail.path||x.detail.cwd||x.detail.image||x.detail.service||x.detail.command_name;
+   if(!x.detail.command_display)summary.append(text("div",String(target).slice(0,175),"cc-preview"));
   }
   details.append(summary);
   const data=x.detail;
   if(data&&typeof data==="object"){
    const trace=document.createElement("div");trace.className="trace cc-audit-primary";
-   const technical=document.createElement("details");technical.className="cc-technical";
-   const technicalSummary=document.createElement("summary");technicalSummary.textContent="Technical metadata";
-   technical.appendChild(technicalSummary);
    const technicalTrace=document.createElement("div");technicalTrace.className="trace cc-audit-technical";
    const fields=[
     ["Tool",x.tool],["Category",data.category],["Workflow",data.workflow],["Device",x.device],["Status",statusText(status)],
     ["Requested",data.action],["Confirmed change",data.verified_effect],
-    ["Command",data.command_name||data.command],["Working directory",data.cwd||data.root||data.repo],
+    ["Command",data.command_display||data.command_name],["URL",data.public_url],
+    ["Visibility",data.command_visibility],["Redaction",data.redaction_reason],["URL policy",data.url_visibility],
+    ["Output",data.output_policy==="Raw output is not captured by this Activity feed."?null:data.output_policy],["File diff",data.preview],["Working directory",data.cwd||data.root||data.repo],
     ["Target path",data.path],["From",data.source],["To",data.destination],
     ["Container",data.container||data.container_id],["Image",data.image],["Service",data.service],
     ["Action",data.action&&data.service?data.action:null],["Manager",data.manager],
@@ -876,18 +916,29 @@ function render(list){
    for(const [key,value] of fields){
     if(typeof value!=="string"||!value)continue;
     const entry=document.createElement("div");entry.className="trace-line";
-    entry.append(text("span",key,"trace-label"),text("span",value.slice(0,200),"trace-value"));
-    const secondary=["Tool","Category","Device","Status","Duration","Started","Finished","Execution ID","Operation ID"].includes(key);
-    (secondary?technicalTrace:trace).append(entry);
+    const formatted=key==="Command"?"$ "+value.slice(0,4096):value.slice(0,300);
+    entry.append(text("span",key,"trace-label"),text("span",formatted,"trace-value"));
+    const secondary=["Tool","Category","Device","Status","Duration","Started","Finished","Execution ID","Operation ID","Requested","Visibility","URL policy"].includes(key);
+    if(!secondary)trace.append(entry);
    }
-   if(data.note)trace.append(text("div",String(data.note).slice(0,200),"trace-note"));
-   if(data.effect_limit)trace.append(text("div",String(data.effect_limit).slice(0,220),"trace-note"));
-   if(!data.verified_effect && !data.effect_summary)trace.append(text("div","No independently verified file changes reported for this operation.","trace-note"));
+   if(Array.isArray(data.command_steps) && !(data.command_steps.length===1 && data.command_display)){
+    const steps=document.createElement("ol");steps.className="cc-command-steps";
+    steps.setAttribute("aria-label","Requested command steps (execution within a shell is not independently observed)");
+    data.command_steps.slice(0,12).forEach((step,index)=>{
+     if(typeof step!=="string")return;
+     const item=document.createElement("li");
+     const code=document.createElement("code");code.textContent=step.slice(0,4096);item.append(code);
+     if(index>0&&Array.isArray(data.step_operators))item.prepend(text("small",({"&&":"After success: ","||":"After failure: ","|":"Pipeline: ",";":"Next: "})[data.step_operators[index-1]]||""));
+     steps.append(item);
+    });
+    trace.append(text("div","Requested shell steps · per-step completion is not observed","trace-note"),steps);
+   }
+   if(data.redaction_reason)trace.append(text("div",String(data.redaction_reason),"trace-note"));
    if(trace.children.length)details.append(trace);
    else details.append(text("div",status==="running"?"Operation in progress":"No additional verified details","cc-detail-hint"));
-   if(technicalTrace.children.length){technical.appendChild(technicalTrace);details.append(technical);}
+
   }else{
-   details.append(text("div","Summary only — detailed operations require STANDARD OAuth access.","trace-note"));
+   details.append(text("div","Summary view. Enable Developer steps for verified STANDARD / FULL_CONTROL details.","trace-note"));
   }
   body.append(details);
   // Actionable only for verified managed jobs returned by process.start.
@@ -928,15 +979,37 @@ async function refresh(force=false){
  if(activityHidden && !force && Date.now()-lastHiddenActivityPoll<3500)return;
  if(activityHidden)lastHiddenActivityPoll=Date.now();
  busy=true;
+ const loadingHost=by("activity-pane");
+ if((force || document.body.dataset.ccInitialActivityLoad!=="done") && loadingHost && !loadingHost.querySelector("#cc-activity-loading")){
+   const loading=document.createElement("div");
+   loading.id="cc-activity-loading";
+   loading.setAttribute("role","status");
+   loading.setAttribute("aria-label","Loading activity");
+   loading.innerHTML='<span class="cc-skeleton-bar medium" aria-hidden="true"></span><span class="cc-skeleton-bar short" aria-hidden="true"></span><small>Loading activity…</small>';
+   by("feed").before(loading);
+ }
+ document.body.dataset.ccInitialActivityLoad="done";
+ const startedLoading=Date.now();
+ const feedEl=by("feed");
+ if(feedEl&&!feedEl.querySelector("article")&&!feedEl.querySelector(".cc-skeleton")){
+   const placeholder=document.createElement("div");
+   placeholder.id="empty";
+   placeholder.setAttribute("aria-live","polite");
+   placeholder.innerHTML='<div class="cc-skeleton" aria-hidden="true"><div class="cc-skeleton-card"><span class="cc-skeleton-bar short"></span><span class="cc-skeleton-bar long"></span><span class="cc-skeleton-bar medium"></span></div><div class="cc-skeleton-card"><span class="cc-skeleton-bar medium"></span><span class="cc-skeleton-bar long"></span></div></div><span>Loading activity…</span>';
+   feedEl.replaceChildren(placeholder);
+ }
  const requestedScope=scopeKey();
  try{
   const view=scopeEl.value;
-  const args={limit:35,include_details:true};
+  const args={limit:35,include_details:by("cc-developer-view").checked};
   if(view==="conversation"){args.view="conversation";if(sessionRef)args.session_ref=sessionRef;if(window.__ccTaskId)args.task_id=window.__ccTaskId;}
   if(view==="device"){if(!deviceEl.value)throw Error("Select a device");args.device_id=deviceEl.value;}
   let res=await callTool("activity.feed",args);
   if(res?.isError&&/insufficient_scope|invalid_include_details|STANDARD OAuth/i.test(
    String(res?.structuredContent?.error||"")+" "+String(res?.structuredContent?.message||""))){
+   by("cc-developer-view").checked=false;
+   by("cc-developer-policy").textContent="Developer steps unavailable: verified STANDARD / FULL_CONTROL OAuth access is required.";
+   rowCache.clear();by("feed").replaceChildren();
    args.include_details=false;res=await callTool("activity.feed",args);
   }
   if(res?.isError&&view==="conversation"&&lastRenewedRef!==(sessionRef||"host")&&/invalid_session_view/i.test(JSON.stringify(res?.structuredContent||res?.content||{}))){
@@ -972,8 +1045,7 @@ async function refresh(force=false){
   previousActivityIds=currentIds;
   document.body.dataset.ccActivityStale="false";attributionBlocked=false;by("activity-reconnect").hidden=true;
   if(!activityHidden || !by("activity-pane").hidden)render(payload.events);
-  by("state").textContent=paused?"Paused":"Live";
-  by("state").className=paused?"cc-badge-running":"cc-badge-live";
+  setActivityState(paused?"Paused":"Live",paused?"cc-badge-running":"cc-badge-live");
   by("updated").textContent="Updated "+new Date().toLocaleTimeString();
   by("scope-hint").textContent=view==="conversation"?"This conversation · attributed MCP operations":view==="device"?"Filtered to selected authorized device":"All authorized account activity";
  }catch(e){
@@ -988,10 +1060,17 @@ async function refresh(force=false){
   }
   if(by("metric-running")?.textContent==="Connecting…")by("metric-running").textContent="Unavailable";
   document.body.dataset.ccActivityStale="true";
-  by("state").textContent="Unavailable";
-  by("state").className="cc-badge-unavailable";
+  setActivityState("Unavailable","cc-badge-unavailable");
   by("updated").textContent=attributionBlocked?"Conversation verification unavailable · no other conversation was loaded.":by("feed").querySelector("article")?"Connection lost · previous snapshot. Refresh to reconnect.":"Not connected · no activity snapshot loaded.";
- }finally{busy=false;if(refreshPending){refreshPending=false;refresh(true);}}
+ }finally{
+   const loading=by("cc-activity-loading");
+   if(loading){
+     // Keep a short, readable confirmation even for fast requests, without delaying data rendering.
+     const remaining=Math.max(0,380-(Date.now()-startedLoading));
+     setTimeout(()=>loading.remove(),remaining);
+   }
+   busy=false;if(refreshPending){refreshPending=false;refresh(true);}
+  }
 }
 by("feed").addEventListener("click",async event=>{
   const btn=event.target.closest("button[data-job-action]");
@@ -1048,13 +1127,18 @@ by("feed").addEventListener("click",async event=>{
   }
 });
 function reconnect(){lastRenewedRef=null;attributionBlocked=false;refresh(true);}
+by("cc-developer-view").addEventListener("change",()=>{
+ rowCache.clear();expanded.clear();collapsedRunning.clear();
+ by("feed").replaceChildren(text("div","Refreshing Activity view…","empty"));
+ by("cc-context-path").textContent="—";by("cc-context-effect").textContent="—";
+ refresh(true);
+});
 by("activity-reconnect").addEventListener("click",reconnect);
 by("refresh").addEventListener("click",reconnect);
 by("pause").addEventListener("click",()=>{
  paused=!paused;
  by("pause").textContent=paused?"Resume":"Pause";
- by("state").textContent=paused?"Paused":"Connecting";
- by("state").className="cc-badge-running";
+ setActivityState(paused?"Paused":"Connecting","cc-badge-running");
  if(!paused)refresh(true);
 });
 window.addEventListener("commandcore:activity-active",()=>{if(!deviceChoices.length)loadDevices();refresh(true);});
@@ -1101,6 +1185,8 @@ setTimeout(refresh,450);
   }
   const refreshBtn = document.getElementById("browser-refresh");
   const autoBtn = document.getElementById("browser-auto");
+  const stopBtn = document.getElementById("browser-stop");
+  let stopSession="",closing=false;
   const takeBtn = document.getElementById("browser-take");
   const monitorBtn = document.getElementById("browser-monitor");
   const continueBtn = document.getElementById("browser-continue");
@@ -1135,6 +1221,7 @@ setTimeout(refresh,450);
   let browserSequenceInitialized=false,lastHiddenBrowserPoll=0,viewerGeneration=0;
   window.addEventListener("commandcore:viewer-changed",()=>{
     viewerGeneration++;sequence=-1;cursor=null;recentActions=[];trailSignature="";
+    stopSession="";closing=false;stopBtn.disabled=true;stopBtn.textContent="Stop Browser";
     browserSequenceInitialized=false;browserEmpty=false;browserUnavailable=false;
     paused=false;firstFramePending=false;recoveryState("agent");monitorUrl=null;monitorBtn.disabled=true;
     continueBtn.hidden=true;takeBtn.disabled=true;trail.replaceChildren();
@@ -1165,18 +1252,14 @@ setTimeout(refresh,450);
     : rpc("ui/initialize", {
         protocolVersion:"2026-01-26",
         appInfo:{name:"CommandCore Live Browser",version:"0.9.0"},
-        appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+        appCapabilities:{}
       }).then(() => {
         window.parent.postMessage(
           {jsonrpc:"2.0",method:"ui/notifications/initialized"}, "*"
         );
       });
   async function callTool(name,args={}) {
-    await bridgeReady;
-    if(typeof window.openai?.callTool === "function") {
-      return window.openai.callTool(name,args);
-    }
-    return rpc("tools/call",{name,arguments:args});
+    return window.__ccCallTool(name,args);
   }
   async function openLink(url) {
     await bridgeReady;
@@ -1254,6 +1337,9 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
   window.addEventListener("resize", updatePointer);
   function show(data) {
     const page = data.structuredContent || {};
+    stopSession=typeof page.session_id==="string"&&page.session_id.length<=128?page.session_id:"";
+    stopBtn.disabled=closing||!stopSession||page.state!=="agent";
+    stopBtn.title=page.state==="awaiting_human"?"Resume AI control in the private window before stopping this Browser.":"Close only this conversation’s Browser. This does not stop the ChatGPT response.";
     setMonitorLink(data);
     if(typeof page.session_id==="string"&&page.session_id){
       window.dispatchEvent(new CustomEvent("commandcore:browser-session",{detail:{session_id:page.session_id}}));
@@ -1355,7 +1441,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
     return response;
   }
   async function refresh(force=false) {
-    if(busy||document.hidden||document.body.dataset.ccOperationCompact==="true"||window.__ccWorkspaceSuspended||document.body.dataset.ccMinimized==="true")return;
+    if(busy||closing||document.hidden||document.body.dataset.ccOperationCompact==="true"||window.__ccWorkspaceSuspended||document.body.dataset.ccMinimized==="true")return;
     const browserHidden=document.getElementById("browser-pane").hidden;
     if(browserHidden && !force && Date.now()-lastHiddenBrowserPoll<3500)return;
     if(browserHidden)lastHiddenBrowserPoll=Date.now();
@@ -1390,6 +1476,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
         document.getElementById("browser-control").textContent="No session";
         host.textContent="No active browser session";
         document.getElementById("browser-url").textContent="—";
+        stopSession="";stopBtn.disabled=true;
         takeBtn.disabled=true;continueBtn.hidden=true;
         trail.replaceChildren();
         hide("Ask ChatGPT to open a website to begin a new browser session.");
@@ -1397,14 +1484,43 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
         return;
       }
       browserEmpty=false;browserUnavailable=true;firstFramePending=false;lastUnavailablePoll=Date.now();
+      stopSession="";stopBtn.disabled=true;
       recoveryState("unavailable");
       if(/another conversation owns|browser_conversation_in_use/i.test(String(err?.message||""))){recoveryTitle.textContent="Browser active in another conversation";recoveryDesc.textContent=safeError(err);}
       document.getElementById("browser-session").textContent="Unavailable";
       host.textContent="Browser status unavailable";
       document.getElementById("browser-url").textContent="—";
       hide(safeError(err));status(safeError(err));takeBtn.disabled=true;document.getElementById("browser-control").textContent="Unavailable";
-    } finally {busy=false;refreshBtn.disabled=false;if(handoffPending){handoffPending=false;requestHandoff();}}
+    } finally {busy=false;refreshBtn.disabled=closing;if(handoffPending){handoffPending=false;requestHandoff();}}
   }
+  stopBtn.addEventListener("click",async()=>{
+    if(closing||stopBtn.disabled||!stopSession)return;
+    const expected=stopSession,current=++viewerGeneration;
+    closing=true;handoffPending=false;stopBtn.disabled=true;stopBtn.textContent="Stopping…";refreshBtn.disabled=true;takeBtn.disabled=true;
+    document.getElementById("browser-control").textContent="Stopping";
+    hide("Stopping this conversation’s Browser…");status("Stop requested · waiting for server confirmation");
+    try{
+      const result=await tool("browser.close",{session_ref:window.__ccBrowserViewerRef||"",expected_session_id:expected});
+      if(current!==viewerGeneration)return;
+      const payload=result?.structuredContent||result?.result?.structuredContent||result;
+      if(typeof payload?.closed!=="boolean")throw Error("Browser stop was not confirmed");
+      stopSession="";sequence=-1;cursor=null;browserEmpty=true;browserUnavailable=false;lastEmptyPoll=Date.now();
+      host.textContent=payload.closed?"Browser stopped":"No active browser session";
+      document.getElementById("browser-url").textContent="—";
+      document.getElementById("browser-control").textContent=payload.closed?"Stopped":"No session";
+      continueBtn.hidden=true;trail.replaceChildren();
+      hide(payload.closed?"This Browser is closed. Ask ChatGPT to open a website to start again.":"No Browser was closed. This session was already absent.");
+      status(payload.closed?"Browser stopped · server confirmed closure":"No active Browser · no closure performed");
+    }catch(_){
+      if(current!==viewerGeneration)return;
+      stopSession="";browserUnavailable=true;lastUnavailablePoll=Date.now();
+      recoveryState("unavailable");host.textContent="Browser stop unconfirmed";
+      document.getElementById("browser-control").textContent="Unverified";
+      status("Stop could not be confirmed. Refresh to check the session before trying again. No automatic retry was sent.");
+    }finally{
+      if(current===viewerGeneration){closing=false;stopBtn.disabled=true;stopBtn.textContent="Stop Browser";refreshBtn.disabled=false;}
+    }
+  });
   function stopAuto() {
     automatic=false;
     autoBtn.textContent="Resume live view";
@@ -1419,6 +1535,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
   refreshBtn.addEventListener("click",()=>refresh(true));
   setInterval(()=>{if(automatic&&!document.hidden)refresh();},1200);
   async function requestHandoff(){
+    if(closing)return;
     browserEmpty=false;
     // Keep the read-only viewer synchronized while private human control is active.
     // The server suppresses all human frames, but the viewer can detect Resume.
@@ -1448,7 +1565,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
     if(event.source !== window.parent) return;
     const msg=event.data;
     if(!msg || msg.jsonrpc!=="2.0") return;
-    if(msg.id !== undefined && pending.has(msg.id)){
+    if(msg.id !== undefined && typeof msg.method!=="string" && ("result" in msg||"error" in msg) && pending.has(msg.id)){
       const p=pending.get(msg.id);pending.delete(msg.id);clearTimeout(p.timeout);
       if(msg.error)p.reject(Error(msg.error.message || "MCP UI error"));
       else p.resolve(msg.result);
@@ -1492,9 +1609,10 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
    subtitle.textContent="Live execution workspace";
    const name=metric?.textContent||"";
    device.textContent=name&&name!=="Control plane" ? name : "Device: —";
-   if(badge.textContent.trim()==="Unavailable"){badge.className="cc-badge-unavailable";}
-   else if(active?.classList.contains("active")){badge.textContent="● Running";badge.className="cc-badge-running";}
-   else if(badge.textContent==="Live"||badge.textContent==="Connecting"||badge.textContent==="● Running"){badge.textContent="● Live";badge.className="cc-badge-live";}
+   const activityState=window.__ccActivityBadge||{label:"Connecting",className:"cc-badge-unavailable"};
+   const running=activityState.label==="Live"&&active?.classList.contains("active");
+   badge.textContent=running?"● Running":activityState.label==="Live"?"● Live":activityState.label;
+   badge.className=running?"cc-badge-running":activityState.className;
   }
  }
  const browserFlow=document.createElement("section");
@@ -1512,17 +1630,19 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
    const human=mode.includes("human");
    const working=mode.includes("working");
    const stateMessage=(by("browser-state")?.textContent||"").toLowerCase();
-   const noSession=!human&&(/session ended safely|no browser session|session invalidated|worker restarted/.test(stateMessage));
-   const unavailable=mode.includes("unavailable")||mode.includes("connecting")||noSession;
+   const stopped=mode==="stopped",stopping=mode==="stopping";
+   const noSession=!human&&(mode==="no session"||/session ended safely|no browser session|no active browser|session invalidated|worker restarted/.test(stateMessage));
+   const unknown=mode.includes("unavailable")||mode.includes("unverified");
+   const unavailable=unknown||mode.includes("connecting")||noSession||stopped;
    browserFlow.dataset.ccEmpty=noSession?"true":"false";
    if(noSession){
     by("cc-control-title").textContent="No active browser session";
     by("cc-control-text").textContent="Ask ChatGPT to open a website using CommandCore Browser.";
    }
    const actionFailure=/failed|timed out|timeout|error/i.test((by("browser-state")?.textContent||""));
-   badge.textContent=human?"● Your action needed":noSession?"○ No session":mode.includes("unavailable")?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
+   badge.textContent=human?"● Your action needed":stopping?"◌ Stopping":stopped?"○ Stopped":noSession?"○ No session":unknown?"○ Unavailable":unavailable?"○ Connecting":actionFailure?"⚠ Interaction failed":working?"◌ AI working":"● AI control";
    badge.className=human?"cc-badge-action":unavailable?"cc-badge-unavailable":"cc-badge-live";
-   by("cc-control-title").textContent=human?"Private human control":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
+   by("cc-control-title").textContent=human?"Private human control":stopping?"Stopping Browser":stopped?"Browser stopped":noSession?"No active browser session":unavailable?"Browser connection":"AI browser control";
    by("cc-control-text").textContent=human?"AI frames and input are disabled by the browser server until you resume through the authenticated handoff.":noSession?"No session is running. Ask ChatGPT to open a website with CommandCore Browser. No recovery or login action is needed.":(by("browser-state")?.textContent||"Waiting for browser").slice(0,230);
    const sessionText=by("browser-session")?.textContent||"";
    const sessionKnown=human||(!unavailable&&!sessionText.startsWith("No active")&&sessionText!=="Unavailable");
@@ -1540,6 +1660,7 @@ function safeError(err){const raw=String(err?.message||""); if(/another conversa
  if(control)new MutationObserver(updateBrowser).observe(control,observed);
  if(by("browser-state"))new MutationObserver(updateBrowser).observe(by("browser-state"),observed);
  if(by("browser-host"))new MutationObserver(updateBrowser).observe(by("browser-host"),observed);
+ window.addEventListener("commandcore:activity-state",updateActivity);
  window.addEventListener("commandcore:activity-active",()=>queueMicrotask(updateActivity));
  window.addEventListener("commandcore:browser-active",()=>queueMicrotask(updateBrowser));
  updateActivity();

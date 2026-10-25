@@ -561,6 +561,15 @@ async def dashboard() -> HTMLResponse:
     return HTMLResponse("<h1>CommandCore</h1><p>Web assets not found.</p>")
 
 
+@app.get("/commandcore.webmanifest")
+async def commandcore_manifest() -> Response:
+    return Response(
+        web_asset("commandcore.webmanifest").read_bytes(),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/panel.css")
 @app.get("/onboarding.css")
 @app.get("/legacy-admin.css")

@@ -8,7 +8,13 @@ const inlineHeight=(intrinsic,hint,min)=>Math.max(intrinsic??hint??480,min??200)
   const p=await browser.newPage({viewport:{width,height:850}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
   // This parent owns iframe height, as Codex does. Content cannot resize its parent directly.
   await p.setContent('<style>body{margin:0}iframe{border:0;display:block;width:100%}</style><iframe title="CommandCore test"></iframe>');
-  await p.evaluate(({metadata})=>{const frame=document.querySelector('iframe');frame.height=String(Math.max(metadata['openai/widgetHeightHint']??480,metadata['openai/widgetMinFrameHeight']??200));window.acceptHeight=h=>{frame.height=String(Math.max(h,metadata['openai/widgetMinFrameHeight']??200))};window.addEventListener('message',e=>{if(e.source===frame.contentWindow&&e.data?.method==='ui/notifications/size-changed')window.acceptHeight(e.data.params.height)});},{metadata});
+  await p.evaluate(({metadata})=>{const frame=document.querySelector('iframe');frame.height=String(Math.max(metadata['openai/widgetHeightHint']??480,metadata['openai/widgetMinFrameHeight']??200));window.acceptHeight=h=>{frame.height=String(Math.max(h,metadata['openai/widgetMinFrameHeight']??200))};window.addEventListener('message',e=>{
+  if(e.source!==frame.contentWindow)return;
+  if(e.data?.jsonrpc==='2.0'&&e.data.method==='ui/initialize'){
+    frame.contentWindow.postMessage({jsonrpc:'2.0',id:e.data.id,error:{code:-32601,message:'Offline iframe fixture uses native tool alias'}},'*');
+  }
+  if(e.data?.method==='ui/notifications/size-changed')window.acceptHeight(e.data.params.height);
+ });},{metadata});
   const boot=`<script>(()=>{const id='12345678-1234-4234-8234-123456789abc';window.task={id,total:8,ended:null,running:0,failed:0,last_tool:'shell.exec',device:'test-device'};window.openai={toolOutput:{task_id:id,task:window.task,session_available:true,session_ref:'fixture'},callTool:async n=>n==='activity.feed'?{structuredContent:{task:window.task,events:[{tool:'shell.exec',status:'ok',device:'test-device',detail:{path:'/tmp/fixture'}}]}}:{structuredContent:{devices:[]}},requestDisplayMode:async()=>{}};if('${channel}'==='openai')window.openai.notifyIntrinsicHeight=h=>parent.acceptHeight(h);if('${channel}'==='throwing-openai')window.openai.notifyIntrinsicHeight=()=>{throw Error('Unsupported host channel')};})();<\/script>`;
   const html=fs.readFileSync(path.join(process.env.COMMANDCORE_UI_FIXTURES,'task-rendered.html'),'utf8').replace('<head>','<head>'+boot);
   await p.locator('iframe').evaluate((e,html)=>{e.srcdoc=html},html);const f=p.frameLocator('iframe');

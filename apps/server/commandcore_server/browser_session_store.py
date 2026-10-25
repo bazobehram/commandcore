@@ -6,7 +6,6 @@ same authenticated owner may explicitly resume it while the token is valid.
 """
 
 from __future__ import annotations
-
 import base64
 import hashlib
 import json
@@ -17,7 +16,6 @@ import time
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-
 from .browser_worker_binding import BrowserWorkerBinding, WorkerOwnershipError
 
 _BOOT = Path("/proc/sys/kernel/random/boot_id")

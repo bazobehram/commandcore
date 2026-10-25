@@ -1,1 +1,9 @@
-{"private":true,"devDependencies":{"playwright":"1.56.1"}}
+{
+  "private": true,
+  "devDependencies": {
+    "playwright": "1.56.1"
+  },
+  "scripts": {
+    "test:graphite": "node test_graphite_browser.cjs && node test_graphite_owner.cjs && node test_graphite_responsive.cjs && node test_onboarding_ui.cjs && node test_live_updates.cjs"
+  }
+}
