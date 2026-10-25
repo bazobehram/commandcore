@@ -325,7 +325,7 @@ class BrowserGateway:
             for owner, entry in list(self.sessions.items()):
                 if not entry.paused_for_human and self._idle_expired(entry):
                     try:
-                        await self._release(owner, expected_session_id=entry.id)
+                        await self._release(owner, expected_session_id=entry.id, require_idle=True)
                     except Exception:
                         pass  # Keep owner binding and retry; never transfer the worker.
                     continue
@@ -854,6 +854,7 @@ class BrowserGateway:
         *,
         expected_session_id: str | None = None,
         allow_expired_human: bool = False,
+        require_idle: bool = False,
     ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
@@ -864,6 +865,14 @@ class BrowserGateway:
                     raise BrowserError(
                         "Browser session changed; refresh before stopping"
                     )
+                # Recheck under the action lock. The idle sweeper must not
+                # close a session that became active while waiting to release.
+                if require_idle and (
+                    entry.paused_for_human or entry.action_running
+                    or time.monotonic() - entry.last_interaction_mono
+                    < self.idle_timeout_seconds
+                ):
+                    return {"closed": False, "reason": "session_active"}
                 # An agent cannot terminate a browser while the operator is
                 # typing credentials or approving a sensitive action.
                 if entry.paused_for_human:

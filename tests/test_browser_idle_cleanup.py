@@ -47,3 +47,36 @@ def test_idle_cleanup_cannot_reassign_owner():
     g._bound_owner = owner
     assert g._idle_expired(entry)
     assert g._bound_owner == owner
+
+
+def test_idle_release_rechecks_after_activity():
+    async def check():
+        g = gateway()
+        owner = ("issuer", "subject", "client")
+        entry = OwnedSession("test")
+        entry.last_interaction_mono = time.monotonic() - 1000
+        g.sessions[owner] = entry
+        # Activity resumes after the sweep initially considers it expired.
+        entry.last_interaction_mono = time.monotonic()
+        result = await g._release(owner, expected_session_id="test", require_idle=True)
+        assert result["closed"] is False
+        assert owner in g.sessions
+        # An explicit close remains separately authorized, not altered by
+        # the idle-sweeper's conditional release path.
+    asyncio.run(check())
+
+
+def test_handoff_cannot_be_closed_by_idle_sweeper():
+    async def check():
+        g = gateway()
+        owner = ("issuer", "subject", "client")
+        entry = OwnedSession("test")
+        entry.last_interaction_mono = time.monotonic() - 1000
+        entry.paused_for_human = True
+        entry.handoff_token = "private"
+        entry.handoff_until = time.monotonic() + 400
+        g.sessions[owner] = entry
+        result = await g._release(owner, expected_session_id="test", require_idle=True)
+        assert result["closed"] is False
+        assert owner in g.sessions
+    asyncio.run(check())
