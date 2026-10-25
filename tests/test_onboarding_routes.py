@@ -26,7 +26,9 @@ def panel(tmp_path):
             subject,
             "test-panel",
             "oauth2-panel",
-            ("commandcore:read", "commandcore:standard", "commandcore:full") if request.headers.get("test-full-scope") == "yes" else ("commandcore:read", "commandcore:standard"),
+            ("commandcore:read", "commandcore:standard", "commandcore:full")
+            if request.headers.get("test-full-scope") == "yes"
+            else ("commandcore:read", "commandcore:standard"),
         )
 
     class Agents:
@@ -270,17 +272,36 @@ def test_managed_permission_upgrade_requires_full_scope_online_local_helper(pane
     full = {**headers, "test-full-scope": "yes"}
     body = {"profile": "FULL_CONTROL", "expected_profile": "STANDARD"}
     assert client.put(path, headers=operator("stranger"), json=body).status_code == 404
-    assert client.put(path, headers={"test-subject": "operator"}, json=body).status_code == 403
+    assert (
+        client.put(path, headers={"test-subject": "operator"}, json=body).status_code
+        == 403
+    )
     assert client.put(path, headers=headers, json=body).status_code == 403
     assert client.put(path, headers=full, json=body).status_code == 409
     agents.online_ids = [device_id]
     assert client.put(path, headers=full, json=body).status_code == 409
-    db.mark_online(device_id, ip="127.0.0.1", agent_version="candidate", capabilities={"privileged_helper": True, "local_max_permission_profile": "FULL_CONTROL"}, agent_protocol_version="1")
+    db.mark_online(
+        device_id,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={
+            "privileged_helper": True,
+            "local_max_permission_profile": "FULL_CONTROL",
+        },
+        agent_protocol_version="1",
+    )
     response = client.put(path, headers=full, json=body)
     assert response.status_code == 200, response.text
     assert db.get_device(device_id)["permission_profile"] == "FULL_CONTROL"
     assert client.put(path, headers=full, json=body).status_code == 409
-    assert client.put(path, headers=headers, json={"profile": "STANDARD", "expected_profile": "FULL_CONTROL"}).status_code == 200
+    assert (
+        client.put(
+            path,
+            headers=headers,
+            json={"profile": "STANDARD", "expected_profile": "FULL_CONTROL"},
+        ).status_code
+        == 200
+    )
     assert db.get_device(device_id)["permission_profile"] == "STANDARD"
 
 
@@ -290,10 +311,28 @@ def test_full_grant_needs_full_scope_and_active_helper(panel):
     path = "/api/managed-devices/" + did
     full = {**operator(), "test-full-scope": "yes"}
     body = {"subject": "other", "profile": "FULL_CONTROL"}
-    assert client.put(path+"/grants", headers=full, json=body).status_code == 403
-    db.mark_online(did, ip="127.0.0.1", agent_version="candidate", capabilities={"privileged_helper": True, "local_max_permission_profile": "FULL_CONTROL"}, agent_protocol_version="1")
-    assert client.put(path+"/grants", headers=full, json=body).status_code == 409
+    assert client.put(path + "/grants", headers=full, json=body).status_code == 403
+    db.mark_online(
+        did,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={
+            "privileged_helper": True,
+            "local_max_permission_profile": "FULL_CONTROL",
+        },
+        agent_protocol_version="1",
+    )
+    assert client.put(path + "/grants", headers=full, json=body).status_code == 409
     agents.online_ids = [did]
-    assert client.put(path+"/permissions", headers=full, json={"profile": "FULL_CONTROL", "expected_profile": "STANDARD"}).status_code == 200
-    assert client.put(path+"/grants", headers=operator(), json=body).status_code == 403
-    assert client.put(path+"/grants", headers=full, json=body).status_code == 200
+    assert (
+        client.put(
+            path + "/permissions",
+            headers=full,
+            json={"profile": "FULL_CONTROL", "expected_profile": "STANDARD"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.put(path + "/grants", headers=operator(), json=body).status_code == 403
+    )
+    assert client.put(path + "/grants", headers=full, json=body).status_code == 200
