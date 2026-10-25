@@ -249,40 +249,71 @@ addEventListener('hashchange',()=>showPanel(location.hash.slice(1),false));
 let activityRefresh=null;
 async function loadActivity(){
     const target=$('activity');
+    const selectedDevice=target.querySelector('#activityDevice')?.value;
     target.replaceChildren();
-    const title=document.createElement('h2');title.textContent='Recent Activity';
-    const hint=document.createElement('p');hint.textContent='Select a device to view its owner-authorized operation history.';
-    const picker=document.createElement('select');picker.setAttribute('aria-label','Select activity device');
-    const results=document.createElement('div');results.className='activity-results';
+    target.classList.add('activity-workspace');
+    const title=document.createElement('h2');title.textContent='Activity';
+    const hint=document.createElement('p');hint.textContent='Owner-authorized operations with results and audit details.';
+    const toolbar=document.createElement('div');toolbar.className='activity-toolbar';
+    const picker=document.createElement('select');picker.id='activityDevice';picker.setAttribute('aria-label','Select activity device');
+    const search=document.createElement('input');search.type='search';search.placeholder='Search operations';search.setAttribute('aria-label','Search operations');
+    const status=document.createElement('select');status.setAttribute('aria-label','Filter operation status');
+    for(const [value,label] of [['all','All statuses'],['ok','Successful'],['error','Errors'],['running','Running']]){
+      const option=document.createElement('option');option.value=value;option.textContent=label;status.append(option);
+    }
     for(const d of state.devices.filter(d=>!d.revoked_at)){
         const option=document.createElement('option');option.value=d.id;option.textContent=d.display_name;picker.append(option);
     }
-    target.append(title,hint,picker,results);
-    let lastEvents=null;
+    if([...picker.options].some(o=>o.value===selectedDevice))picker.value=selectedDevice;
+    toolbar.append(picker,search,status);
+    const results=document.createElement('div');results.className='activity-results';
+    target.append(title,hint,toolbar,results);
+    let lastFingerprint=null,lastEvents=[],generation=0;
+    function render(){
+      const term=search.value.toLowerCase().trim(),filter=status.value;
+      const filtered=lastEvents.filter(e=>{
+        const outcome=String(e.status||'unknown').toLowerCase();
+        const isError=['error','failed','failure','denied'].includes(outcome);
+        const isRunning=['running','pending','started','in_progress'].includes(outcome);
+        if(filter==='ok'&&!['ok','completed','success'].includes(outcome))return false;
+        if(filter==='error'&&!isError)return false;
+        if(filter==='running'&&!isRunning)return false;
+        return !term||[e.tool,e.status,e.operation_id,e.device].some(v=>String(v||'').toLowerCase().includes(term));
+      });
+      results.replaceChildren();
+      if(!filtered.length){results.textContent=lastEvents.length?'No matching operations.':'No recent operations.';return}
+      for(const event of filtered.slice(0,60)){
+        const entry=document.createElement('details');entry.className='activity-entry';
+        entry.dataset.status=String(event.status||'unknown').toLowerCase();
+        const summary=document.createElement('summary');
+        summary.textContent=String(event.tool||'Operation')+' · '+String(event.status||'unknown')+(event.duration_ms==null?'':' · '+event.duration_ms+' ms');
+        const detail=document.createElement('pre');
+        // Audit details are escaped; event values are never interpreted as markup.
+        detail.textContent=JSON.stringify(event,null,2);
+        entry.append(summary,detail);results.append(entry);
+      }
+    }
     const update=async()=>{
-        if(!picker.value){results.textContent='No accessible devices.';return}
-        if(lastEvents===null)results.textContent='Loading activity…';
-        try{
-            const data=await api('/api/devices/'+encodeURIComponent(picker.value)+'/activity');
-            if(activePanel!=='activity')return;
-            results.replaceChildren();
-            const events=Array.isArray(data.events)?data.events:[];
-            const fingerprint=JSON.stringify(events);if(fingerprint===lastEvents)return;lastEvents=fingerprint;
-            if(!events.length){results.textContent='No recent operations.';return}
-            for(const event of events.slice(0,30)){
-                const entry=document.createElement('details');entry.className='activity-entry';
-                const summary=document.createElement('summary');
-                summary.textContent=String(event.tool||'Operation')+' · '+String(event.status||'unknown')+(event.duration_ms==null?'':' · '+event.duration_ms+' ms');
-                entry.dataset.status=String(event.status||'unknown').toLowerCase();
-                const meta=document.createElement('pre');
-                // Escaping via textContent prevents execution of untrusted receipts.
-                meta.textContent=JSON.stringify(event,null,2);
-                entry.append(summary,meta);results.append(entry);
-            }
-        }catch(e){results.textContent=String(e.message||'Activity unavailable')}
+      if(!picker.value){results.textContent='No accessible devices.';return}
+      const requestedDevice=picker.value,requestGeneration=++generation;
+      if(lastFingerprint===null)results.textContent='Loading activity…';
+      try{
+        const data=await api('/api/devices/'+encodeURIComponent(requestedDevice)+'/activity');
+        if(activePanel!=='activity'||requestGeneration!==generation||picker.value!==requestedDevice)return;
+        const events=Array.isArray(data.events)?data.events:[];
+        const fingerprint=JSON.stringify(events);
+        if(fingerprint===lastFingerprint)return;
+        lastFingerprint=fingerprint;lastEvents=events;render();
+      }catch(e){
+        if(requestGeneration===generation&&picker.value===requestedDevice)
+          results.textContent=String(e.message||'Activity unavailable');
+      }
     };
-    picker.onchange=()=>{lastEvents=null;update()};activityRefresh=update;await update();
+    picker.onchange=()=>{lastFingerprint=null;lastEvents=[];update()};
+    search.oninput=render;status.onchange=render;
+    activityRefresh=update;await update();
 }
+
 function browserUiState(message){
     const status=$('browserStatus');status.textContent=message;
     const lower=String(message).toLowerCase();

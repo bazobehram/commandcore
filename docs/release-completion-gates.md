@@ -3,7 +3,7 @@
 Updated 2026-10-25. This document distinguishes evidence from release approval.
 
 ## Verified in this pass
-- PR #43 head 59f6b48 is draft and production homeserver remains healthy.
+- PR #43 head 59f6b48 is draft and production private server remains healthy.
 - GitHub CI on PR #43: policy, DCO, release candidate, Windows, security, Browser UI, Rust, Linux, Python passed at the last check.
 - Actual browser.open -> browser.observe -> browser.close succeeded for a disposable browser session.
 - `PYTHONPATH=apps/server:agent pytest -q tests/test_onboarding_routes.py tests/test_update_lifecycle.py tests/test_browser_security_boundaries.py`: 36 passed.
