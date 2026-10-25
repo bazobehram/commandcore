@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import subprocess
+import os
 import tempfile
 import unittest
 
@@ -29,6 +30,7 @@ class LinuxInstallStatePreflightTests(unittest.TestCase):
             ["python3", "-c", self.preflight, str(target or self.target)],
             text=True,
             capture_output=True,
+            env={**os.environ, "HOME": str(self.base)},
         )
 
     def test_fresh_install_creates_secure_state(self):
@@ -50,6 +52,43 @@ class LinuxInstallStatePreflightTests(unittest.TestCase):
         self.assertEqual(self.run_preflight().returncode, 0)
         for folder in (self.target, jobs, device):
             self.assertEqual(folder.stat().st_mode & 0o777, 0o700)
+
+    def test_user_config_group_writable_is_repaired(self):
+        config = self.base / ".config"
+        config.mkdir(mode=0o775)
+        target = config / "commandcore"
+        result = self.run_preflight(target)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(config.stat().st_mode & 0o777, 0o755)
+
+    def test_unrelated_group_writable_parent_is_denied(self):
+        (self.base / "config").chmod(0o775)
+        self.assertNotEqual(self.run_preflight().returncode, 0)
+
+    def test_legacy_service_check_is_structurally_guarded(self):
+        installer = INSTALLER.read_text()
+        block = installer.split("<<'PY_UNIT'", 1)[1].split("\nPY_UNIT", 1)[0]
+        original = self.base / "commandcore-agent.service"
+        install = self.base / "install" / "commandcore-agent"
+        install.mkdir(parents=True)
+        (install / ".commandcore-install").write_text("commandcore-agent\n")
+        state = self.base / "config" / "commandcore"
+        exe = f'ExecStart="{install}/current/commandcore-agent" run --state "{state}/agent.json"'
+        legacy = bytes.fromhex(
+            "23204d616e616765642062792053796e6f76617120436f6d6d616e64436f7265"
+        ).decode()
+        for first, line, expected in (
+            (legacy, exe, True),
+            (legacy, "ExecStart=/tmp/other", False),
+            ("# Unrelated", exe, False),
+        ):
+            original.write_text(first + "\n" + line + "\n")
+            result = subprocess.run(
+                ["python3", "-c", block, str(original), str(install), str(state)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode == 0, expected, result.stderr)
 
     def test_state_symlink_denied(self):
         safe = self.base / "real"
