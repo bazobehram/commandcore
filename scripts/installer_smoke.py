@@ -51,7 +51,8 @@ def main():
         public = base64.b64encode(
             key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
         ).decode()
-        binary = b"#!/bin/sh\nprintf 'isolated installer fixture\\n'\n"
+        binary_path = os.environ.get('COMMANDCORE_ACCEPTANCE_BINARY')
+        binary = Path(binary_path).read_bytes() if binary_path else Path(binary_path).read_bytes() if binary_path else b"#!/bin/sh\nprintf 'isolated installer fixture\\n'\n"
         (web / "agent").write_bytes(binary)
 
         def manifest(version="1.0.0-rc1", signer=key):
@@ -216,7 +217,8 @@ def main():
                             "numeric-prerelease-order",
                             "uninstall-preserves-identity",
                         ],
-                        "scope": "installer integrity; fixture executable and service, no enrollment claim",
+                        "scope": ("installer lifecycle; provided binary with temporary test signing manifest and mock service, no enrollment claim"
+                                  if binary_path else "installer integrity; fixture executable and service, no enrollment claim"),
                     }
                 )
             )
