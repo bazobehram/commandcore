@@ -160,8 +160,52 @@ fi
 if [ -e "$unit_root/$service_name" ]; then
   [ "$(head -n 1 "$unit_root/$service_name")" = '# Managed by CommandCore' ] || { echo 'An unrelated service already exists.' >&2; exit 2; }
 fi
-mkdir -p "$install_root/releases" "$state_root" "$bin_root"
-chmod 700 "$install_root" "$state_root"
+# Match the Agent's managed-job trust boundary before enrollment. Do not
+# silently chmod an existing HOME, symlink, or shared parent directory.
+python3 - "$state_root" <<'PY_CHECK_DIR'
+import os, pathlib, stat, sys
+path = pathlib.Path(sys.argv[1]).absolute()
+uid = os.geteuid()
+for ancestor in reversed((path.parent, *path.parent.parents)):
+    if not ancestor.exists() and not ancestor.is_symlink():
+        # A fresh user may not have ~/.config yet. Create missing parents
+        # securely; never repair preexisting shared or foreign-owned parents.
+        ancestor.mkdir(mode=0o700)
+    info = ancestor.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, uid):
+        raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (owner mismatch or symlink)")
+    if info.st_mode & 0o022 and not (info.st_uid == 0 and info.st_mode & stat.S_ISVTX):
+        raise SystemExit(f"Unsafe CommandCore state ancestor: {ancestor} (writable by group/others)")
+if path.is_symlink():
+    raise SystemExit(f"Unsafe CommandCore state directory symlink: {path}")
+if path.exists():
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid:
+        raise SystemExit(f"Unsafe CommandCore state directory: {path} (not owned by current user)")
+    # This is the CommandCore-owned state directory, so tightening is safe.
+    path.chmod(0o700)
+else:
+    path.mkdir(mode=0o700)
+# Managed jobs belong to CommandCore. Repair legacy directory modes only
+# when ownership and type are verified; never follow symlinks.
+for child in (path / 'managed-jobs',):
+    if child.is_symlink():
+        raise SystemExit(f"Unsafe CommandCore managed-job symlink: {child}")
+    if child.exists():
+        info = child.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid:
+            raise SystemExit(f"Unsafe CommandCore managed-job directory: {child}")
+        child.chmod(0o700)
+        for device_dir in child.iterdir():
+            if device_dir.is_symlink():
+                raise SystemExit(f"Unsafe CommandCore device-job symlink: {device_dir}")
+            info = device_dir.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid:
+                raise SystemExit(f"Unsafe CommandCore device-job directory: {device_dir}")
+            device_dir.chmod(0o700)
+PY_CHECK_DIR
+mkdir -p "$install_root/releases" "$bin_root"
+chmod 700 "$install_root"
 printf '%s\n' 'commandcore-agent' > "$install_root/.commandcore-install"
 python3 - "$install_root" "$service_name" "$systemd_config_home" "$bin_root" <<'PY'
 import json,pathlib,sys
