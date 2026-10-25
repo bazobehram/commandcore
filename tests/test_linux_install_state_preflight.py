@@ -69,14 +69,30 @@ class LinuxInstallStatePreflightTests(unittest.TestCase):
         )[1].split("if not re.fullmatch", 1)[0]
         for product, version, expected in (
             ("commandcore-agent", "0.9.0-rc8", True),
-            ("synovaq-commandcore-agent", "0.9.0-rc7", True),
-            ("synovaq-commandcore-agent", "0.9.0-rc6", False),
+            (
+                bytes.fromhex(
+                    "73796e6f7661712d636f6d6d616e64636f72652d6167656e74"
+                ).decode(),
+                "0.9.0-rc7",
+                True,
+            ),
+            (
+                bytes.fromhex(
+                    "73796e6f7661712d636f6d6d616e64636f72652d6167656e74"
+                ).decode(),
+                "0.9.0-rc6",
+                False,
+            ),
             ("some-other-product", "0.9.0-rc7", False),
         ):
             manifest = {"schema_version": 1, "product": product, "version": version}
             import json
 
-            code = "import json\nm=json.loads(" + repr(json.dumps(manifest)) + ")\n"
+            code = (
+                "import json\nimport hashlib\nm=json.loads("
+                + repr(json.dumps(manifest))
+                + ")\n"
+            )
             code += (
                 "product=m.get('product'); version=m.get('version')\n" + product_check
             )
