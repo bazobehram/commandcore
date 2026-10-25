@@ -169,6 +169,21 @@ permissionForm.innerHTML='<h3>Permission controls</h3><p class="muted">Server pe
     (eligible?'<p class="muted">This device allows Full Control locally. Update an authorized account grant below if your server policy and OAuth scope also allow it.</p>':'<p class="muted" role="status">Full Control cannot be enabled remotely: this device has a '+esc(displayPermissionName(ceiling))+' local ceiling'+(helper?'':', and no privileged helper')+'. Configure and approve the higher ceiling locally on the Linux device first, then refresh this panel. Your current device access remains unchanged.</p>')+
     '<p class="muted">Server policy cannot currently be edited from this panel. No unsupported permission request will be sent.</p>';
 section.prepend(permissionForm);
+const setup=document.createElement('details');
+setup.className='detail-disclosure';
+setup.id='cc-full-control-setup';
+const summary=document.createElement('summary');
+summary.textContent=eligible?'Full Control capability is available':'Set up Full Control capability';
+const explanation=document.createElement('p');
+explanation.className='muted';
+explanation.textContent=eligible?'This device reports a healthy privileged helper. Your active access still depends on server policy and your account grant.':'Full Control capability requires a one-time, explicit approval on the Linux computer. The local privileged helper must be installed and verified before the panel can activate Full Control. This is not a server approval or an account subject problem.';
+setup.append(summary,explanation);
+const requirements=document.createElement('p');
+requirements.className='muted';
+requirements.textContent='Current device: local ceiling '+ceiling+'; privileged helper '+(helper?'available':'not available')+'. Do not change local security files or execute unverified privileged installers.';
+setup.append(requirements);
+section.prepend(setup);
+
 const currentSubject=state.session?.subject;
 if(currentSubject){
     const subjectInput=form.elements.subject;
