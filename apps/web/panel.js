@@ -169,6 +169,40 @@ permissionForm.innerHTML='<h3>Permission controls</h3><p class="muted">Server pe
     (eligible?'<p class="muted">This device allows Full Control locally. Update an authorized account grant below if your server policy and OAuth scope also allow it.</p>':'<p class="muted" role="status">Full Control cannot be enabled remotely: this device has a '+esc(displayPermissionName(ceiling))+' local ceiling'+(helper?'':', and no privileged helper')+'. Configure and approve the higher ceiling locally on the Linux device first, then refresh this panel. Your current device access remains unchanged.</p>')+
     '<p class="muted">Server policy cannot currently be edited from this panel. No unsupported permission request will be sent.</p>';
 section.prepend(permissionForm);
+const activeForm=document.createElement('form');
+activeForm.className='device-active-permission-form';
+const activeLabel=document.createElement('label');
+activeLabel.textContent='Active device permission';
+const activeSelect=document.createElement('select');
+activeSelect.name='profile';
+activeSelect.setAttribute('aria-label','Active device permission');
+const oauthScopes=Array.isArray(state.session?.scopes)?state.session.scopes:[];
+const oauthCanFull=oauthScopes.includes('commandcore:full')||['panel-cookie','bootstrap-bearer'].includes(state.session?.auth_kind);
+const levels=['READ_ONLY','STANDARD','FULL_CONTROL'];
+for(const level of levels){
+    const option=document.createElement('option');
+    option.value=level;
+    option.textContent=displayPermissionName(level);
+    option.disabled=level==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull)||level==='STANDARD'&&ceiling==='READ_ONLY';
+    if(level===d.permission_profile)option.selected=true;
+    activeSelect.append(option);
+}
+activeLabel.append(activeSelect);
+const activeSave=document.createElement('button');
+activeSave.type='submit';activeSave.textContent='Save active permission';
+const activeInfo=document.createElement('p');activeInfo.className='muted';
+activeInfo.textContent='Changes apply to this device server policy. Individual account grants and OAuth scopes remain separate; local approval is required before this device can offer Full Control.';
+activeForm.append(activeLabel,activeSave,activeInfo);
+activeForm.onsubmit=e=>{
+    e.preventDefault();
+    const profile=activeSelect.value;
+    if(profile===d.permission_profile)return;
+    if(profile==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull)){error(Error('Full Control requires an online device, healthy locally approved helper and a Full Control OAuth scope.'));return;}
+    if(!confirm('Change server permission for '+d.display_name+' from '+displayPermissionName(d.permission_profile)+' to '+displayPermissionName(profile)+'?'))return;
+    activeSave.disabled=true;
+    action('/api/managed-devices/'+encodeURIComponent(d.id)+'/permissions','PUT',{profile,expected_profile:d.permission_profile}).finally(()=>{activeSave.disabled=false});
+};
+permissionForm.append(activeForm);
 const setup=document.createElement('details');
 setup.className='detail-disclosure';
 setup.id='cc-full-control-setup';
@@ -195,6 +229,39 @@ if(currentSubject){
     if(prior?.max_permission_profile==='FULL_CONTROL')grantSelector.value='FULL_CONTROL';
     const hint=document.createElement('p');hint.className='muted';hint.textContent='Current signed-in account prefilled. Effective access is limited by OAuth, server policy, account grant, and local device ceiling.';
     form.append(hint);
+    // Keep raw subject delegation in an advanced section. Daily self-access needs no account ID.
+    const grantAdvanced=document.createElement('details');
+    grantAdvanced.className='detail-disclosure';
+    const grantAdvancedSummary=document.createElement('summary');
+    grantAdvancedSummary.textContent='Advanced: delegate access to another account';
+    grantAdvanced.append(grantAdvancedSummary,form);
+    section.append(grantAdvanced);
+    const myForm=document.createElement('form');
+    myForm.className='my-account-access-form';
+    const myLabel=document.createElement('label');
+    myLabel.textContent='My account permission';
+    const mySelect=document.createElement('select');
+    mySelect.setAttribute('aria-label','My account permission');
+    for(const level of ['READ_ONLY','STANDARD','FULL_CONTROL']){
+        const opt=document.createElement('option');opt.value=level;
+        opt.textContent=displayPermissionName(level);
+        opt.disabled=level==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull||d.permission_profile!=='FULL_CONTROL')||level==='STANDARD'&&ceiling==='READ_ONLY';
+        if(level===(prior?.max_permission_profile||'READ_ONLY'))opt.selected=true;
+        mySelect.append(opt);
+    }
+    myLabel.append(mySelect);
+    const mySave=document.createElement('button');mySave.type='submit';mySave.textContent='Save my access';
+    myForm.append(myLabel,mySave);
+    myForm.onsubmit=e=>{
+        e.preventDefault();
+        if(mySelect.value==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull||d.permission_profile!=='FULL_CONTROL')){
+            error(Error('Full Control cannot be granted until the device and account are fully authorized.'));return;
+        }
+        if(!confirm('Change permission for your account on '+d.display_name+' to '+displayPermissionName(mySelect.value)+'?'))return;
+        mySave.disabled=true;
+        action('/api/managed-devices/'+encodeURIComponent(d.id)+'/grants','PUT',{subject:currentSubject,profile:mySelect.value}).finally(()=>{mySave.disabled=false});
+    };
+    section.prepend(myForm);
     const originalSubmit=form.onsubmit;
     form.onsubmit=e=>{
         if(form.elements.profile.value==='FULL_CONTROL'&&(!eligible||d.permission_profile!=='FULL_CONTROL')){e.preventDefault();hint.textContent='Full Control requires local agent approval and Full Control server permission first.';return;}
