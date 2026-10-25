@@ -1,4 +1,5 @@
 """Regression tests for the Linux agent managed-job filesystem trust boundary."""
+
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,7 +12,9 @@ class LinuxInstallStatePreflightTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         source = INSTALLER.read_text()
-        cls.preflight = source.split("python3 - \"$state_root\" <<'PY_CHECK_DIR'", 1)[1].split("\nPY_CHECK_DIR", 1)[0]
+        cls.preflight = source.split("python3 - \"$state_root\" <<'PY_CHECK_DIR'", 1)[
+            1
+        ].split("\nPY_CHECK_DIR", 1)[0]
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="cc-preflight-")
@@ -22,7 +25,11 @@ class LinuxInstallStatePreflightTests(unittest.TestCase):
         self.target = self.base / "config" / "commandcore"
 
     def run_preflight(self, target=None):
-        return subprocess.run(["python3", "-c", self.preflight, str(target or self.target)], text=True, capture_output=True)
+        return subprocess.run(
+            ["python3", "-c", self.preflight, str(target or self.target)],
+            text=True,
+            capture_output=True,
+        )
 
     def test_fresh_install_creates_secure_state(self):
         self.assertEqual(self.run_preflight().returncode, 0)
