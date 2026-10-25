@@ -15,7 +15,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
-from .auth import STANDARD_SCOPE, scope_allows
+from .auth import FULL_SCOPE, STANDARD_SCOPE, scope_allows
 from .enrollment import EnrollmentService
 from .security import issue_panel_session, token_hash
 from .web_assets import web_page
@@ -100,7 +100,12 @@ class ManagedRename(BaseModel):
 
 class ManagedGrant(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
-    profile: Literal["READ_ONLY", "STANDARD"] = "READ_ONLY"
+    profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"] = "READ_ONLY"
+
+
+class ManagedPermission(BaseModel):
+    profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"]
+    expected_profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"]
 
 
 def install_routes(
@@ -428,6 +433,46 @@ def install_routes(
             )
         return {"ok": True}
 
+    @app.put("/api/managed-devices/{device_id}/permissions")
+    async def set_managed_permission(
+        device_id: str,
+        body: ManagedPermission,
+        request: Request,
+        principal=authenticated,
+    ):
+        mutation(request, principal)
+        device = manager(principal, device_id)
+        if not device or device["revoked_at"]:
+            raise HTTPException(409, "device revoked")
+        if body.profile == "FULL_CONTROL":
+            if not scope_allows(principal.scopes, FULL_SCOPE):
+                raise HTTPException(403, "full scope required")
+            if device["id"] not in await agents.online_device_ids():
+                raise HTTPException(
+                    409, "device must be online before enabling Full Control"
+                )
+            if not device["capabilities"].get("privileged_helper", False):
+                raise HTTPException(409, "local privileged helper not ready")
+        with db.lock:
+            current = db.get_device(device_id)
+            if not current or current["revoked_at"]:
+                raise HTTPException(409, "device revoked")
+            if current["permission_profile"] != body.expected_profile:
+                raise HTTPException(409, "device permission changed; refresh and retry")
+            try:
+                if not db.set_permission(current["owner_id"], device_id, body.profile):
+                    raise HTTPException(404, "device not found")
+            except RuntimeError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            service._audit(
+                principal.subject,
+                "enrollment.device.permission",
+                device_id,
+                device_id,
+                {"previous": body.expected_profile, "profile": body.profile},
+            )
+        return {"ok": True, "profile": body.profile}
+
     @app.put("/api/managed-devices/{device_id}/grants")
     async def grant_managed(
         device_id: str, body: ManagedGrant, request: Request, principal=authenticated
@@ -435,8 +480,22 @@ def install_routes(
         mutation(request, principal)
         device = manager(principal, device_id)
         local = device["capabilities"].get("local_max_permission_profile", "READ_ONLY")
-        if local == "READ_ONLY" and body.profile != "READ_ONLY":
+        rank = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
+        if rank[body.profile] > rank.get(local, 0):
             raise HTTPException(403, "grant exceeds local ceiling")
+        if body.profile == "FULL_CONTROL":
+            if not scope_allows(principal.scopes, FULL_SCOPE):
+                raise HTTPException(403, "full scope required")
+            if device["permission_profile"] != "FULL_CONTROL" or not device[
+                "capabilities"
+            ].get("privileged_helper", False):
+                raise HTTPException(
+                    409, "Full Control is not active and healthy on this device"
+                )
+            if device_id not in await agents.online_device_ids():
+                raise HTTPException(
+                    409, "device must be online before granting Full Control"
+                )
         if body.subject == settings.bootstrap_subject:
             raise HTTPException(400, "registry owner cannot receive a delegated grant")
         with db.lock, db.conn:
