@@ -428,7 +428,7 @@ $('browserTakeover').onclick=async()=>{
 setInterval(()=>{if(activePanel==='browser'&&!browserLivePaused&&!document.hidden)refreshBrowserFrame()},2500);
 
 const linuxCommands=[
-    ['install','Install CommandCore','curl -fsSL https://commandcore.synovaq.org/install/linux | sh'],
+    ['install','Install CommandCore','curl -fsSL '+location.origin+'/install/linux | sh'],
     ['status','Check connection status','commandcore-agent status'],
     ['activity','Watch CommandCore activity','commandcore-agent activity'],
     ['follow','Watch live service logs','journalctl --user -u commandcore-agent.service -f'],
