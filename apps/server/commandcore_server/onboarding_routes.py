@@ -481,6 +481,8 @@ def install_routes(
                 raise HTTPException(403, "full scope required")
             if device["permission_profile"] != "FULL_CONTROL" or not device["capabilities"].get("privileged_helper", False):
                 raise HTTPException(409, "Full Control is not active and healthy on this device")
+            if device_id not in await agents.online_device_ids():
+                raise HTTPException(409, "device must be online before granting Full Control")
         if body.subject == settings.bootstrap_subject:
             raise HTTPException(400, "registry owner cannot receive a delegated grant")
         with db.lock, db.conn:
