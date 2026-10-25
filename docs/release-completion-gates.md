@@ -39,3 +39,8 @@ Do not merge, restart, upgrade agents, or deploy Oracle merely because these che
 - Published Linux x86_64 and ARM64 binaries both passed signed-manifest SHA-256 and size verification: 11,320,248 and 10,772,688 bytes respectively.
 - No agent upgrade or re-enrollment was performed.
 - Still required: disposable legacy upgrade and rollback tests, preserved device identities and service isolation, signed newer artifacts, and new installer cutover acceptance.
+
+## Additional isolated safety regression (2026-10-25)
+- On current release-candidate source, `PYTHONPATH=apps/server:agent pytest -q tests/test_linux_install_state_preflight.py tests/test_browser_live_frames.py tests/test_browser_journey.py tests/test_browser_consequential_action_guard.py`: 45 passed.
+- Checks include safe first-install filesystem ownership, legacy-service structural verification, rejection of unsafe symlinks, Browser live frames, navigation and consequential-action protection.
+- These are isolated tests only; they do not confirm signed newer artifact installation on a disposable Linux machine, Android soft-keyboard behavior, cross-conversation live conflict handling, or Oracle public tenant isolation.
