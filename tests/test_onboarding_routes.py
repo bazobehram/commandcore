@@ -303,7 +303,9 @@ def test_managed_permission_upgrade_requires_full_scope_online_local_helper(pane
         == 200
     )
     assert db.get_device(device_id)["permission_profile"] == "STANDARD"
-    events = client.get(path.replace("/permissions", "/audit"), headers=full).json()["events"]
+    events = client.get(path.replace("/permissions", "/audit"), headers=full).json()[
+        "events"
+    ]
     assert any(event["tool"] == "enrollment.device.permission" for event in events)
 
 
