@@ -32,3 +32,10 @@ Updated 2026-10-25. This document distinguishes evidence from release approval.
 - Verify public service health and compare installer SHA-256 in read-only mode.
 
 Do not merge, restart, upgrade agents, or deploy Oracle merely because these checks are green.
+
+## Public agent release integrity verified (2026-10-25)
+- Public Linux installer differs from tracked install/linux.sh; do not replace it with a UI deployment.
+- Public release manifest version 0.9.0-rc7 has a valid Ed25519 signature verified against the public key pinned by the deployed installer.
+- Published Linux x86_64 and ARM64 binaries both passed signed-manifest SHA-256 and size verification: 11,320,248 and 10,772,688 bytes respectively.
+- No agent upgrade or re-enrollment was performed.
+- Still required: disposable legacy upgrade and rollback tests, preserved device identities and service isolation, signed newer artifacts, and new installer cutover acceptance.
