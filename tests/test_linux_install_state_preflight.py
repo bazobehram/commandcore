@@ -62,6 +62,31 @@ class LinuxInstallStatePreflightTests(unittest.TestCase):
         (self.target / "managed-jobs").symlink_to(self.base, target_is_directory=True)
         self.assertNotEqual(self.run_preflight().returncode, 0)
 
+    def test_signed_manifest_product_compatibility(self):
+        source = INSTALLER.read_text()
+        product_check = source.split(
+            "product=m.get('product'); version=m.get('version')", 1
+        )[1].split("if not re.fullmatch", 1)[0]
+        for product, version, expected in (
+            ("commandcore-agent", "0.9.0-rc8", True),
+            ("synovaq-commandcore-agent", "0.9.0-rc7", True),
+            ("synovaq-commandcore-agent", "0.9.0-rc6", False),
+            ("some-other-product", "0.9.0-rc7", False),
+        ):
+            manifest = {"schema_version": 1, "product": product, "version": version}
+            import json
+
+            code = "import json\nm=json.loads(" + repr(json.dumps(manifest)) + ")\n"
+            code += (
+                "product=m.get('product'); version=m.get('version')\n" + product_check
+            )
+            result = subprocess.run(
+                ["python3", "-c", code], capture_output=True, text=True
+            )
+            self.assertEqual(
+                result.returncode == 0, expected, (product, version, result.stderr)
+            )
+
     def test_untrusted_parent_denied(self):
         parent = self.base / "config"
         parent.chmod(0o777)
