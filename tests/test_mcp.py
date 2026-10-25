@@ -99,8 +99,11 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
         "commandcore.viewer",
         "commandcore.finish",
         "commandcore.workspace",
+        # V4 production compatibility: retain these separately audited tools.
+        "operation.render",
+        "shell.native",
     }
-    assert len(CORE_TOOL_NAMES) == 48
+    assert len(CORE_TOOL_NAMES) == 50
     response = await handler.handle(
         await request_for("tools/call", {"name": "system.reboot", "arguments": {}}),
         Principal("owner"),

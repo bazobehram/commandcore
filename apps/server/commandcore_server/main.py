@@ -23,14 +23,8 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .agent_gateway import AgentManager
-from .auth import ADMIN_SCOPE, ALL_SCOPES, OAuthSettings, OAuthVerifier, scope_allows
-from .browser_console import install_browser_console
-from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
-from .browser_viewer import install_browser_viewer
-from .browser_worker_attestation import WorkerAttestationVerifier
-from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
-from .browser_worker_binding import BrowserWorkerBinding
-from .browser_worker_pool import OwnerBrowserWorkerPool
+from .web_assets import web_asset, web_page
+from .auth import ALL_SCOPES, ADMIN_SCOPE, OAuthSettings, OAuthVerifier, scope_allows
 from .config import Settings
 from .db import Database
 from .fleet import FleetRolloutService
@@ -44,7 +38,13 @@ from .security import (
     panel_session_claims,
 )
 from .tools import CORE_TOOL_DEFINITIONS, TOOL_DEFINITIONS, ToolError, ToolService
-from .web_assets import web_asset, web_page
+from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
+from .browser_worker_binding import BrowserWorkerBinding
+from .browser_worker_pool import OwnerBrowserWorkerPool
+from .browser_worker_attestation import WorkerAttestationVerifier
+from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
+from .browser_console import install_browser_console
+from .browser_viewer import install_browser_viewer
 
 settings = Settings()
 settings.validate()
@@ -110,16 +110,9 @@ visible_tools = (
 )
 visible_core_tools = CORE_TOOL_DEFINITIONS + (
     [
-        {
-            **t,
-            "description": "CommandCore canonical endpoint /mcp/core. "
-            + t["description"],
-        }
-        for t in TOOL_DEFINITIONS
-        if t["name"] in BROWSER_TOOL_NAMES
-    ]
-    if browser
-    else []
+        {**t, "description": "CommandCore canonical endpoint /mcp/core. " + t["description"]}
+        for t in TOOL_DEFINITIONS if t["name"] in BROWSER_TOOL_NAMES
+    ] if browser else []
 )
 fleet = FleetRolloutService(db, agents)
 branding_icons = [
@@ -289,7 +282,7 @@ def _authenticate_bearer(
     if oauth_verifier is not None:
         try:
             return oauth_verifier.verify(token)
-        except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
+        except Exception:
             return None
     return None
 
@@ -406,13 +399,29 @@ async def heartbeat_monitor() -> None:
         db.expire_stale_devices(time.time() - settings.heartbeat_timeout_seconds)
 
 
+async def browser_idle_monitor():
+    while True:
+        await asyncio.sleep(30)
+        try:
+            await tools.reap_idle_browsers(600)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Browser idle cleanup failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(heartbeat_monitor())
+    browser_idle_task = asyncio.create_task(browser_idle_monitor())
     try:
         yield
     finally:
         task.cancel()
+        browser_idle_task.cancel()
+        try:
+            await browser_idle_task
+        except asyncio.CancelledError:
+            pass
         try:
             await task
         except asyncio.CancelledError:
@@ -1305,7 +1314,7 @@ def _account_activity_response(
         if isinstance(value, (float, int)):
             return value
         try:
-            return datetime.fromisoformat(str(value)).timestamp()
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
             return 0
 

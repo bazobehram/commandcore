@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from .browser_gateway import BrowserError, BrowserGateway
+from .browser_worker_binding import BrowserWorkerBinding, WorkerOwnershipError
 from .browser_worker_attestation import (
     BrowserAttestationError,
     WorkerAttestationVerifier,
 )
 from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
-from .browser_worker_binding import BrowserWorkerBinding, WorkerOwnershipError
 
 ProofVerifier = WorkerAttestationVerifier | Ed25519WorkerAttestationVerifier
 from urllib.parse import urlsplit
@@ -76,7 +76,7 @@ class OwnerBrowserWorkerPool:
         allow_hosts: tuple[str, ...],
         public_base_url: str,
         attestation: ProofVerifier | None = None,
-    ) -> OwnerBrowserWorkerPool:
+    ) -> "OwnerBrowserWorkerPool":
         source = Path(path)
         try:
             parent = source.parent.stat()
@@ -92,7 +92,7 @@ class OwnerBrowserWorkerPool:
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError("browser worker manifest unavailable") from exc
         if not isinstance(body, dict) or not isinstance(body.get("workers"), list):
-            raise ValueError("browser worker manifest requires workers list")  # noqa: TRY004 - invalid external data
+            raise ValueError("browser worker manifest requires workers list")
         workers = []
         for row in body["workers"]:
             if (
@@ -212,6 +212,12 @@ class OwnerBrowserWorkerPool:
         except (BrowserError, WorkerOwnershipError):
             return False
         return True
+
+    async def reap_idle(self, idle_seconds: float = 600.0):
+        removed = []
+        for worker in self.workers:
+            removed.extend(await worker.reap_idle(idle_seconds))
+        return removed
 
     async def call(
         self,
