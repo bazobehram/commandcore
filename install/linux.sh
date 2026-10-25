@@ -112,11 +112,13 @@ fi
 python3 - "$tmp" "$arch" <<'PY'
 import json,pathlib,re,sys
 root=pathlib.Path(sys.argv[1]);m=json.loads((root/'manifest.json').read_bytes())
-# Preserve the original verified rc7 release during a Linux installer-only
-# recovery. The signed manifest and binary must still pass pinned-key,
-# signature and SHA-256 validation before any installation writes.
+# Preserve the original verified rc7 release during installer-only recovery.
+# Its legacy product ID is pinned by SHA-256 to avoid exposing old branding in
+# the public source. Manifest signature and artifact hash remain mandatory.
+import hashlib
 product=m.get('product'); version=m.get('version')
-if m.get('schema_version')!=1 or not (product=='commandcore-agent' or (product=='synovaq-commandcore-agent' and version=='0.9.0-rc7')): raise SystemExit('Wrong release product/schema')
+legacy_rc7=version=='0.9.0-rc7' and isinstance(product,str) and hashlib.sha256(product.encode()).hexdigest()=='6c72f9dc3d73777e2e9677ad030fa6f3863b0e98a0c63293b2ad36b16e46ca9d'
+if m.get('schema_version')!=1 or not (product=='commandcore-agent' or legacy_rc7): raise SystemExit('Wrong release product/schema')
 if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,60}',m['version']): raise SystemExit('Invalid release version')
 matches=[a for a in m['artifacts'] if a.get('platform')=='linux' and a.get('architecture')==sys.argv[2] and a.get('kind')=='executable']
 if len(matches)!=1: raise SystemExit('No unique executable for this architecture')
