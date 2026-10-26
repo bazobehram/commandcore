@@ -1,6 +1,8 @@
 from pathlib import Path
 import os
-from scripts.full_control_preflight import inspect
+import runpy
+
+inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "full_control_preflight.py"))["inspect"]
 
 
 def test_absent_helper_fails_closed(tmp_path):
