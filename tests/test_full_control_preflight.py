@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 import runpy
 
 inspect = runpy.run_path(
