@@ -5,7 +5,6 @@ import base64
 import hashlib
 import json
 from pathlib import Path
-from urllib.parse import urlsplit
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 def verify(directory: Path, public_key_b64: str, version: str, repo: str) -> None:
