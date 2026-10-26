@@ -1,0 +1,84 @@
+name: Publish verified Linux privileged helper
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Actions run containing externally signed helper assets
+        required: true
+        type: string
+      version:
+        description: Version of the signed helper (e.g. 0.9.0-rc8)
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-helper-${{ inputs.version }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: agent-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography
+      - name: Retrieve externally signed bundle
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          name: linux-helper-signed-release
+          path: signed-helper
+          github-token: ${{ github.token }}
+      - name: Verify signature and digest before publishing
+        env:
+          RELEASE_PUBLIC_KEY: ${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_PUBLIC_KEY"
+          python - <<'PY'
+          import json, os, pathlib, re
+          root=pathlib.Path('signed-helper')
+          version=os.environ['RELEASE_VERSION']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?',version):
+              raise SystemExit('Invalid version')
+          files={p.name for p in root.iterdir()}
+          expected={'manifest.signed.json','commandcore-helper-linux-x86_64.tar.gz'}
+          if files!=expected or any(p.is_symlink() or not p.is_file() for p in root.iterdir()):
+              raise SystemExit('Expected exactly one signed manifest and helper bundle')
+          m=json.loads((root/'manifest.signed.json').read_text())
+          if m.get('version')!=version or m.get('product')!='commandcore-agent':
+              raise SystemExit('Signed release identity mismatch')
+          entries=m.get('artifacts')
+          if not isinstance(entries,list) or len(entries)!=1:
+              raise SystemExit('Expected one helper artifact entry')
+          a=entries[0]
+          if a.get('filename')!='commandcore-helper-linux-x86_64.tar.gz' or a.get('kind')!='privileged-helper' or a.get('architecture')!='x86_64':
+              raise SystemExit('Signed artifact target mismatch')
+          PY
+          python scripts/verify_signed_helper.py \
+            --manifest signed-helper/manifest.signed.json \
+            --artifact signed-helper/commandcore-helper-linux-x86_64.tar.gz \
+            --architecture x86_64 \
+            --trusted-public-key-b64 "$RELEASE_PUBLIC_KEY"
+      - name: Publish immutable prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="helper-v${RELEASE_VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Existing helper release; refusing overwrite" >&2
+            exit 1
+          fi
+          gh release create "$tag" \
+            signed-helper/commandcore-helper-linux-x86_64.tar.gz \
+            signed-helper/manifest.signed.json \
+            --title "CommandCore Linux helper ${RELEASE_VERSION}" \
+            --notes "Externally signed privileged-helper candidate. Local root authorization remains required." \
+            --prerelease
