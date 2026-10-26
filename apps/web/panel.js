@@ -35,7 +35,7 @@ function displayPermissionName(v){return ({FULL_CONTROL:'Full Control',READ_ONLY
 function permissionDisplay(device,expanded=false){
     const summary=permissionSummary(device);
     const oauthLimited=summary.limiting.some(layer=>layer.label==='OAuth');
-    const action=oauthLimited?'<a class="button permission-reconnect" href="/auth/login">Reconnect to update OAuth permissions</a>':'';
+    const action=oauthLimited?'<a class="button permission-reconnect" href="/auth/login?access=full">Sign in with Full Control scope</a>':'';
     const details=expanded?`<p class="muted">Effective permission is the lowest applicable access layer.</p><dl class="permission-layers">${summary.layers.map(layer=>`<dt>${esc(layer.label)}</dt><dd class="${summary.limiting.includes(layer)?'permission-limiter':''}">${esc(displayPermissionName(layer.display??layer.profile??'Not reported'))}${summary.limiting.includes(layer)?' · limiting':''}<div class="muted">${esc(String(layer.note).replaceAll('FULL_CONTROL','Full Control').replaceAll('READ_ONLY','Read Only').replaceAll('STANDARD','Standard'))}</div></dd>`).join('')}</dl>`:'';
     return `<div class="permission-summary"><div class="permission-effective">Effective permission: <strong>${esc(displayPermissionName(summary.profile))}</strong><p class="permission-reason">${esc(summary.reason.replaceAll('FULL_CONTROL','Full Control').replaceAll('READ_ONLY','Read Only').replaceAll('STANDARD','Standard'))}</p>${action}</div>${details}</div>`;
 }
