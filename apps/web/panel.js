@@ -216,6 +216,33 @@ const requirements=document.createElement('p');
 requirements.className='muted';
 requirements.textContent='Current device: local ceiling '+ceiling+'; privileged helper '+(helper?'available':'not available')+'. Do not change local security files or execute unverified privileged installers.';
 setup.append(requirements);
+if(!eligible){
+    const checklist=document.createElement('ol');
+    checklist.className='full-control-setup-checklist';
+    const items=[
+        {done:helper,label:'Verified privileged helper installed and healthy',detail:'Install a genuinely signed privileged helper with explicit local OS approval. Never run an unsigned installer.'},
+        {done:ceiling==='FULL_CONTROL',label:'Local device ceiling approved for Full Control',detail:'Confirm the new local ceiling on the device itself; the server cannot override a lower local ceiling.'},
+        {done:d.permission_profile==='FULL_CONTROL',label:'Server device permission approved',detail:'An authorized server administrator must approve Full Control after local readiness is verified.'}
+    ];
+    for(const item of items){
+        const row=document.createElement('li');
+        row.textContent=(item.done?'Complete: ':'Required: ')+item.label+'. '+item.detail;
+        checklist.append(row);
+    }
+    setup.append(checklist);
+    const start=document.createElement('button');
+    start.type='button';
+    start.className='button';
+    start.textContent='Enable Full Control — view setup';
+    start.setAttribute('aria-controls',setup.id);
+    start.onclick=()=>{setup.open=true;setup.scrollIntoView({block:'nearest',behavior:'smooth'});};
+    permissionForm.append(start);
+    const note=document.createElement('p');
+    note.className='muted';
+    note.textContent='This opens the required setup steps; it does not change access or install software. Guided signed installation will be available only after its local approval and rollback tests pass.';
+    permissionForm.append(note);
+}
+
 section.prepend(setup);
 
 const currentSubject=state.session?.subject;
