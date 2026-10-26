@@ -83,3 +83,23 @@ def test_modified_bytes_rejected(tmp_path):
             archive.addfile(item, io.BytesIO(data))
     with pytest.raises(ValueError, match="size"):
         module.inspect_bundle(path)
+
+
+def test_tar_symlink_rejected(tmp_path):
+    path = fixture_bundle(tmp_path)
+    with tarfile.open(path, "r:gz") as archive:
+        parts = [(m.name, archive.extractfile(m).read()) for m in archive]
+    path.unlink()
+    with tarfile.open(path, "w:gz") as archive:
+        for name, data in parts:
+            if name.endswith(".whl"):
+                entry = tarfile.TarInfo(name)
+                entry.type = tarfile.SYMTYPE
+                entry.linkname = "/etc/shadow"
+                archive.addfile(entry)
+            else:
+                entry = tarfile.TarInfo(name)
+                entry.size = len(data)
+                archive.addfile(entry, io.BytesIO(data))
+    with pytest.raises(ValueError, match="members"):
+        module.inspect_bundle(path)
