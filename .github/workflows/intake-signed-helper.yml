@@ -1,0 +1,93 @@
+name: Intake externally signed Linux helper
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Signed helper version (e.g. 0.9.0-rc8)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: signed-helper-intake-${{ inputs.version }}
+  cancel-in-progress: false
+jobs:
+  intake:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, commandcore-release-intake]
+    environment: agent-release
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography
+      - name: Independently verify signed intake assets
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_PUBLIC_KEY: ${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}
+          INTAKE_ROOT: ${{ vars.HELPER_RELEASE_INTAKE_DIR }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_PUBLIC_KEY"
+          test -n "$INTAKE_ROOT"
+          python - <<'PY'
+          import os, pathlib, re, shutil, stat
+          version=os.environ['RELEASE_VERSION']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?',version):
+              raise SystemExit('invalid version')
+          root=pathlib.Path(os.environ['INTAKE_ROOT'])
+          if not root.is_absolute() or root.is_symlink():
+              raise SystemExit('unsafe intake root')
+          source=root / version
+          if source.is_symlink() or not source.is_dir():
+              raise SystemExit('missing release intake directory')
+          if source.resolve().parent != root.resolve():
+              raise SystemExit('intake path escaped root')
+          expected={'manifest.signed.json','commandcore-helper-linux-x86_64.tar.gz'}
+          if {p.name for p in source.iterdir()} != expected:
+              raise SystemExit('unexpected signed intake files')
+          for path in (root,source):
+              info=path.stat()
+              if info.st_uid != 0 or info.st_mode & (stat.S_IWGRP|stat.S_IWOTH):
+                  raise SystemExit('intake must be root owned and not group/world writable')
+          target=pathlib.Path('signed-helper')
+          target.mkdir(exist_ok=False)
+          for name in sorted(expected):
+              path=source / name
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit('unsafe intake file')
+              info=path.stat()
+              if info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & (stat.S_IWGRP|stat.S_IWOTH):
+                  raise SystemExit('unsafe intake file ownership')
+              with path.open('rb') as inp, (target/name).open('xb') as out:
+                  shutil.copyfileobj(inp,out)
+          PY
+          python scripts/verify_signed_helper.py \
+            --manifest signed-helper/manifest.signed.json \
+            --artifact signed-helper/commandcore-helper-linux-x86_64.tar.gz \
+            --architecture x86_64 \
+            --trusted-public-key-b64 "$RELEASE_PUBLIC_KEY"
+          python scripts/inspect_helper_bundle.py \
+            --bundle signed-helper/commandcore-helper-linux-x86_64.tar.gz
+          python - <<'PY'
+          import json, os, pathlib
+          version=os.environ['RELEASE_VERSION']
+          doc=json.loads(pathlib.Path('signed-helper/manifest.signed.json').read_text())
+          if doc.get('version') != version:
+              raise SystemExit('release version mismatch')
+          if len(doc.get('artifacts',[])) != 1:
+              raise SystemExit('unexpected artifact count')
+          PY
+      - name: Upload verified signed artifact for protected publisher
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-helper-signed-release
+          path: |
+            signed-helper/manifest.signed.json
+            signed-helper/commandcore-helper-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 7
