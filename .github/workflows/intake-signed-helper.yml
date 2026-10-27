@@ -13,7 +13,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   intake:
-    if: github.ref == 'refs/heads/main'
+    # Disabled: privileged intake must run only in the separately controlled private release repository.
+    # Do not remove this guard until a security-reviewed migration explicitly replaces it.
+    if: ${{ false }}
     runs-on: [self-hosted, linux, x64, commandcore-release-intake]
     environment: agent-release
     timeout-minutes: 20
