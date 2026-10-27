@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>CommandCore · Operation</title>
+<style>
+:root{color-scheme:light dark;font:13px/1.5 system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;padding:10px;background:var(--color-background-primary,#fff);color:var(--color-text-primary,#252525);min-width:220px}
+section{border:1px solid var(--color-border-primary,#ddd);border-radius:12px;padding:12px;max-width:100%}
+details{min-width:0}summary{cursor:pointer;list-style:none;font-weight:680;overflow-wrap:anywhere}
+summary::-webkit-details-marker{display:none}
+summary:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+header{font-size:11px;color:var(--color-text-secondary,#666);margin-bottom:5px}
+dl{display:grid;grid-template-columns:84px minmax(0,1fr);column-gap:10px;row-gap:6px;margin:13px 0 6px}
+dt{color:var(--color-text-secondary,#666)}dd{margin:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+small{display:block;color:var(--color-text-secondary,#666);margin-top:9px}
+@media(prefers-color-scheme:dark){body{background:var(--color-background-primary,#171717);color:var(--color-text-primary,#eee)}section{border-color:var(--color-border-primary,#444)}}
+</style>
+</head>
+<body>
+<section>
+<header>CC · CommandCore operation · b53</header>
+<details id="details">
+<summary id="headline">Operation · loading verified result…</summary>
+<dl>
+<dt>Operation ID</dt><dd id="id">—</dd>
+<dt>Device</dt><dd id="device">—</dd>
+<dt>Status</dt><dd id="status">—</dd>
+<dt>Exit code</dt><dd id="exit">—</dd>
+<dt>Duration</dt><dd id="duration">—</dd>
+</dl>
+<small id="output">Command output remains in the original tool response.</small>
+</details>
+</section>
+<script>
+(() => {
+"use strict";
+const by = id => document.getElementById(id);
+const canonical = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+let lockedId = null;
+const candidate = packet => {
+  if(!packet || typeof packet !== "object") return null;
+  const rows = [
+    packet.structuredContent?.operation,
+    packet.operation,
+    packet.result?.structuredContent?.operation,
+    packet.result?.operation,
+    packet.toolOutput?.operation,
+    packet.toolOutput?.structuredContent?.operation
+  ];
+  return rows.find(row => row && typeof row === "object" && canonical.test(row.operation_id || "")) || null;
+};
+function render(packet) {
+  const row = candidate(packet);
+  if(!row || (lockedId !== null && lockedId !== row.operation_id)) return;
+  lockedId = row.operation_id;
+  const fields = {
+    id: row.operation_id,
+    device: typeof row.device_id === "string" ? row.device_id : "Unavailable",
+    status: typeof row.status === "string" ? row.status : "Unavailable",
+    exit: Number.isInteger(row.exit_code) ? String(row.exit_code) : "Unavailable",
+    duration: Number.isFinite(row.duration_ms) && row.duration_ms >= 0
+      ? String(row.duration_ms) + " ms" : "Unavailable"
+  };
+  for(const [key, value] of Object.entries(fields)) by(key).textContent = value;
+  by("headline").textContent = "shell.exec · " + fields.status;
+}
+window.addEventListener("openai:set_globals", event => {
+  render(event?.detail?.globals?.toolOutput);
+  render(event?.detail?.globals?.toolResponseMetadata?.mcp_tool_result);
+});
+const pending = new Map();
+let nextId = 1;
+window.addEventListener("message", event => {
+  if(event.source !== window.parent) return;
+  const message = event.data;
+  if(!message || typeof message !== "object") return;
+  if(message.method === "ui/notifications/tool-result") render(message.params);
+  if(message.jsonrpc === "2.0" && pending.has(message.id)){
+    const resolve = pending.get(message.id);
+    pending.delete(message.id);
+    resolve(message);
+  }
+});
+function rpc(method, params) {
+  const id = "cc-render-b52-" + nextId++;
+  return new Promise(resolve => {
+    pending.set(id,resolve);
+    window.parent.postMessage({jsonrpc:"2.0",id,method,params},"*");
+  });
+}
+render(window.openai?.toolOutput);
+render(window.openai?.toolResponseMetadata?.mcp_tool_result);
+if(typeof window.openai?.callTool !== "function") {
+  rpc("ui/initialize",{
+    protocolVersion:"2026-01-26",
+    appInfo:{name:"CommandCore operation renderer",version:"0.12.0-b52"},
+    appCapabilities:{availableDisplayModes:["inline"]}
+  }).then(reply => {
+    if(!reply.error) window.parent.postMessage({
+      jsonrpc:"2.0",method:"ui/notifications/initialized"
+    },"*");
+  });
+}
+})();
+</script>
+</body>
+</html>

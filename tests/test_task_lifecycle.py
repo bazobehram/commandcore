@@ -145,11 +145,12 @@ async def main():
     h = m.MCPHandler(tools, Metrics(), "test")
     defs = {x["name"]: x for x in h.definitions}
     for name in m.OPERATION_TOOLS:
-        if name in defs:
+        if name in defs and name != "shell.exec":
             assert not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri"), (
                 name
             )
             assert not defs[name].get("_meta", {}).get("openai/outputTemplate"), name
+    assert defs["shell.exec"]["_meta"]["ui"]["resourceUri"] == m.SHELL_UI_URI
     assert defs["commandcore.watch"]["_meta"]["ui"]["resourceUri"] == m.TASK_UI_URI
     assert (
         defs["commandcore.workspace"]["_meta"]["ui"]["resourceUri"]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -33,6 +34,8 @@ COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
 TASK_UI_URI = "ui://commandcore/task-0.12.0-b18.html"
 TIMELINE_UI_URI = "ui://commandcore/live-execution-v01-20261024.html"
+RENDER_UI_URI = "ui://commandcore/operation-render-b53-bannerfix-20261024.html"
+SHELL_UI_URI = "ui://commandcore/shell-compact-v23-20261024.html"
 TASK_UI_URIS = {
     "ui://commandcore/task-0.12.0-b17.html",
     "ui://commandcore/task-0.12.0-b16.html",
@@ -393,10 +396,106 @@ def _with_server_info(
     return out
 
 
+def _safe_shell_card_command(args: dict[str, Any]) -> str | None:
+    command = args.get("command")
+    if args.get("env") or not isinstance(command, str) or not 1 <= len(command) <= 1200:
+        return None
+    if any(ord(char) < 32 and char not in ("\n", "\t") for char in command):
+        return None
+    if re.search(
+        r"(?i)(password|passwd|api.?key|token|secret|private|credential|cookie|authorization|\.ssh|\.env|id_ed25519|id_rsa|bearer\s|\b(?:curl|wget)\b.*(?:-H|--header|--data))",
+        command,
+    ):
+        return None
+    return command.strip()
+
+
+def _shell_card_output(value: Any, limit: int) -> tuple[str, bool]:
+    if not isinstance(value, str):
+        return "", False
+    text = "".join(
+        ch for ch in value if ch in "\t\n" or 32 <= ord(ch) < 127 or ord(ch) > 159
+    )
+    clipped = len(text) > limit
+    text = re.sub(
+        r"(?i)(bearer\s+\S+|(?:token|api.?key|password|secret)\s*[:=]\s*\S+)",
+        "[REDACTED]",
+        text[:limit],
+    )
+    return text, clipped
+
+
 def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
     payload = dict(payload)
     operation = payload.pop("_ui_operation", None)
     viewer = payload.pop("_ui_viewer", None)
+    shell_command = payload.pop("_ui_shell_command", None)
+    if isinstance(operation, dict) and isinstance(operation.get("tool"), str):
+        detail = operation.get("detail")
+        detail = detail if isinstance(detail, dict) else {}
+        step = {
+            "tool": operation["tool"],
+            "status": operation.get("status", payload.get("status", "returned")),
+            "device": operation.get("device", ""),
+        }
+        for key in ("operation_id", "execution_id", "exit_code", "duration_ms"):
+            if operation.get(key) is not None:
+                step[key] = operation[key]
+        if isinstance(detail.get("command_display"), str):
+            step["command"] = detail["command_display"][:4096]
+        elif isinstance(detail.get("command_visibility"), str):
+            step["command_visibility"] = detail["command_visibility"]
+        if isinstance(detail.get("public_url"), str):
+            step["url_origin"] = detail["public_url"]
+        if isinstance(detail.get("verified_effect"), str):
+            step["verified_effect"] = detail["verified_effect"][:200]
+        payload["activity_step"] = step
+    if (
+        isinstance(operation, dict)
+        and operation.get("tool") == "shell.exec"
+        and operation.get("operation_id")
+    ):
+        stdout, out_cut = (
+            _shell_card_output(payload.get("stdout"), 4096)
+            if shell_command
+            else ("", False)
+        )
+        stderr, err_cut = (
+            _shell_card_output(payload.get("stderr"), 2048)
+            if shell_command
+            else ("", False)
+        )
+        code = payload.get("exit_code")
+        status = str(operation.get("status", payload.get("status", "unknown"))).lower()
+        if (type(code) is int and code != 0) or status in {
+            "error",
+            "failed",
+            "timeout",
+            "canceled",
+            "interrupted",
+        }:
+            status = "failed"
+        elif status in {"started", "running"}:
+            status = "running"
+        elif code == 0 or status in {"ok", "completed"}:
+            status = "completed"
+        else:
+            status = "unknown"
+        payload["command_status"] = status
+        capture = payload.get("output_capture")
+        payload["shell_card"] = {
+            "operation_id": operation["operation_id"],
+            "command": shell_command or "",
+            "stdout": stdout,
+            "stderr": stderr,
+            "status": status,
+            "device": operation.get("device", ""),
+            "exit_code": code,
+            "duration_ms": operation.get("duration_ms"),
+            "truncated": out_cut
+            or err_cut
+            or bool(capture.get("truncated") if isinstance(capture, dict) else False),
+        }
     # Screenshots must be returned as MCP images, not twice as huge
     # text/structured JSON or in an activity log.
     captured = payload.get("result") or {}
@@ -934,6 +1033,18 @@ class MCPHandler:
                 "execution-timeline.html",
                 "CommandCore Live Execution",
             ),
+            "operation.render": (
+                RENDER_UI_URI,
+                COMMANDCORE_UI_MIME,
+                "operation-render.html",
+                "CommandCore single operation",
+            ),
+            "shell.exec": (
+                SHELL_UI_URI,
+                COMMANDCORE_UI_MIME,
+                "shell-card.html",
+                "CommandCore shell terminal",
+            ),
         }
         self.definitions = []
         self.ui_resources = {}
@@ -953,6 +1064,29 @@ class MCPHandler:
             "CommandCore workspace",
         )
         raw_definitions = [dict(x) for x in raw_definitions]
+        raw_definitions.append(
+            {
+                "name": "operation.render",
+                "title": "Render one authorized operation",
+                "description": "Read-only single-ID historical shell operation metadata. No stdout or command content. Requires same OAuth client, device grant and conversation.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "operation_id": {
+                            "type": "string",
+                            "minLength": 36,
+                            "maxLength": 36,
+                        }
+                    },
+                    "required": ["operation_id"],
+                    "additionalProperties": False,
+                },
+                "annotations": {"readOnlyHint": True, "destructiveHint": False},
+                "securitySchemes": [
+                    {"type": "oauth2", "scopes": ["commandcore:standard"]}
+                ],
+            }
+        )
         browser_open = next(
             (x for x in raw_definitions if x["name"] == "browser.open"), None
         )
@@ -978,6 +1112,19 @@ class MCPHandler:
                     },
                 )
             )
+        shell = next((x for x in raw_definitions if x["name"] == "shell.exec"), None)
+        if shell:
+            native_shell = json.loads(json.dumps(shell))
+            native_shell.update(
+                name="shell.native",
+                title="Run shell command (native result)",
+                description=(
+                    "Compatibility alias for shell.exec with a native, data-only result. "
+                    "The same device grants and permission ceilings apply."
+                ),
+            )
+            native_shell.pop("_meta", None)
+            raw_definitions.append(native_shell)
         original_watch = next(
             (x for x in raw_definitions if x["name"] == "commandcore.watch"), None
         )
@@ -1056,6 +1203,9 @@ class MCPHandler:
                 "visibility", ["model", "app"]
             )
             entry["_meta"]["openai/widgetAccessible"] = True
+            if tool_name == "shell.native":
+                entry["_meta"]["ui"] = {"visibility": ["model"]}
+                entry["_meta"]["openai/widgetAccessible"] = False
             if tool_name == "activity.feed":
                 entry["inputSchema"]["properties"]["task_id"] = {
                     "type": "string",
@@ -1410,9 +1560,14 @@ class MCPHandler:
                     exc.code == "insufficient_scope"
                     and principal.auth_kind == "oauth2"
                     and self.scope_challenge is not None
-                    and any(tool["name"] == name for tool in TOOL_DEFINITIONS)
+                    and (
+                        name == "shell.native"
+                        or any(tool["name"] == name for tool in TOOL_DEFINITIONS)
+                    )
                 ):
-                    required = self.tools._required_scope(name)
+                    required = self.tools._required_scope(
+                        "shell.exec" if name == "shell.native" else name
+                    )
                     result["_meta"] = {
                         "mcp/www_authenticate": [self.scope_challenge(required)]
                     }
@@ -1483,6 +1638,9 @@ class MCPHandler:
             return False
 
     async def _call_tools(self, principal, name, args, host_session):
+        if name == "shell.native":
+            # Delegate to the same scope, device-grant, audit and execution path.
+            name = "shell.exec"
         if name == "commandcore.finish":
             owner, tag = self._task_context(principal, args, host_session)
             return {
@@ -1624,6 +1782,70 @@ class MCPHandler:
         return payload
 
     async def _call_tools_impl(self, principal, name, args, host_session):
+        if name == "operation.render":
+            import uuid
+
+            from .auth import STANDARD_SCOPE, scope_allows
+
+            if not isinstance(args, dict) or set(args) != {"operation_id"}:
+                raise ToolError(
+                    "invalid_arguments", "One immutable operation ID required"
+                )
+            operation_id = args["operation_id"]
+            try:
+                valid_id = (
+                    isinstance(operation_id, str)
+                    and str(uuid.UUID(operation_id)) == operation_id
+                )
+            except (ValueError, TypeError):
+                valid_id = False
+            if not (
+                valid_id
+                and principal.auth_kind == "oauth2"
+                and principal.issuer
+                and principal.subject
+                and principal.client_id not in {"", "unknown", "oauth-client"}
+                and scope_allows(principal.scopes, STANDARD_SCOPE)
+            ):
+                raise ToolError("operation_unavailable", "Operation unavailable")
+            live = self.tools.live_activity
+            tag = live.session_tag(host_session)
+            live._expire_completed()
+            row = live.completed.get(operation_id)
+            accessible = {
+                device["id"]
+                for device in self.tools.db.list_accessible_devices(principal.subject)
+                if device.get("id") and not device.get("revoked_at")
+            }
+            if not (
+                tag
+                and isinstance(row, dict)
+                and row.get("tool") == "shell.exec"
+                and (
+                    row.get("issuer"),
+                    row.get("owner"),
+                    row.get("client_id"),
+                    row.get("session_tag"),
+                )
+                == (principal.issuer, principal.subject, principal.client_id, tag)
+                and row.get("device_id") in accessible
+            ):
+                raise ToolError("operation_unavailable", "Operation unavailable")
+            return {
+                "operation": {
+                    "operation_id": operation_id,
+                    "device_id": row["device_id"],
+                    "tool": "shell.exec",
+                    "status": row.get("status", "error"),
+                    "exit_code": row.get("exit_code"),
+                    "duration_ms": max(
+                        0, int((row["finished_epoch"] - row["started_epoch"]) * 1000)
+                    ),
+                    "output_available": False,
+                },
+                "status": "found",
+                "output_note": "Output unavailable; only verified metadata is retained",
+            }
         if name == "browser.search":
             from urllib.parse import urlencode
 
@@ -1661,6 +1883,8 @@ class MCPHandler:
                 )
             if name in OPERATION_TOOLS and isinstance(payload, dict):
                 payload = dict(payload)
+                if name == "shell.exec":
+                    payload["_ui_shell_command"] = _safe_shell_card_command(args)
                 viewer = self.tools.live_activity.issue_viewer(principal, host_session)
                 operation = {
                     "tool": name,
@@ -1812,7 +2036,11 @@ class MCPHandler:
                             result["_meta"] = {
                                 "mcp/www_authenticate": [
                                     self.scope_challenge(
-                                        self.tools._required_scope(name)
+                                        self.tools._required_scope(
+                                            "shell.exec"
+                                            if name == "shell.native"
+                                            else name
+                                        )
                                     )
                                 ]
                             }
