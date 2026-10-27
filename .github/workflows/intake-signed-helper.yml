@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   intake:
-    if: github.ref == 'refs/heads/main'
+    # Legacy public privileged workflow disabled; private release pipeline owns intake.
+    if: ${{ false }}
     runs-on: [self-hosted, linux, x64, commandcore-release-intake]
     environment: agent-release
     timeout-minutes: 20
