@@ -65,6 +65,8 @@ jobs:
             --artifact signed-helper/commandcore-helper-linux-x86_64.tar.gz \
             --architecture x86_64 \
             --trusted-public-key-b64 "$RELEASE_PUBLIC_KEY"
+          python scripts/inspect_helper_bundle.py \
+            --bundle signed-helper/commandcore-helper-linux-x86_64.tar.gz
       - name: Publish immutable prerelease
         env:
           GH_TOKEN: ${{ github.token }}
