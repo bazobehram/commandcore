@@ -322,6 +322,40 @@
     },
     "title": "List containers"
   },
+  "execution.timeline": {
+    "description": "Read bounded, conversation-specific ordered execution events. Only authenticated STANDARD OAuth and current device grants may see details. No filesystem payloads, arbitrary shell arguments or unapproved command output are exposed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after_seq": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "limit": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "session_ref": {
+          "maxLength": 128,
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Read live execution timeline"
+  },
+  "execution.timeline.watch": {
+    "description": "Open one conversation-scoped live operation timeline with verified device activity, bounded authorized terminal output and file summaries. Activity and Browser existing views remain available.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "title": "Watch live execution timeline"
+  },
   "fs.copy": {
     "description": "Copy a file or directory on one device.",
     "inputSchema": {

@@ -224,6 +224,35 @@ def main():
                 algorithm="RS256",
                 headers={"kid": "smoke-key"},
             )
+            discovery = httpx.post(
+                base + "/mcp",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"jsonrpc": "2.0", "id": 91, "method": "tools/list", "params": {}},
+            )
+            discovery.raise_for_status()
+            discovered = {
+                item["name"]: item for item in discovery.json()["result"]["tools"]
+            }
+            assert {
+                "execution.timeline",
+                "execution.timeline.watch",
+            } <= discovered.keys()
+            assert discovered["execution.timeline.watch"]["securitySchemes"] == [
+                {"type": "oauth2", "scopes": ["commandcore:standard"]}
+            ]
+            assert discovered["execution.timeline.watch"]["_meta"]["ui"][
+                "resourceUri"
+            ] == ("ui://commandcore/live-execution-v01-20261024.html")
+            core_discovery = httpx.post(
+                base + "/mcp/core",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"jsonrpc": "2.0", "id": 92, "method": "tools/list", "params": {}},
+            )
+            core_discovery.raise_for_status()
+            core_names = {
+                item["name"] for item in core_discovery.json()["result"]["tools"]
+            }
+            assert {"execution.timeline", "execution.timeline.watch"} <= core_names
             read_token = jwt.encode(
                 {
                     "sub": "oauth-user",
@@ -316,6 +345,7 @@ def main():
                     {
                         "status": "PASS",
                         "oauth_jwt_verified": True,
+                        "timeline_discovery_both_endpoints": True,
                         "protected_resource_metadata": True,
                         "unauthenticated_challenge": True,
                         "insufficient_scope_challenge": True,

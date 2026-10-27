@@ -24,3 +24,12 @@ def test_existing_production_tool_names_and_schemas_are_preserved():
         if expected[name] != actual[name]
     )
     assert not missing and not changed, f"missing={missing}, changed_schemas={changed}"
+
+
+def test_private_production_core_tool_names_are_preserved():
+    from commandcore_server.tools import CORE_TOOL_NAMES
+
+    baseline = json.loads(
+        (BASELINE.parent / "private-production-core-tools.json").read_text()
+    )
+    assert set(baseline) == CORE_TOOL_NAMES
