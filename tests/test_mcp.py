@@ -99,6 +99,8 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
         "commandcore.viewer",
         "commandcore.finish",
         "commandcore.workspace",
+        "operation.render",
+        "shell.native",
     }
     assert len(CORE_TOOL_NAMES) == 50
     response = await handler.handle(

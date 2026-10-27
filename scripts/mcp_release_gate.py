@@ -126,7 +126,7 @@ def main():
         print("\n".join(changes))
         return 1
     print(
-        f"MCP COMPATIBLE: {len(current)} tools; sha256={fingerprint(current)}; no rediscovery needed"
+        f"MCP CORE BASELINE MATCH: {len(current)} tools; sha256={fingerprint(current)}; client discovery requires separate validation"
     )
     return 0
 

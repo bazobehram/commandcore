@@ -59,7 +59,11 @@ def mcp(base, token, name, arguments, rid):
         "jsonrpc": "2.0",
         "id": rid,
         "method": method,
-        "params": {"name": name, "arguments": arguments, "_meta": meta()},
+        "params": {
+            "name": name,
+            "arguments": arguments,
+            "_meta": {**meta(), "openai/session": "oauth-smoke-fixture"},
+        },
     }
     h = {
         "Authorization": f"Bearer {token}",
@@ -308,6 +312,22 @@ def main():
             allowed.raise_for_status()
             payload = allowed.json()["result"]["structuredContent"]
             assert payload["exit_code"] == 0
+            assert payload["shell_card"]["operation_id"]
+            assert payload["shell_card"]["command"] == "hostname"
+            assert (
+                allowed.json()["result"]["_meta"]["ui"]["resourceUri"]
+                == "ui://commandcore/shell-compact-v23-20261024.html"
+            )
+            native = mcp(
+                base,
+                token,
+                "shell.native",
+                {"device_id": did, "command": "hostname"},
+                93,
+            )
+            native.raise_for_status()
+            assert native.json()["result"]["structuredContent"]["exit_code"] == 0
+            assert "ui" not in native.json()["result"].get("_meta", {})
             bad = jwt.encode(
                 {
                     "sub": "oauth-user",
