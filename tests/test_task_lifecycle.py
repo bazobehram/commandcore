@@ -4,6 +4,7 @@ from commandcore_server.models import Principal
 from commandcore_server.metrics import Metrics
 from commandcore_server.auth import READ_SCOPE, STANDARD_SCOPE
 from commandcore_server.tools import operation_ui_context, ToolError, ToolService
+from commandcore_server.execution_timeline import LiveExecutionTimeline
 
 from commandcore_server import mcp as m
 
@@ -64,6 +65,7 @@ class DB:
 class Tools:
     def __init__(self):
         self.live_activity = Live()
+        self.timeline = LiveExecutionTimeline(self.live_activity.session_tag)
         self.db = DB()
         self.pause = None
         self.failure = None

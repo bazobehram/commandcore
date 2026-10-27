@@ -32,6 +32,7 @@ COMMANDCORE_UI_URI = WORKSPACE_UI_URI
 COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
 TASK_UI_URI = "ui://commandcore/task-0.12.0-b18.html"
+TIMELINE_UI_URI = "ui://commandcore/live-execution-v01-20261024.html"
 TASK_UI_URIS = {
     "ui://commandcore/task-0.12.0-b17.html",
     "ui://commandcore/task-0.12.0-b16.html",
@@ -926,6 +927,12 @@ class MCPHandler:
                 COMMANDCORE_UI_MIME,
                 "commandcore-widget.html",
                 "CommandCore Live Views",
+            ),
+            "execution.timeline.watch": (
+                TIMELINE_UI_URI,
+                COMMANDCORE_UI_MIME,
+                "execution-timeline.html",
+                "CommandCore Live Execution",
             ),
         }
         self.definitions = []

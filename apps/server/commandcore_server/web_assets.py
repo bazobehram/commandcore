@@ -19,6 +19,7 @@ def web_asset(name: str) -> Path:
         "browser-widget.html",
         "activity-widget.html",
         "commandcore-widget.html",
+        "execution-timeline.html",
         "browser-console.js",
         "browser-console.css",
         "commandcore-logo.webp",
