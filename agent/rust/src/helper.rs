@@ -329,9 +329,9 @@ mod tests {
         use std::io::Write;
 
         let mut file = tempfile::NamedTempFile::new().unwrap();
-        file.write_all(&[b'\x0b']).unwrap();
+        file.write_all(b"\x0b").unwrap();
         file.write_all(&[b'k'; 40]).unwrap();
-        file.write_all(&[b'\n']).unwrap();
+        file.write_all(b"\n").unwrap();
         let client = HelperClient {
             socket_path: PathBuf::new(),
             secret_path: file.path().to_path_buf(),
