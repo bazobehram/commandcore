@@ -70,11 +70,16 @@ def safe_path(value: Any) -> str | None:
         return None
     normalized = posixpath.normpath(portable)
     if _RESTRICTED.search(portable) or re.search(
-        r"secret|credential|password|token|private[._-]?key|cookie",
+        r"secret|credential|password|passwd|token|bearer|auth|cookie|private|"
+        r"api[_.-]?key|access[_.-]?key|session|\.env|\.ssh|\.aws|\.kube|"
+        r"\.gnupg|id_rsa|id_ed25519|AKIA[A-Z0-9]{16}|eyJ",
         portable,
         re.IGNORECASE,
     ):
         return "[restricted path]"
+    # Do not display long opaque components that may be identifiers or secrets.
+    if any(len(component) > 48 for component in portable.split("/")):
+        return None
     return normalized
 
 
