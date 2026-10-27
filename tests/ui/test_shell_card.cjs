@@ -15,6 +15,15 @@ const {pathToFileURL} = require('node:url');
  await page.evaluate(() => window.dispatchEvent(new CustomEvent('openai:set_globals', {detail:{globals:{toolOutput:{shell_card:{operation_id:'98765432-1234-4234-8234-123456789abc',command:'other',stdout:'other-output',status:'completed',exit_code:0}}}}})));
  assert.equal(await page.locator('#out').innerText(), 'fixture-host');
  assert.deepEqual(errors, []);
+ const protectedPage = await browser.newPage();
+ await protectedPage.addInitScript(() => {
+  window.openai = {toolOutput:{shell_card:{operation_id:'12345678-1234-4234-8234-123456789abc',command:'',stdout:'',stderr:'',status:'completed',exit_code:0}}};
+ });
+ await protectedPage.goto(pathToFileURL(path.join(__dirname, '../../apps/web/shell-card.html')).href);
+ await protectedPage.waitForFunction(() => !document.querySelector('#preview-note').hidden);
+ assert(await protectedPage.locator('#terminal').isHidden());
+ assert.match(await protectedPage.locator('#preview-note').textContent(), /protected/);
+ await protectedPage.close();
  await browser.close();
- console.log('PASS shell card renders one call and ignores another operation');
+ console.log('PASS shell card isolates operations and hides protected previews');
 })().catch(error => {console.error(error); process.exit(1)});
