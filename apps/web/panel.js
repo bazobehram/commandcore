@@ -210,7 +210,7 @@ const summary=document.createElement('summary');
 summary.textContent=eligible?'Full Control capability is available':'Set up Full Control capability';
 const explanation=document.createElement('p');
 explanation.className='muted';
-explanation.textContent=eligible?'This device reports a healthy privileged helper. Your active access still depends on server policy and your account grant.':'Full Control capability requires a one-time, explicit approval on the Linux computer. The local privileged helper must be installed and verified before the panel can activate Full Control. This is not a server approval or an account subject problem.';
+explanation.textContent=eligible?'This device reports a healthy privileged helper. Your active access still depends on server policy and your account grant.':'Full Control needs a trusted signed privileged helper and explicit administrator approval on this device. No GitHub Actions runner is needed: runners belong to CommandCore release infrastructure, not device enrollment. Until the helper and local ceiling are verified, Standard access remains available.';
 setup.append(summary,explanation);
 const requirements=document.createElement('p');
 requirements.className='muted';
