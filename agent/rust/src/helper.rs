@@ -63,14 +63,28 @@ fn canonical_bytes(payload: &Value) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec(&canonicalize(&body))?)
 }
 
+#[cfg(any(unix, test))]
+fn trim_helper_secret(secret: &[u8]) -> &[u8] {
+    // Match Python bytes.strip(), including vertical tab. Helper keys are
+    // generated as binary bytes and can begin or end with whitespace.
+    let whitespace = |byte: &u8| matches!(*byte, b'\t' | b'\n' | 0x0b | 0x0c | b'\r' | b' ');
+    let start = secret
+        .iter()
+        .position(|byte| !whitespace(byte))
+        .unwrap_or(secret.len());
+    let end = secret
+        .iter()
+        .rposition(|byte| !whitespace(byte))
+        .map_or(start, |index| index + 1);
+    &secret[start..end]
+}
+
 impl HelperClient {
     #[cfg(unix)]
     fn signed(&self, mut payload: Value) -> Result<Value> {
-        let mut secret = fs::read(&self.secret_path)
+        let raw_secret = fs::read(&self.secret_path)
             .with_context(|| format!("read helper secret {}", self.secret_path.display()))?;
-        while secret.last().is_some_and(|b| b.is_ascii_whitespace()) {
-            secret.pop();
-        }
+        let secret = trim_helper_secret(&raw_secret);
         if secret.len() < 32 {
             return Err(anyhow!("helper secret must contain at least 32 bytes"));
         }
@@ -96,7 +110,7 @@ impl HelperClient {
             Value::String(nonce)
         });
         let bytes = canonical_bytes(&payload)?;
-        let mut mac = Hmac::<Sha256>::new_from_slice(&secret)
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret)
             .map_err(|_| anyhow!("invalid helper HMAC key"))?;
         mac.update(&bytes);
         payload.as_object_mut().unwrap().insert(
@@ -295,5 +309,40 @@ mod tests {
             hex::encode(mac.finalize().into_bytes()),
             v["hmac_sha256_hex"].as_str().unwrap()
         );
+    }
+
+    #[test]
+    fn helper_secret_matches_python_bytes_strip_for_binary_keys() {
+        for whitespace in [b'\t', b'\n', 0x0b, 0x0c, b'\r', b' '] {
+            let mut secret = vec![whitespace];
+            secret.extend_from_slice(&[b'x'; 40]);
+            secret.push(whitespace);
+            assert_eq!(trim_helper_secret(&secret), &[b'x'; 40]);
+        }
+        assert_eq!(trim_helper_secret(&[b' ', 0x0b]), b"");
+        assert_eq!(trim_helper_secret(b"x y"), b"x y");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn signed_request_uses_python_stripped_binary_key() {
+        use std::io::Write;
+
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(&[b'\x0b']).unwrap();
+        file.write_all(&[b'k'; 40]).unwrap();
+        file.write_all(&[b'\n']).unwrap();
+        let client = HelperClient {
+            socket_path: PathBuf::new(),
+            secret_path: file.path().to_path_buf(),
+        };
+        let signed = client
+            .signed(
+                json!({"action":"probe","request_id":"fixture","timestamp":1,"nonce":"fixture"}),
+            )
+            .unwrap();
+        let mut mac = Hmac::<Sha256>::new_from_slice(&[b'k'; 40]).unwrap();
+        mac.update(&canonical_bytes(&signed).unwrap());
+        assert_eq!(signed["mac"], hex::encode(mac.finalize().into_bytes()));
     }
 }
