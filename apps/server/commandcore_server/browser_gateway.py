@@ -800,12 +800,18 @@ class BrowserGateway:
                 {"behavior": "deny", "eventsEnabled": True},
             )
 
-    async def _release(self, owner: tuple[str, str, str]) -> dict[str, Any]:
+    async def _release(
+        self, owner: tuple[str, str, str], *, expected_session_id: str | None = None
+    ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
             if not entry:
                 return {"closed": False}
             async with entry.lock:
+                if expected_session_id is not None and entry.id != expected_session_id:
+                    raise BrowserError(
+                        "Browser session changed; refresh before stopping"
+                    )
                 # An agent cannot terminate a browser while the operator is
                 # typing credentials or approving a sensitive action.
                 if entry.paused_for_human:
@@ -1214,7 +1220,12 @@ class BrowserGateway:
             async with entry.lock:
                 return self._handoff(owner, args.get("reason", "login_or_approval"))
         if name == "browser.close":
-            return await self._release(owner)
+            expected = args.get("expected_session_id")
+            if expected is not None and (
+                not isinstance(expected, str) or not 1 <= len(expected) <= 128
+            ):
+                raise BrowserError("invalid expected browser session ID")
+            return await self._release(owner, expected_session_id=expected)
         if name == "browser.open":
             check_url(args.get("url", ""), self.allow_hosts)
             entry = await self._new_session(owner)
