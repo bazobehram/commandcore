@@ -52,6 +52,34 @@ class CeremonyTests(unittest.TestCase):
        "SELECT consumed FROM registration_ceremonies WHERE challenge=?",
        (c["challenge"],)).fetchone()[0],1)
   finally:registry.close()
+ def test_concurrent_finish_only_one_enrolls(self):
+  from concurrent.futures import ThreadPoolExecutor
+  from unittest.mock import patch
+  from types import SimpleNamespace
+  from commandcore_server.collaboration_webauthn_credentials import CredentialRegistry
+  path=os.path.join(self.tmp.name,"state.sqlite")
+  other=RegistrationCeremonies(path)
+  registry=CredentialRegistry(path)
+  c=self.ceremony.begin(owner="owner",rp_id="panel.example.test",
+                        origin="https://panel.example.test",now=100)
+  verified=SimpleNamespace(credential_id=b"one-credential",
+                           public_key={1:1,3:-8,-1:6,-2:b"k"*32})
+  def attempt(ceremony):
+   try:
+    ceremony.finish_and_enroll(registry=registry,owner="owner",
+       challenge=c["challenge"],response={},now=101)
+    return True
+   except AuthorizationDenied:
+    return False
+  try:
+   with patch("commandcore_server.collaboration_registration_ceremony.verify_registration",return_value=verified):
+    with ThreadPoolExecutor(max_workers=2) as pool:
+     result=list(pool.map(attempt,(self.ceremony,other)))
+   self.assertEqual(sorted(result),[False,True])
+   self.assertEqual(registry.db.execute("SELECT count(*) FROM credentials").fetchone()[0],1)
+  finally:
+   other.close()
+   registry.close()
  def test_wrong_cose_curve_never_enrolls(self):
   from unittest.mock import patch
   from types import SimpleNamespace
