@@ -545,3 +545,94 @@ async def test_python_agent_marks_real_output_complete_after_pipe_eof():
     assert result["stdout"] == "fixture-tail"
     assert result["stdout_capture"]["retained_bytes"] == len(b"fixture-tail")
     assert result["stdout_capture"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("capture_mode", "should_release"),
+    [
+        ("rust-complete", True),
+        ("legacy", False),
+        ("draining", False),
+        ("truncated", False),
+        ("unread-data", False),
+        ("boolean-size", False),
+    ],
+)
+async def test_managed_tail_requires_trustworthy_capture_metadata(
+    tmp_path, capture_mode, should_release
+):
+    from commandcore_server.db import Database
+    from commandcore_server.models import JobResult
+
+    process = str(uuid.uuid4())
+
+    class Agent:
+        async def dispatch(self, **kwargs):
+            if kwargs["tool"] == "process.start":
+                return JobResult("start", "ok", {"process_id": process}, 0)
+            offset = kwargs["arguments"].get("offset", 0)
+            result = {
+                "available": True,
+                "running": False,
+                "stdout": "host" if offset == 0 else "",
+                "stderr": "",
+            }
+            if capture_mode != "legacy":
+                result["stdout_capture"] = {
+                    "complete": capture_mode != "draining",
+                    "truncated": capture_mode == "truncated",
+                    "retained_bytes": True
+                    if capture_mode == "boolean-size"
+                    else 5
+                    if capture_mode == "unread-data"
+                    else 4,
+                    "observed_bytes": 4,
+                    "last_output_at": 1.0,
+                }
+                result["stderr_capture"] = {
+                    "complete": True,
+                    "truncated": False,
+                    "retained_bytes": 0,
+                }
+            return JobResult("poll", "ok", result, 0)
+
+    db = Database(str(tmp_path / "timeline.sqlite3"))
+    device = db.register_device(
+        owner_id="owner",
+        display_name="fixture",
+        hostname="fixture",
+        platform="Linux",
+        architecture="x86_64",
+        agent_version="candidate",
+        agent_protocol_version="1",
+        public_key_b64="AAAA",
+        capabilities={},
+        auto_approve=True,
+    )["device_id"]
+    db.mark_online(
+        device,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={},
+        agent_protocol_version="1",
+    )
+    service = ToolService(db, Agent(), 60)
+    await service.call(
+        OWNER,
+        "process.start",
+        {"device_id": device, "command": "hostname"},
+        host_session="chat-a",
+    )
+    for offset in (0, 4):
+        await service.call(
+            OWNER,
+            "process.output",
+            {"device_id": device, "process_id": process, "offset": offset},
+            host_session="chat-a",
+        )
+    result = await service.call(OWNER, "execution.timeline", {}, host_session="chat-a")
+    outputs = [
+        event.get("chunk") for event in result["events"] if event["kind"] == "output"
+    ]
+    assert ("host" in outputs) is should_release
