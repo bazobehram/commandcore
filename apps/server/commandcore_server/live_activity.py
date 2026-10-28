@@ -475,7 +475,8 @@ class LiveActivity:
             "refreshed_at": _iso(now),
             "privacy": (
                 "Owner-scoped, 15-minute in-memory operation metadata; "
-                "no raw command arguments, file contents or output."
+                "validated command grammar or redacted structure only. "
+                "No raw output, file contents or diff text. HTTPS origins only."
                 if include_details or panel_details
                 else "Only tool, device, time and status. No arguments or output."
             ),
