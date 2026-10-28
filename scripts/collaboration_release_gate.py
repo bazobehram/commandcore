@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Read-only, fail-closed staging release-gate report.
+
+The test suite passing does not establish live human approval or delivery.
+"""
+from __future__ import annotations
+import json
+from pathlib import Path
+import subprocess
+
+ROOT = Path(__file__).resolve().parents[1]
+def present(path):
+    return (ROOT / path).is_file()
+
+def run():
+    checks = {
+        "registration_module_present": present("apps/server/commandcore_server/collaboration_registration_ceremony.py"),
+        "review_module_present": present("apps/server/commandcore_server/collaboration_webauthn_review.py"),
+        "webauthn_browser_tests_present": all(present(p) for p in (
+            "tests/ui/test_webauthn_enroll.cjs",
+            "tests/ui/test_webauthn_enroll_success.cjs",
+            "tests/ui/test_webauthn_review.cjs")),
+        "pinned_fido2_in_lock": "fido2==2.2.1" in (ROOT/"requirements-server.lock").read_text(),
+    }
+    # These are evidence gates, not guesses. No local unit test may set them true.
+    live = {
+        "real_authenticator_enrollment_verified": False,
+        "explicit_owner_approval_verified": False,
+        "signed_delivery_with_gx10_local_confirmation_verified": False,
+        "argon_reply_verified": False,
+        "production_release_and_rollback_verified": False,
+    }
+    state = subprocess.run(["git","-c",f"safe.directory={ROOT}","status","--porcelain",
+                            "--untracked-files=normal"],cwd=ROOT,text=True,capture_output=True)
+    checks["git_status_readable"] = state.returncode == 0
+    report = {
+        "staging_checks": checks,
+        "live_acceptance_evidence": live,
+        "uncommitted_git_entries": len(state.stdout.splitlines()) if state.returncode == 0 else None,
+        "release_ready": all(checks.values()) and all(live.values()) and state.returncode == 0
+                         and not state.stdout.strip(),
+    }
+    print(json.dumps(report,indent=2,sort_keys=True))
+    return 0 if report["release_ready"] else 3
+
+if __name__ == "__main__":
+    raise SystemExit(run())

@@ -1448,6 +1448,37 @@ class ToolService:
             self._browser_conversation_leases[owner] = host_tag
         return {key: value for key, value in args.items() if key != "session_ref"}
 
+    def _collaboration_review_store_path(self):
+        # One adjacent SQLite database for review challenges and WebAuthn
+        # counters; never expose this as credential enrollment.
+        with self.db.lock:
+            filename = self.db.conn.execute("PRAGMA database_list").fetchone()[2]
+        if not filename or filename == ":memory:":
+            raise ToolError("review_challenge_storage_unavailable")
+        return filename + ".collaboration-review"
+
+    def _review_challenges(self):
+        from .collaboration_review_challenge import ReviewChallenges
+        if not hasattr(self, "_collaboration_challenges") or self._collaboration_challenges is None:
+            self._collaboration_challenges = ReviewChallenges(self._collaboration_review_store_path())
+        return self._collaboration_challenges
+
+    def _webauthn_credentials(self):
+        # Internal verification only; no credential enrollment routes.
+        from .collaboration_webauthn_credentials import CredentialRegistry
+        if not hasattr(self, "_collaboration_credentials") or self._collaboration_credentials is None:
+            self._collaboration_credentials = CredentialRegistry(self._collaboration_review_store_path())
+        return self._collaboration_credentials
+
+    def _registration_ceremonies(self):
+        # Staging-only server-side ceremony storage. No enrollment API exposed.
+        # Must be co-located with credentials for atomic finish_and_enroll.
+        from .collaboration_registration_ceremony import RegistrationCeremonies
+        if not hasattr(self, "_collaboration_registrations") or self._collaboration_registrations is None:
+            self._collaboration_registrations = RegistrationCeremonies(
+                self._collaboration_review_store_path())
+        return self._collaboration_registrations
+
     def _approval_ledger(self) -> ApprovalLedger:
         if self._collaboration_ledger is None:
             # Separate adjacent WAL database avoids modifying the live
@@ -1955,6 +1986,13 @@ class ToolService:
             forwarded = {
                 k: v for k, v in args.items() if k not in {"device_id", "selection_id"}
             }
+            # Signed delivery permits are issued only by a trusted human-review
+            # boundary. Never forward a caller-supplied permit through MCP.
+            if name == "agents.deliver" and "signed_permit" in forwarded:
+                raise ToolError(
+                    "permit_source_not_trusted",
+                    "Signed delivery permits cannot be supplied by MCP callers",
+                )
             # Older Agents must not silently ignore a narrowing filter.
             capabilities = device.get("capabilities", {})
             if (
