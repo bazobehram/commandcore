@@ -39,6 +39,19 @@ class CeremonyTests(unittest.TestCase):
    with self.assertRaises(AuthorizationDenied):
     self.ceremony.finish_and_enroll(registry=registry,owner="owner",challenge=c["challenge"],response={},now=102)
   finally:registry.close()
+ def test_invalid_finish_and_enroll_consumes_challenge(self):
+  from commandcore_server.collaboration_webauthn_credentials import CredentialRegistry
+  registry=CredentialRegistry(os.path.join(self.tmp.name,"state.sqlite"))
+  try:
+   c=self.ceremony.begin(owner="owner",rp_id="panel.example.test",
+                         origin="https://panel.example.test",now=100)
+   with self.assertRaises(AuthorizationDenied):
+    self.ceremony.finish_and_enroll(registry=registry,owner="owner",
+       challenge=c["challenge"],response={},now=101)
+   self.assertEqual(self.ceremony.db.execute(
+       "SELECT consumed FROM registration_ceremonies WHERE challenge=?",
+       (c["challenge"],)).fetchone()[0],1)
+  finally:registry.close()
  def test_wrong_cose_curve_never_enrolls(self):
   from unittest.mock import patch
   from types import SimpleNamespace

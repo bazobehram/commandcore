@@ -118,6 +118,13 @@ class RegistrationCeremonies:
                 return {"credential_id":base64.urlsafe_b64encode(credential.credential_id).rstrip(b"=").decode(),"enrolled":True}
             except BaseException:
                 self.db.execute("ROLLBACK")
+                # A failed enrollment attempt must not leave its challenge
+                # reusable. Burn only a still-pending challenge for this owner;
+                # credential insertion itself remains atomic and rolled back.
+                self.db.execute(
+                    "UPDATE registration_ceremonies SET consumed=1 "
+                    "WHERE owner=? AND challenge=? AND consumed=0 AND expires>?",
+                    (owner,challenge,now))
                 raise
 
     def close(self): self.db.close()
