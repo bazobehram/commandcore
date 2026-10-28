@@ -363,13 +363,19 @@ def test_managed_process_tail_requires_owned_exact_offset_and_redacts():
     timeline.process_output(
         OWNER, "chat-a", process, "stdout", "token=private-value", offset=0
     )
-    timeline.complete_process_output(OWNER, "chat-b", process, offset=19)
-    timeline.complete_process_output(OWNER, "chat-a", process, offset=20)
+    timeline.complete_process_output(
+        OWNER, "chat-b", process, retained_bytes={"stdout": 19}
+    )
+    timeline.complete_process_output(
+        OWNER, "chat-a", process, retained_bytes={"stdout": 20}
+    )
     assert not any(
         event["kind"] == "output"
         for event in timeline.read(OWNER, "chat-a", [DEVICE])["events"]
     )
-    timeline.complete_process_output(OWNER, "chat-a", process, offset=19)
+    timeline.complete_process_output(
+        OWNER, "chat-a", process, retained_bytes={"stdout": 19}
+    )
     result = json.dumps(timeline.read(OWNER, "chat-a", [DEVICE])["events"])
     assert "private-value" not in result
     assert "[REDACTED]" in result
@@ -387,7 +393,7 @@ def test_managed_process_unicode_offsets_and_overlap():
     timeline.process_output(OWNER, "chat-a", process, "stdout", "café", offset=0)
     timeline.process_output(OWNER, "chat-a", process, "stdout", "émore", offset=3)
     timeline.complete_process_output(
-        OWNER, "chat-a", process, offset=len("cafémore".encode())
+        OWNER, "chat-a", process, retained_bytes={"stdout": len("cafémore".encode())}
     )
     events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
     assert [e["chunk"] for e in events if e["kind"] == "output"] == ["cafémore"]
@@ -450,7 +456,7 @@ async def test_finished_empty_poll_releases_managed_process_tail(tmp_path):
                     "available": True,
                     "running": False,
                     "stdout": output,
-                    "stderr": "",
+                    "stderr": "err" if offset == 0 else "",
                     "stdout_capture": {
                         "complete": self.polls >= 3,
                         "retained_bytes": len("fixture-host"),
@@ -458,7 +464,7 @@ async def test_finished_empty_poll_releases_managed_process_tail(tmp_path):
                     },
                     "stderr_capture": {
                         "complete": self.polls >= 3,
-                        "retained_bytes": 0,
+                        "retained_bytes": 3,
                         "truncated": False,
                     },
                 },
@@ -517,7 +523,11 @@ async def test_finished_empty_poll_releases_managed_process_tail(tmp_path):
         host_session="chat-a",
     )
     after = await svc.call(OWNER, "execution.timeline", {}, host_session="chat-a")
-    assert "fixture-host" in json.dumps(after)
+    output_events = [event for event in after["events"] if event["kind"] == "output"]
+    assert {event["stream"]: event["chunk"] for event in output_events} == {
+        "stdout": "fixture-host",
+        "stderr": "err",
+    }
 
 
 @pytest.mark.asyncio

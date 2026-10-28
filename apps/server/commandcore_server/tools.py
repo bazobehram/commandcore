@@ -2063,7 +2063,10 @@ class ToolService:
                             principal,
                             host_session,
                             process_id,
-                            offset=forwarded.get("offset", 0),
+                            retained_bytes={
+                                "stdout": captures[0]["retained_bytes"],
+                                "stderr": captures[1]["retained_bytes"],
+                            },
                         )
             if name == "shell.exec" and result.status in {"ok", "completed", "started"}:
                 self.timeline.output(live_key, "stdout", result.stdout)

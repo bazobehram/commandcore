@@ -395,23 +395,24 @@ class LiveExecutionTimeline:
         host_session: str | None,
         process_id: str,
         *,
-        offset: int,
+        retained_bytes: dict[str, int],
     ) -> None:
-        """Flush only streams whose observed end matches an empty terminal poll."""
+        """Flush only streams whose observed end matches their verified capture."""
         op = self._managed_processes.get(process_id)
         row = self._rows.get(op or "")
         if (
             not row
             or self._identity(principal, host_session)
             != (row.issuer, row.subject, row.client_id, row.session_tag)
-            or type(offset) is not int
-            or offset < 0
         ):
             return
         for stream, pending in tuple(row.pending.items()):
+            end = retained_bytes.get(stream)
             if (
                 stream not in row.discarding
-                and self._process_offsets.get((process_id, stream)) == offset
+                and type(end) is int
+                and end >= 0
+                and self._process_offsets.get((process_id, stream)) == end
             ):
                 self._emit_line(row, stream, pending)
                 row.pending.pop(stream, None)
