@@ -83,6 +83,15 @@ class BrowserLiveFrameTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BrowserError):
             await self.gateway.human_resume(token, self.owner[1], self.owner[0])
 
+    async def test_stale_stop_does_not_close_replacement_session(self):
+        with self.assertRaisesRegex(BrowserError, "session changed"):
+            await self.send("browser.close", {"expected_session_id": "old-session"})
+        self.assertIs(self.gateway.sessions[self.owner], self.entry)
+        for invalid in ("", 3, "x" * 129):
+            with self.assertRaisesRegex(BrowserError, "invalid expected"):
+                await self.send("browser.close", {"expected_session_id": invalid})
+        self.assertIs(self.gateway.sessions[self.owner], self.entry)
+
     async def test_expired_manual_handoff_requires_new_link_not_ai_resume(self):
         self.publish()
         first = await self.send("browser.handoff", {"reason": "approval"})
