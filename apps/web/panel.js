@@ -167,7 +167,7 @@ const helper=d.capabilities?.privileged_helper===true;
 const eligible=ceiling==='FULL_CONTROL'&&helper;
 permissionForm.innerHTML='<h3>Permission controls</h3><p class="muted">Server permission: <strong>'+esc(displayPermissionName(d.permission_profile))+'</strong> · Local device ceiling: <strong>'+esc(displayPermissionName(ceiling))+'</strong></p>'+
     (eligible?'<p class="muted">This device allows Full Control locally. Update an authorized account grant below if your server policy and OAuth scope also allow it.</p>':'<p class="muted" role="status">Full Control cannot be enabled remotely: this device has a '+esc(displayPermissionName(ceiling))+' local ceiling'+(helper?'':', and no privileged helper')+'. Configure and approve the higher ceiling locally on the Linux device first, then refresh this panel. Your current device access remains unchanged.</p>')+
-    '<p class="muted">Server policy cannot currently be edited from this panel. No unsupported permission request will be sent.</p>';
+    '<p class="muted">The active permission selector below updates server policy only after confirmation. Full Control remains unavailable until the device reports a healthy privileged helper and local approval; account grants and OAuth scopes are separate.</p>';
 section.prepend(permissionForm);
 const activeForm=document.createElement('form');
 activeForm.className='device-active-permission-form';
