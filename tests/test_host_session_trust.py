@@ -84,3 +84,66 @@ async def test_known_session_value_cannot_impersonate_another_conversation(
     # Same OAuth identity and known copied metadata are not proof of host context.
     if await request("victim-session"):
         raise UnauthenticatedSessionSpoof
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    raises=UnauthenticatedSessionSpoof,
+    reason="activity conversation metadata is not authenticated",
+)
+async def test_known_session_value_cannot_impersonate_activity_conversation():
+    class DB:
+        def list_accessible_devices(self, subject):
+            return [{"id": "device-a", "display_name": "Fixture"}]
+
+        def recent_audit(self, subject, limit):
+            return []
+
+        def add_audit(self, **kwargs):
+            return 1
+
+    principal = Principal(
+        "owner", "client", "oauth2", ("commandcore:standard",), "https://idp.test"
+    )
+    service = ToolService(DB(), None, 60)
+    op = service.live_activity.begin(
+        principal, "shell.exec", {"command": "hostname"}, host_session="victim-session"
+    )
+    service.live_activity.set_device(op, "device-a")
+    service.live_activity.finish(op, status="ok")
+    args = {"view": "conversation", "include_details": True}
+    other = await service.call(
+        principal, "activity.feed", args, host_session="other-session"
+    )
+    assert not any(e.get("operation_id") == op for e in other["events"])
+    spoofed = await service.call(
+        principal, "activity.feed", args, host_session="victim-session"
+    )
+    if any(e.get("operation_id") == op for e in spoofed["events"]):
+        raise UnauthenticatedSessionSpoof
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=UnauthenticatedSessionSpoof,
+    reason="Browser conversation metadata is not authenticated",
+)
+def test_known_session_value_cannot_impersonate_browser_conversation():
+    from types import SimpleNamespace
+    from commandcore_server.tools import ToolError
+
+    principal = Principal(
+        "owner", "client", "oauth2", ("commandcore:standard",), "https://idp.test"
+    )
+    service = ToolService(None, None, 60)
+    service.browser = SimpleNamespace(sessions={})
+    service._browser_scope_args(principal, "browser.open", {}, "victim-session")
+    with pytest.raises(ToolError, match="Another conversation"):
+        service._browser_scope_args(principal, "browser.close", {}, "other-session")
+    try:
+        service._browser_scope_args(principal, "browser.close", {}, "victim-session")
+    except ToolError:
+        return
+    # The gate accepted the copied metadata; no Browser worker was started.
+    raise UnauthenticatedSessionSpoof

@@ -15,12 +15,14 @@ not establish cross-subject access, show how the identifier could be obtained,
 or demonstrate behavior of an actual ChatGPT client. Tests using different
 session values only demonstrate separation when callers supply different values.
 Viewer references are issuer/subject/client-bound, but can be issued based on
-the same unauthenticated session metadata.
+the same unauthenticated session metadata. Isolated checks also show that the
+same principal and copied session value can see a conversation-filtered
+Activity event and pass the Browser conversation gate; the latter check does
+not start or operate a Browser worker.
 
 This is a **release blocker** for any claim that conversation metadata is an
-authenticated isolation boundary. Browser and activity code also consume the
-session tag and require separate end-to-end assessment; the timeline test alone
-does not establish whether each surface has the same exploit path.
+authenticated isolation boundary. Browser and Activity require end-to-end
+assessment with the actual host and Browser worker.
 
 Before release, review a design that either authenticates host-to-server
 conversation context through an independently verifiable binding, or explicitly
