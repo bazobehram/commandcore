@@ -33,12 +33,27 @@ def run():
     state = subprocess.run(["git","-c",f"safe.directory={ROOT}","status","--porcelain",
                             "--untracked-files=normal"],cwd=ROOT,text=True,capture_output=True)
     checks["git_status_readable"] = state.returncode == 0
+    # Working tree may contain unrelated Rust experiments and local browser
+    # dependencies. Only changes to the candidate's release-scoped files
+    # should impact source integrity. Never confuse a clean tree with approval.
+    scoped_dirty = []
+    if state.returncode == 0:
+        for line in state.stdout.splitlines():
+            path = line[3:]
+            if (path.startswith("apps/server/commandcore_server/")
+                    or path in {"pyproject.toml", "requirements.txt",
+                                "requirements-server.lock"}
+                    or path.startswith("scripts/collaboration_")
+                    or path.startswith("tests/test_collaboration_")
+                    or path.startswith("tests/ui/test_webauthn_")):
+                scoped_dirty.append(path)
     report = {
         "staging_checks": checks,
         "live_acceptance_evidence": live,
         "uncommitted_git_entries": len(state.stdout.splitlines()) if state.returncode == 0 else None,
+        "release_scoped_dirty_files": scoped_dirty,
         "release_ready": all(checks.values()) and all(live.values()) and state.returncode == 0
-                         and not state.stdout.strip(),
+                         and not scoped_dirty,
     }
     print(json.dumps(report,indent=2,sort_keys=True))
     return 0 if report["release_ready"] else 3
