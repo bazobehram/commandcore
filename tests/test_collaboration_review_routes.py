@@ -21,6 +21,11 @@ with tempfile.TemporaryDirectory() as d:
         headers={"origin":"https://testserver","x-test-owner":"owner-A"}
         def check(method,path,expected,h=headers):
             res=client.request(method,path,headers=h);assert res.status_code==expected,(path,res.status_code,res.text);return res
+        landing=check("GET","/collaboration/review",200)
+        assert 'id="enroll-passkey"' in landing.text
+        assert 'id="enrollment-status"' in landing.text
+        assert '<script src="/collaboration/webauthn-enroll.js" defer></script>' in landing.text
+        assert landing.headers["content-security-policy"].find("script-src 'self'")>=0
         # Registration endpoints require explicit server config and private panel.
         check("POST","/api/collaboration/webauthn/register/begin",503)
         check("POST","/api/collaboration/webauthn/register/finish",503)

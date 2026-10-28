@@ -182,7 +182,12 @@ btn?.addEventListener('click',async()=>{
             '<title>CommandCore — Collaboration review</title></head><body>'
             '<main><h1>Pending collaboration requests</h1>'
             '<p>No message can be approved or delivered from this page.</p>'
-            '<ul>' + items + '</ul></main></body></html>'
+            '<section><h2>Register a passkey</h2>'
+            '<p>Registration verifies identity only; it does not enable message delivery.</p>'
+            '<button id="enroll-passkey" type="button">Enroll passkey</button>'
+            '<p id="enrollment-status" role="status" aria-live="polite"></p>'
+            '<script src="/collaboration/webauthn-enroll.js" defer></script>'
+            '</section><ul>' + items + '</ul></main></body></html>'
         )
         return HTMLResponse(body, headers={
             "Cache-Control": "no-store",
