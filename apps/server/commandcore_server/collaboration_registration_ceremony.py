@@ -22,7 +22,7 @@ class RegistrationCeremonies:
             from fido2.server import Fido2Server
             from fido2.webauthn import (PublicKeyCredentialRpEntity,
                 PublicKeyCredentialUserEntity,UserVerificationRequirement,
-                PublicKeyCredentialParameters,PublicKeyCredentialType)
+                PublicKeyCredentialParameters,PublicKeyCredentialType,ResidentKeyRequirement)
         except ImportError:
             raise AuthorizationDenied("fido2_dependency_missing") from None
         if not owner or not rp_id or origin != "https://"+rp_id:
@@ -34,7 +34,8 @@ class RegistrationCeremonies:
             type=PublicKeyCredentialType.PUBLIC_KEY,alg=-8)]
         options,state=server.register_begin(
             PublicKeyCredentialUserEntity(id=owner.encode(),name=owner,display_name=owner),
-            user_verification=UserVerificationRequirement.REQUIRED)
+            user_verification=UserVerificationRequirement.REQUIRED,
+            resident_key_requirement=ResidentKeyRequirement.REQUIRED)
         serialized={"challenge":state["challenge"],"user_verification":"required"}
         with self.lock:
             self.db.execute("INSERT INTO registration_ceremonies VALUES(?,?,?,?,?,?,0)",

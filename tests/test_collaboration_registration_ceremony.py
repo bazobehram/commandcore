@@ -12,6 +12,7 @@ class CeremonyTests(unittest.TestCase):
   self.assertEqual(result["expires_at"],220)
   self.assertEqual([x["alg"] for x in result["options"]["publicKey"]["pubKeyCredParams"]],[-8])
   self.assertEqual(result["options"]["publicKey"]["authenticatorSelection"]["userVerification"],"required")
+  self.assertEqual(result["options"]["publicKey"]["authenticatorSelection"]["residentKey"],"required")
   self.assertEqual(result["options"]["publicKey"]["challenge"],result["challenge"])
   self.assertEqual(self.ceremony.db.execute("SELECT json_extract(state,'$.user_verification') FROM registration_ceremonies").fetchone()[0],"required")
  def test_separate_credential_store_denied(self):
