@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');
 const fs=require('fs');
 (async()=>{
-const b=await chromium.launch({headless:true,executablePath:'/usr/bin/google-chrome',args:['--no-sandbox']});
+const b=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),args:['--no-sandbox']});
 try{
 const context=await b.newContext({ignoreHTTPSErrors:true});const page=await context.newPage();
 await page.route('https://panel.example.test/**',r=>r.fulfill({status:200,contentType:'text/html',body:'<html>test</html>'}));

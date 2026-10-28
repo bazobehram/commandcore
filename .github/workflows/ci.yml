@@ -217,9 +217,9 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install fido2==2.2.1
           npm ci --prefix tests/ui
+          npx --prefix tests/ui playwright install --with-deps chromium
       - name: Check browser and Docker prerequisites
         run: |
-          test -x /usr/bin/google-chrome
           docker version
       - name: WebAuthn and review staged acceptance (never authorize delivery)
         run: ./scripts/collaboration_staged_acceptance.sh
