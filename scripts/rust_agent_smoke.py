@@ -137,6 +137,9 @@ def main():
         (td / "policy.json").write_text(
             json.dumps({"configured_max_permission_profile": "STANDARD"})
         )
+        # The Agent rejects group-writable policy files. Do not depend on
+        # the invoking host's umask when creating this isolated fixture.
+        (td / "policy.json").chmod(0o600)
         slog = (td / "server.log").open("w+")
         alog = (td / "agent.log").open("w+")
         server = agent = None
@@ -221,6 +224,7 @@ def main():
                 {"selection_id": sid, "command": "hostname", "timeout_ms": 5000},
                 2,
             )
+            assert "stdout" in who, who
             assert who["stdout"].strip() == socket.gethostname(), who
             info = mcp(base, token, "system.info", {"selection_id": sid}, 3)
             assert info["result"]["agent_implementation"] == "rust", info
@@ -278,6 +282,59 @@ def main():
                     break
                 time.sleep(0.05)
             assert ps["result"].get("running") is False, ps
+            # Exercise capture-completion metadata from the real native job
+            # supervisor; bootstrap auth here does not test the OAuth timeline.
+            completed = mcp(
+                base,
+                token,
+                "process.start",
+                {"selection_id": sid, "command": "hostname"},
+                100,
+            )
+            completed_id = completed["result"]["process_id"]
+            for _ in range(100):
+                native = mcp(
+                    base,
+                    token,
+                    "process.output",
+                    {"selection_id": sid, "process_id": completed_id, "offset": 0},
+                    101,
+                )["result"]
+                stdout_capture = native.get("stdout_capture", {})
+                stderr_capture = native.get("stderr_capture", {})
+                if (
+                    native.get("running") is False
+                    and stdout_capture.get("complete") is True
+                    and stderr_capture.get("complete") is True
+                ):
+                    break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("native process capture did not complete")
+            assert native["stdout"].strip() == socket.gethostname()
+            assert (
+                stdout_capture.get("truncated") is False
+                and stderr_capture.get("truncated") is False
+            )
+            assert stdout_capture.get("retained_bytes") == len(
+                native["stdout"].encode("utf-8")
+            )
+            end = mcp(
+                base,
+                token,
+                "process.output",
+                {
+                    "selection_id": sid,
+                    "process_id": completed_id,
+                    "offset": stdout_capture["retained_bytes"],
+                },
+                102,
+            )["result"]
+            assert end["stdout"] == end["stderr"] == ""
+            assert (
+                end["stdout_capture"]["complete"] is True
+                and end["stderr_capture"]["complete"] is True
+            )
             stop(agent)
             agent = None
             rr = subprocess.run(
@@ -334,6 +391,7 @@ def main():
                         "fs_round_trip": True,
                         "process_list": True,
                         "managed_process_stream_and_cancel": True,
+                        "managed_output_completion_metadata": True,
                         "local_read_only_ceiling": True,
                         "round_trip": "MCP -> CommandCore -> Rust Agent -> OS -> MCP",
                     },
