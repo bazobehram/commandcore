@@ -200,3 +200,30 @@ async def test_device_call_records_authorized_timeline_and_rechecks_grant(tmp_pa
     assert (await svc.call(OWNER, "execution.timeline", {}, host_session="chat-a"))[
         "events"
     ] == []
+
+
+@pytest.mark.asyncio
+async def test_timeline_scope_and_verified_client_contract():
+    service = ToolService(FakeDB(), None, 60)
+    reader = Principal(
+        "owner", "client", "oauth2", ("commandcore:read",), "https://idp.test"
+    )
+    for tool in ("execution.timeline", "execution.timeline.watch"):
+        assert service._required_scope(tool) == "commandcore:standard"
+        with pytest.raises(ToolError, match="requires OAuth scope"):
+            await service.call(reader, tool, {}, host_session="chat-a")
+
+    for client_id in ("", "unknown", "oauth-client"):
+        unverified = Principal(
+            "owner", client_id, "oauth2", ("commandcore:standard",), "https://idp.test"
+        )
+        with pytest.raises(ToolError, match="insufficient_scope"):
+            await service.call(
+                unverified, "execution.timeline.watch", {}, host_session="chat-a"
+            )
+
+    result = await service.call(
+        OWNER, "execution.timeline.watch", {}, host_session="chat-a"
+    )
+    assert result["session_available"] is True
+    assert result["session_ref"]
