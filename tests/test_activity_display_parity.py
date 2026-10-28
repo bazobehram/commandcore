@@ -72,9 +72,13 @@ def test_projection_remains_bound_to_authorized_conversation():
     live.finish(op, status="ok", exit_code=0)
     devices = [{"id": "device", "display_name": "fixture"}]
     tag = live.session_tag("chat-a")
-    rows = live.snapshot(owner, [], devices, 10, include_details=True, session_tag=tag)[
-        "events"
-    ]
+    snapshot = live.snapshot(
+        owner, [], devices, 10, include_details=True, session_tag=tag
+    )
+    rows = snapshot["events"]
+    assert "validated command grammar" in snapshot["privacy"]
+    assert "HTTPS origins only" in snapshot["privacy"]
+    assert "no raw command arguments" not in snapshot["privacy"]
     assert rows[0]["detail"]["command_display"] == "pwd && git status --short"
     assert (
         live.snapshot(other, [], devices, 10, include_details=True, session_tag=tag)[
