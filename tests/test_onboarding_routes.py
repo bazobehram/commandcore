@@ -26,9 +26,11 @@ def panel(tmp_path):
             subject,
             "test-panel",
             "oauth2-panel",
-            ("commandcore:read", "commandcore:standard", "commandcore:full")
-            if request.headers.get("test-full-scope") == "yes"
-            else ("commandcore:read", "commandcore:standard"),
+            (
+                ("commandcore:read", "commandcore:standard", "commandcore:full")
+                if request.headers.get("test-full-scope") == "yes"
+                else ("commandcore:read", "commandcore:standard")
+            ),
         )
 
     class Agents:
@@ -340,3 +342,52 @@ def test_full_grant_needs_full_scope_and_active_helper(panel):
         client.put(path + "/grants", headers=operator(), json=body).status_code == 403
     )
     assert client.put(path + "/grants", headers=full, json=body).status_code == 200
+
+
+def test_managed_rename_preserves_identity_permission_and_grants(panel):
+    client, db, _, _ = panel
+    did = approve(client, begin(client, "STANDARD"))
+    path = "/api/managed-devices/" + did
+    before = db.get_device(did)
+    assert (
+        client.put(
+            path + "/grants",
+            headers=operator(),
+            json={"subject": "second", "profile": "STANDARD"},
+        ).status_code
+        == 200
+    )
+    grant_before = db.list_accessible_devices("second")
+    resp = client.patch(path, headers=operator(), json={"display_name": "netti"})
+    assert resp.status_code == 200, resp.text
+    after = db.get_device(did)
+    assert after["id"] == before["id"] == did
+    assert after["display_name"] == "netti"
+    assert after["permission_profile"] == before["permission_profile"]
+    assert after["owner_id"] == before["owner_id"]
+    grant_after = db.list_accessible_devices("second")
+    assert [
+        (g["id"], g["permission_profile"], g.get("access_max_permission_profile"))
+        for g in grant_after
+    ] == [
+        (g["id"], g["permission_profile"], g.get("access_max_permission_profile"))
+        for g in grant_before
+    ]
+    listed = client.get("/api/managed-devices", headers=operator()).json()["devices"]
+    assert any(d["id"] == did and d["display_name"] == "netti" for d in listed)
+    audit = client.get(path + "/audit", headers=operator()).json()["events"]
+    assert any(e["tool"] == "enrollment.device.rename" for e in audit)
+    assert (
+        client.patch(
+            path, headers=operator("stranger"), json={"display_name": "hijack"}
+        ).status_code
+        == 404
+    )
+    assert db.get_device(did)["display_name"] == "netti"
+    assert client.post(path + "/revoke", headers=operator()).status_code == 200
+    assert (
+        client.patch(
+            path, headers=operator(), json={"display_name": "resurrect"}
+        ).status_code
+        == 409
+    )
