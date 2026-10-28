@@ -315,3 +315,51 @@ async def test_discovery_preserves_independent_shell_and_browser_guidance():
         assert "do not start commandcore.watch automatically" in descriptions[tool]
         assert "per-operation terminal widget" in descriptions["shell.exec"]
         assert "Before a new user device/Browser task" not in descriptions[tool]
+
+
+@pytest.mark.asyncio
+async def test_standalone_resources_resolve_for_existing_cards():
+    from commandcore_server.mcp import ACTIVITY_UI_URI, BROWSER_WIDGET_URI
+
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    definitions = {entry["name"]: entry for entry in handler.definitions}
+    assert (
+        definitions["browser.watch"]["_meta"]["ui"]["resourceUri"] == BROWSER_WIDGET_URI
+    )
+    assert (
+        definitions["activity.watch"]["_meta"]["ui"]["resourceUri"] == ACTIVITY_UI_URI
+    )
+    assert ACTIVITY_UI_URI != BROWSER_WIDGET_URI
+    for uri, view in ((BROWSER_WIDGET_URI, "browser"), (ACTIVITY_UI_URI, "activity")):
+
+        async def receive():
+            return {
+                "type": "http.request",
+                "body": json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "resources/read",
+                        "params": {"uri": uri},
+                    }
+                ).encode(),
+            }
+
+        response = await handler.handle(
+            Request(
+                {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+                receive,
+            ),
+            Principal(
+                "owner",
+                "client",
+                "oauth2",
+                ("commandcore:standard",),
+                "https://issuer.test",
+            ),
+        )
+        content = json.loads(response.body)["result"]["contents"][0]
+        assert content["uri"] == uri
+        assert f'function select(view){{view="{view}";' in content["text"]
