@@ -55,10 +55,29 @@ def wait_online(base, token, did, t=20):
                 d["id"] == did
                 and d["status"] == "online"
                 and d.get("capabilities", {}).get("agent_implementation") == "rust"
+                and d.get("capabilities", {}).get("privileged_helper") is True
             ):
                 return d
         time.sleep(0.2)
-    raise RuntimeError("Rust Agent offline")
+    raise RuntimeError("Rust Agent or authenticated privileged helper not ready")
+
+
+def wait_helper_authenticated(sock, secret, timeout=10):
+    """Socket existence alone does not prove the helper can accept IPC."""
+    import asyncio
+
+    from commandcore_agent.helper_client import HelperClient
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        probe = asyncio.run(HelperClient(str(sock), str(secret)).probe())
+        if (
+            probe.get("available") is True
+            and probe.get("max_permission_profile") == "FULL_CONTROL"
+        ):
+            return
+        time.sleep(0.1)
+    raise RuntimeError("authenticated root helper did not become ready")
 
 
 def stop(p):
@@ -191,6 +210,35 @@ def main():
                 text=True,
             )
             wait_path(sock)
+            wait_helper_authenticated(sock, secret)
+            # Verify the Agent's actual unprivileged account can authenticate,
+            # rather than merely confirming that root can probe the socket.
+            user_probe = subprocess.run(
+                [
+                    "setpriv",
+                    f"--reuid={nobody.pw_uid}",
+                    f"--regid={nogroup.gr_gid}",
+                    "--clear-groups",
+                    str(BIN),
+                    "capabilities",
+                ],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            if user_probe.returncode:
+                raise RuntimeError(
+                    "unprivileged native capability probe failed: "
+                    + user_probe.stderr[:2000]
+                )
+            probe = json.loads(user_probe.stdout)
+            if probe.get("privileged_helper") is not True:
+                raise RuntimeError(
+                    "unprivileged native helper capability unavailable: "
+                    + user_probe.stdout[:1000]
+                )
             server = subprocess.Popen(
                 [sys.executable, "-m", "commandcore_server.main"],
                 cwd=ROOT,
