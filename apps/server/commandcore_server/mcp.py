@@ -1172,22 +1172,30 @@ class MCPHandler:
             tools._ui_tasks = UITaskLedger()
         self.tasks = tools._ui_tasks
         self.tasks.bind_activity(getattr(tools, "live_activity", None))
-        watch_first = (
-            "Before a new user device/Browser task, call commandcore.watch ONCE to show one compact live task, then run the ordinary tools. "
-            "Reuse that task for all steps, including Browser actions; do not call watch between steps or repeatedly within one task. "
-            "Ordinary operations return data and update that task without creating a new card. "
-            "After the last call returns, call commandcore.finish once with its task_id. Never retry a timed-out write automatically."
+        interface_guidance = (
+            "Use commandcore.watch only when the user explicitly requests an aggregate task panel. "
+            "For Browser requests, call browser.open (or browser.search), then browser.watch; "
+            "do not start commandcore.watch automatically. For Shell requests, call shell.exec "
+            "without commandcore.watch. Finish only an explicitly started aggregate task. "
+            "Never retry a timed-out write automatically."
         )
         for source in raw_definitions:
             entry = json.loads(json.dumps(source))
             tool_name = entry["name"]
             if tool_name == "commandcore.watch":
                 entry["description"] = (
-                    "Start one compact live task before a new user device or Browser task. Returns task_id; reuse it through all steps and finish once at the end. The card expands to Activity or Browser. "
-                    + watch_first
+                    "Legacy aggregate task monitor, used only when explicitly requested. "
+                    + interface_guidance
+                )
+            elif tool_name == "shell.exec":
+                entry["description"] += (
+                    " This atomic Shell operation returns an auditable result and advertises "
+                    "a per-operation terminal widget; the host controls placement. "
+                    "When native results are not visible, present one concise receipt before "
+                    "the next shell operation. " + interface_guidance
                 )
             elif tool_name in OPERATION_TOOLS:
-                entry["description"] = entry["description"] + " " + watch_first
+                entry["description"] += " " + interface_guidance
             if name == "commandcore" and tool_name in {
                 "devices.list",
                 "devices.select",
@@ -1325,9 +1333,9 @@ class MCPHandler:
                 "instructions": (
                     "CommandCore controls enrolled computers. Call devices.list, then devices.select. "
                     "Reuse the returned selection_id in subsequent device tools. Explicit device_id overrides selection_id. "
-                    "Call commandcore.watch once at the start of a user device/Browser task. "
-                    "Reuse its single live task card for every step; ordinary tools return data. "
-                    "Call commandcore.finish once after the last action returns. "
+                    "For Browser tasks call browser.open (or browser.search) followed by browser.watch. "
+                    "For Shell tasks call shell.exec without commandcore.watch. "
+                    "Browser and Shell widgets are independent. Use commandcore.watch only for an explicitly requested aggregate task, and finish only that task. "
                     "Open commandcore.workspace only for an explicitly requested full workspace. "
                     "Use browser.search for public searches, browser.links then browser.follow to open visible results without coordinates, and browser.back/browser.forward to revisit public pages. Never guess a result URL or replay an uncertain submission. Use browser.handoff for private "
                     "sign-in and approvals. Tool success is not visual UI acceptance."
@@ -1365,8 +1373,9 @@ class MCPHandler:
                     },
                     "instructions": (
                         "Use devices.select and pass selection_id to device tools. "
-                        "Call commandcore.watch once before a new user device/Browser task. "
-                        "Reuse its live card for all steps and call commandcore.finish once at the end. "
+                        "For Browser requests use browser.open (or browser.search) then browser.watch. "
+                        "For Shell requests use shell.exec without commandcore.watch. "
+                        "Use commandcore.watch only for an explicitly requested aggregate task and finish only that task. "
                         "Ordinary tools return data. Use commandcore.workspace for an explicitly requested full workspace. "
                         "Request browser.handoff for private approval."
                     ),

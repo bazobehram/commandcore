@@ -51,6 +51,10 @@ async def test_brand_icon_discovery_preserves_older_protocols(protocol):
         Principal("owner"),
     )
     result = json.loads(response.body)["result"]
+    instructions = result["instructions"]
+    assert "browser.watch" in instructions
+    assert "shell.exec without commandcore.watch" in instructions
+    assert "explicitly requested aggregate task" in instructions
     info = (
         result["_meta"]["io.modelcontextprotocol/serverInfo"]
         if modern
@@ -296,3 +300,18 @@ async def test_oauth_scope_failure_gives_mcp_reauthorization_challenge():
     assert result["isError"] is True
     assert result["_meta"]["mcp/www_authenticate"] == [challenge]
     assert "io.modelcontextprotocol/serverInfo" in result["_meta"]
+
+
+@pytest.mark.asyncio
+async def test_discovery_preserves_independent_shell_and_browser_guidance():
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    descriptions = {
+        entry["name"]: entry["description"] for entry in handler.definitions
+    }
+    assert "explicitly requested" in descriptions["commandcore.watch"]
+    for tool in ("shell.exec", "browser.open"):
+        assert "do not start commandcore.watch automatically" in descriptions[tool]
+        assert "per-operation terminal widget" in descriptions["shell.exec"]
+        assert "Before a new user device/Browser task" not in descriptions[tool]
