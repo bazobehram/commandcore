@@ -123,6 +123,7 @@ class _Row:
     output_truncated: bool = False
     pending: dict[str, str] = field(default_factory=dict)
     discarding: set[str] = field(default_factory=set)
+    unreliable_streams: set[str] = field(default_factory=set)
     finished: float | None = None
     last_seq: int = 0
 
@@ -342,17 +343,50 @@ class LiveExecutionTimeline:
             row.session_tag,
         ):
             return
-        if type(offset) is not int or offset < 0 or not isinstance(chunk, str):
+        if (
+            stream not in {"stdout", "stderr"}
+            or stream in row.unreliable_streams
+            or type(offset) is not int
+            or offset < 0
+            or not isinstance(chunk, str)
+            or not chunk
+        ):
+            return
+
+        def withhold_stream() -> None:
+            # Lossy decoding makes byte offsets and line boundaries ambiguous.
+            row.pending.pop(stream, None)
+            row.discarding.add(stream)
+            row.unreliable_streams.add(stream)
+            row.output_truncated = True
+
+        try:
+            if "\ufffd" in chunk:
+                withhold_stream()
+                return
+            data = chunk.encode("utf-8", errors="strict")
+        except UnicodeEncodeError:
+            withhold_stream()
             return
         key = (process_id, stream)
         old = self._process_offsets.get(key, 0)
         if offset < old:
-            # A repeat poll must not replay overlapping output.
-            chunk = chunk[old - offset :]
+            # Agent offsets count bytes, not Unicode characters.
+            data = data[old - offset :]
             offset = old
-        if not chunk:
+        elif offset > old:
+            # A skipped prefix could contain a secret label: discard that line.
+            row.pending.pop(stream, None)
+            row.discarding.add(stream)
+            row.output_truncated = True
+        if not data:
             return
-        self._process_offsets[key] = offset + len(chunk)
+        try:
+            chunk = data.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            withhold_stream()
+            return
+        self._process_offsets[key] = offset + len(data)
         self.output(op, stream, chunk, source_process=process_id)
 
     def complete_process_output(

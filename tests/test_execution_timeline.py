@@ -375,6 +375,58 @@ def test_managed_process_tail_requires_owned_exact_offset_and_redacts():
     assert "[REDACTED]" in result
 
 
+def test_managed_process_unicode_offsets_and_overlap():
+    timeline = LiveExecutionTimeline(LiveActivity().session_tag)
+    operation, process = str(uuid.uuid4()), str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, "process.start", {"command": "hostname"}
+    )
+    timeline.device(operation, "device-a")
+    timeline.finish(operation, status="started", exit_code=None, duration_ms=1)
+    timeline.attach_process(operation, process)
+    timeline.process_output(OWNER, "chat-a", process, "stdout", "café", offset=0)
+    timeline.process_output(OWNER, "chat-a", process, "stdout", "émore", offset=3)
+    timeline.complete_process_output(
+        OWNER, "chat-a", process, offset=len("cafémore".encode())
+    )
+    events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    assert [e["chunk"] for e in events if e["kind"] == "output"] == ["cafémore"]
+
+
+@pytest.mark.parametrize("mode", ["gap", "replacement", "split_overlap"])
+def test_managed_process_withholds_ambiguous_output(mode):
+    timeline = LiveExecutionTimeline(LiveActivity().session_tag)
+    operation, process = str(uuid.uuid4()), str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, "process.start", {"command": "hostname"}
+    )
+    timeline.device(operation, "device-a")
+    timeline.finish(operation, status="started", exit_code=None, duration_ms=1)
+    timeline.attach_process(operation, process)
+    if mode == "gap":
+        timeline.process_output(OWNER, "chat-a", process, "stdout", "token=", offset=0)
+        timeline.process_output(
+            OWNER, "chat-a", process, "stdout", "private-value\nvisible\n", offset=10
+        )
+    elif mode == "replacement":
+        timeline.process_output(
+            OWNER, "chat-a", process, "stdout", "token=\ufffd", offset=0
+        )
+        timeline.process_output(
+            OWNER, "chat-a", process, "stdout", "private-value\nvisible\n", offset=8
+        )
+    else:
+        timeline.process_output(OWNER, "chat-a", process, "stdout", "é", offset=0)
+        timeline.process_output(
+            OWNER, "chat-a", process, "stdout", "éprivate-value\nvisible\n", offset=1
+        )
+    events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    rendered = json.dumps([e for e in events if e["kind"] == "output"])
+    assert "private-value" not in rendered
+    assert ("visible" in rendered) == (mode == "gap")
+    assert timeline._rows[operation].output_truncated
+
+
 @pytest.mark.asyncio
 async def test_finished_empty_poll_releases_managed_process_tail(tmp_path):
     from commandcore_server.db import Database
