@@ -57,3 +57,15 @@ jobs:
 
   # Deliberately no production deploy job until a trusted runner,
   # verified live compose topology and protected environment are installed.
+
+  reproducible-helper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install isolated build tooling
+        run: python -m pip install 'build>=1,<2' 'setuptools>=75' wheel
+      - name: Verify unsigned helper is reproducible
+        run: python scripts/check_reproducible_helper.py
