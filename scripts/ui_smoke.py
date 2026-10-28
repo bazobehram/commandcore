@@ -16,7 +16,12 @@ from types import SimpleNamespace
 from commandcore_server import browser_gateway
 from commandcore_server.auth import READ_SCOPE, STANDARD_SCOPE
 from commandcore_server.live_activity import LiveActivity
-from commandcore_server.mcp import MCPHandler, TASK_UI_URI
+from commandcore_server.mcp import (
+    ACTIVITY_UI_URI,
+    BROWSER_WIDGET_URI,
+    MCPHandler,
+    TASK_UI_URI,
+)
 from commandcore_server.metrics import Metrics
 from commandcore_server.models import Principal
 
@@ -57,6 +62,20 @@ async def render(directory):
     resource = json.loads(response.body)["result"]["contents"][0]
     (directory / "task-rendered.html").write_text(resource["text"])
     (directory / "sizing-meta.json").write_text(json.dumps(resource["_meta"]))
+    for uri, filename in (
+        (BROWSER_WIDGET_URI, "browser-standalone.html"),
+        (ACTIVITY_UI_URI, "activity-standalone.html"),
+    ):
+
+        class StandaloneRequest(Request):
+            async def json(self):
+                body = await super().json()
+                body["params"]["uri"] = uri
+                return body
+
+        response = await handler.handle(StandaloneRequest(), principal)
+        resource = json.loads(response.body)["result"]["contents"][0]
+        (directory / filename).write_text(resource["text"])
 
 
 def main():

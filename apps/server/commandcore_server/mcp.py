@@ -25,9 +25,9 @@ from .web_assets import web_asset
 # CommandCore plugin. Always retain the original v1 URI for old conversations,
 # but advertise versioned resources to avoid UI-template cache collisions.
 WORKSPACE_UI_URI = "ui://commandcore/workspace-0.12.0-b1.html"
-BROWSER_WIDGET_URI = WORKSPACE_UI_URI
+BROWSER_WIDGET_URI = "ui://commandcore/browser-handoff-calm-v25-20261024.html"
 BROWSER_WIDGET_MIME = "text/html;profile=mcp-app"
-ACTIVITY_UI_URI = WORKSPACE_UI_URI
+ACTIVITY_UI_URI = "ui://commandcore/activity-standalone-v4-20261024.html"
 ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
 COMMANDCORE_UI_URI = WORKSPACE_UI_URI
 COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
@@ -584,6 +584,29 @@ def _operation_html(html: str) -> str:
         .replace("<body>", '<body data-cc-operation-compact="true">' + CARD_BODY, 1)
         .replace("</body>", CARD_RUNTIME + "</body>", 1)
     )
+
+
+def _standalone_view_html(view: str) -> str:
+    """Lock the reviewed workspace to one view for independent saved cards."""
+    if view not in {"browser", "activity"}:
+        raise ValueError("unknown standalone view")
+    html = web_asset("commandcore-widget.html").read_text(encoding="utf-8")
+    selector = "function select(view){"
+    if (
+        html.count(selector) != 1
+        or html.count("</head>") != 1
+        or html.count("</body>") != 1
+    ):
+        raise ValueError("unsupported workspace widget structure")
+    html = html.replace(selector, selector + "view=" + json.dumps(view) + ";", 1)
+    style = '<style>nav[aria-label="Workspace tabs"]{display:none!important}</style>'
+    html = html.replace("</head>", style + "</head>", 1)
+    init = (
+        "<script>document.getElementById("
+        + json.dumps(view + "-tab")
+        + ").click();</script>"
+    )
+    return html.replace("</body>", init + "</body>", 1)
 
 
 # Durable UI task boundaries. No command arguments, output, paths, browser
@@ -1426,7 +1449,11 @@ class MCPHandler:
                     {
                         "uri": uri,
                         "mimeType": mime,
-                        "text": _task_html(web_asset(asset).read_text(encoding="utf-8"))
+                        "text": _standalone_view_html(
+                            "browser" if uri == BROWSER_WIDGET_URI else "activity"
+                        )
+                        if uri in {BROWSER_WIDGET_URI, ACTIVITY_UI_URI}
+                        else _task_html(web_asset(asset).read_text(encoding="utf-8"))
                         if uri in TASK_UI_URIS
                         else _operation_html(
                             web_asset(asset).read_text(encoding="utf-8")
