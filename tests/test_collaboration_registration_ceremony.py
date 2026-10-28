@@ -52,6 +52,27 @@ class CeremonyTests(unittest.TestCase):
        "SELECT consumed FROM registration_ceremonies WHERE challenge=?",
        (c["challenge"],)).fetchone()[0],1)
   finally:registry.close()
+ def test_foreign_owner_cannot_burn_registration_challenge(self):
+  from unittest.mock import patch
+  from types import SimpleNamespace
+  from commandcore_server.collaboration_webauthn_credentials import CredentialRegistry
+  registry=CredentialRegistry(os.path.join(self.tmp.name,"state.sqlite"))
+  c=self.ceremony.begin(owner="owner",rp_id="panel.example.test",
+                        origin="https://panel.example.test",now=100)
+  verified=SimpleNamespace(credential_id=b"owned-credential",
+                           public_key={1:1,3:-8,-1:6,-2:b"k"*32})
+  try:
+   with self.assertRaises(AuthorizationDenied):
+    self.ceremony.finish_and_enroll(registry=registry,owner="intruder",
+       challenge=c["challenge"],response={},now=101)
+   self.assertEqual(self.ceremony.db.execute(
+       "SELECT consumed FROM registration_ceremonies WHERE challenge=?",
+       (c["challenge"],)).fetchone()[0],0)
+   with patch("commandcore_server.collaboration_registration_ceremony.verify_registration",return_value=verified):
+    result=self.ceremony.finish_and_enroll(registry=registry,owner="owner",
+       challenge=c["challenge"],response={},now=102)
+   self.assertTrue(result["enrolled"])
+  finally: registry.close()
  def test_concurrent_finish_only_one_enrolls(self):
   from concurrent.futures import ThreadPoolExecutor
   from unittest.mock import patch
