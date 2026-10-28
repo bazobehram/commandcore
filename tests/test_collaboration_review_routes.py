@@ -26,6 +26,17 @@ with tempfile.TemporaryDirectory() as d:
         assert 'id="enrollment-status"' in landing.text
         assert '<script src="/collaboration/webauthn-enroll.js" defer></script>' in landing.text
         assert landing.headers["content-security-policy"].find("script-src 'self'")>=0
+        # A cross-site form must not be able to reject a pending request.
+        denied_path="/api/collaboration/approvals/req-A/deny"
+        for blocked_headers in (
+            {"origin":"https://evil.example","x-test-owner":"owner-A"},
+            {"x-test-owner":"owner-A","sec-fetch-site":"cross-site"},
+            {"x-test-owner":"owner-A","x-test-auth-kind":"oauth-bearer",
+             "origin":"https://testserver"},
+        ):
+            blocked=client.post(denied_path,headers=blocked_headers)
+            assert blocked.status_code==403,(blocked.status_code,blocked.text)
+            assert ledger.get(owner_subject="owner-A",request_id="req-A").status=="pending"
         # Registration endpoints require explicit server config and private panel.
         check("POST","/api/collaboration/webauthn/register/begin",503)
         check("POST","/api/collaboration/webauthn/register/finish",503)
