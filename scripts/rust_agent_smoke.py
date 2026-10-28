@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, os, socket, subprocess, sys, tempfile, time, tomllib
+import json, os, socket, subprocess, sys, tempfile, threading, time, tomllib
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
 from pathlib import Path
 import httpx
 
@@ -79,12 +83,16 @@ def meta():
     }
 
 
-def mcp(base, token, name, args, rid, timeout=45):
+def mcp(base, token, name, args, rid, timeout=45, session=None):
     body = {
         "jsonrpc": "2.0",
         "id": rid,
         "method": "tools/call",
-        "params": {"name": name, "arguments": args, "_meta": meta()},
+        "params": {
+            "name": name,
+            "arguments": args,
+            "_meta": {**meta(), **({"openai/session": session} if session else {})},
+        },
     }
     h = {
         "Authorization": f"Bearer {token}",
@@ -109,6 +117,26 @@ def main():
     base = f"http://{HOST}:{port}"
     agent_url = f"ws://{HOST}:{port}/agent"
     token = "rust-agent-smoke-token-0123456789abcdef"
+    jwks_port = free_port()
+    issuer = f"http://{HOST}:{jwks_port}"
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(RSAAlgorithm.to_jwk(key.public_key()))
+    jwk.update({"kid": "fixture", "use": "sig", "alg": "RS256"})
+
+    class JWKS(BaseHTTPRequestHandler):
+        def do_GET(self):
+            content = json.dumps({"keys": [jwk]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+        def log_message(self, *_args):
+            pass
+
+    jwks_server = HTTPServer((HOST, jwks_port), JWKS)
+    threading.Thread(target=jwks_server.serve_forever, daemon=True).start()
     with tempfile.TemporaryDirectory(prefix="commandcore-rust-smoke-") as tmp:
         td = Path(tmp)
         state = td / "agent.json"
@@ -128,6 +156,11 @@ def main():
                 "COMMANDCORE_API_TOKEN": token,
                 "COMMANDCORE_PUBLIC_BOOTSTRAP_ENABLED": "true",
                 "COMMANDCORE_BOOTSTRAP_SUBJECT": "rust-owner",
+                "COMMANDCORE_OAUTH_ENABLED": "true",
+                "COMMANDCORE_OAUTH_ISSUER": issuer,
+                "COMMANDCORE_OAUTH_AUDIENCE": base + "/mcp",
+                "COMMANDCORE_OAUTH_JWKS_URL": issuer + "/jwks",
+                "COMMANDCORE_OAUTH_AUTHORIZATION_SERVERS": issuer,
                 "COMMANDCORE_PUBLIC_BASE_URL": base,
                 "COMMANDCORE_AGENT_BASE_URL": agent_url,
                 "COMMANDCORE_AGENT_STATE": str(state),
@@ -335,6 +368,139 @@ def main():
                 end["stdout_capture"]["complete"] is True
                 and end["stderr_capture"]["complete"] is True
             )
+            # Exercise the OAuth timeline through the actual Rust Agent using
+            # a fixture issuer and an isolated temporary device grant.
+            httpx.put(
+                base + f"/api/devices/{did}/grants",
+                headers=auth,
+                json={
+                    "subject": "rust-oauth-fixture",
+                    "max_permission_profile": "STANDARD",
+                },
+                timeout=5,
+            ).raise_for_status()
+            now = int(time.time())
+            oauth = jwt.encode(
+                {
+                    "sub": "rust-oauth-fixture",
+                    "iss": issuer,
+                    "aud": base + "/mcp",
+                    "iat": now,
+                    "exp": now + 300,
+                    "scope": "commandcore:read commandcore:standard",
+                    "client_id": "rust-fixture-client",
+                },
+                key,
+                algorithm="RS256",
+                headers={"kid": "fixture"},
+            )
+            session = "rust-oauth-fixture-conversation"
+            watched = mcp(
+                base, oauth, "execution.timeline.watch", {}, 110, session=session
+            )
+            assert watched.get("session_available") is True
+            started_oauth = mcp(
+                base,
+                oauth,
+                "process.start",
+                {"device_id": did, "command": "hostname"},
+                111,
+                session=session,
+            )
+            oauth_process = started_oauth["result"]["process_id"]
+            for _ in range(100):
+                output = mcp(
+                    base,
+                    oauth,
+                    "process.output",
+                    {"device_id": did, "process_id": oauth_process, "offset": 0},
+                    112,
+                    session=session,
+                )["result"]
+                out_meta, err_meta = (
+                    output.get("stdout_capture", {}),
+                    output.get("stderr_capture", {}),
+                )
+                if (
+                    output.get("running") is False
+                    and out_meta.get("complete") is True
+                    and err_meta.get("complete") is True
+                ):
+                    break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("OAuth native process capture did not complete")
+            assert output["stdout"].strip() == socket.gethostname()
+            before = mcp(base, oauth, "execution.timeline", {}, 113, session=session)
+            output_events = [
+                event
+                for event in before["events"]
+                if event.get("kind") == "output"
+                and event.get("chunk", "").strip() == socket.gethostname()
+            ]
+            assert len(output_events) == 1
+            offset = out_meta["retained_bytes"]
+            assert offset == len(output["stdout"].encode("utf-8"))
+            last = mcp(
+                base,
+                oauth,
+                "process.output",
+                {"device_id": did, "process_id": oauth_process, "offset": offset},
+                114,
+                session=session,
+            )["result"]
+            assert last["stdout"] == last["stderr"] == ""
+            after = mcp(base, oauth, "execution.timeline", {}, 115, session=session)
+            assert (
+                len(
+                    [
+                        event
+                        for event in after["events"]
+                        if event.get("kind") == "output"
+                        and event.get("chunk", "").strip() == socket.gethostname()
+                    ]
+                )
+                == 1
+            )
+            other_session = mcp(
+                base,
+                oauth,
+                "execution.timeline",
+                {},
+                116,
+                session="another-fixture-conversation",
+            )
+            assert not other_session["events"]
+            for subject, client_id in (
+                ("rust-oauth-fixture", "other-client"),
+                ("ungranted-fixture", "rust-fixture-client"),
+            ):
+                other_token = jwt.encode(
+                    {
+                        "sub": subject,
+                        "iss": issuer,
+                        "aud": base + "/mcp",
+                        "iat": now,
+                        "exp": now + 300,
+                        "scope": "commandcore:read commandcore:standard",
+                        "client_id": client_id,
+                    },
+                    key,
+                    algorithm="RS256",
+                    headers={"kid": "fixture"},
+                )
+                isolated = mcp(
+                    base, other_token, "execution.timeline", {}, 117, session=session
+                )
+                assert not isolated["events"]
+            httpx.delete(
+                base + f"/api/devices/{did}/grants",
+                headers=auth,
+                params={"subject": "rust-oauth-fixture"},
+                timeout=5,
+            ).raise_for_status()
+            revoked = mcp(base, oauth, "execution.timeline", {}, 118, session=session)
+            assert not revoked["events"]
             stop(agent)
             agent = None
             rr = subprocess.run(
@@ -392,6 +558,8 @@ def main():
                         "process_list": True,
                         "managed_process_stream_and_cancel": True,
                         "managed_output_completion_metadata": True,
+                        "fixture_oauth_timeline_real_rust_agent": True,
+                        "timeline_client_subject_session_and_revocation_isolation": True,
                         "local_read_only_ceiling": True,
                         "round_trip": "MCP -> CommandCore -> Rust Agent -> OS -> MCP",
                     },
@@ -410,6 +578,8 @@ def main():
         finally:
             stop(agent)
             stop(server)
+            jwks_server.shutdown()
+            jwks_server.server_close()
             slog.close()
             alog.close()
 
