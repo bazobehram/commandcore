@@ -379,6 +379,8 @@ async def main():
 
     for uri in [
         m.TASK_UI_URI,
+        "ui://commandcore/task-0.12.0-b49.html",
+        "ui://commandcore/task-0.12.0-b18.html",
         "ui://commandcore/task-0.12.0-b13.html",
         "ui://commandcore/task-0.12.0-b12.html",
         "ui://commandcore/task-0.12.0-b11.html",
