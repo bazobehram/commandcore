@@ -4,6 +4,7 @@ from commandcore_server.models import Principal
 from commandcore_server.metrics import Metrics
 from commandcore_server.auth import READ_SCOPE, STANDARD_SCOPE
 from commandcore_server.tools import operation_ui_context, ToolError, ToolService
+from commandcore_server.execution_timeline import LiveExecutionTimeline
 
 from commandcore_server import mcp as m
 
@@ -64,6 +65,7 @@ class DB:
 class Tools:
     def __init__(self):
         self.live_activity = Live()
+        self.timeline = LiveExecutionTimeline(self.live_activity.session_tag)
         self.db = DB()
         self.pause = None
         self.failure = None
@@ -143,11 +145,12 @@ async def main():
     h = m.MCPHandler(tools, Metrics(), "test")
     defs = {x["name"]: x for x in h.definitions}
     for name in m.OPERATION_TOOLS:
-        if name in defs:
+        if name in defs and name != "shell.exec":
             assert not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri"), (
                 name
             )
             assert not defs[name].get("_meta", {}).get("openai/outputTemplate"), name
+    assert defs["shell.exec"]["_meta"]["ui"]["resourceUri"] == m.SHELL_UI_URI
     assert defs["commandcore.watch"]["_meta"]["ui"]["resourceUri"] == m.TASK_UI_URI
     assert (
         defs["commandcore.workspace"]["_meta"]["ui"]["resourceUri"]
@@ -376,6 +379,8 @@ async def main():
 
     for uri in [
         m.TASK_UI_URI,
+        "ui://commandcore/task-0.12.0-b49.html",
+        "ui://commandcore/task-0.12.0-b18.html",
         "ui://commandcore/task-0.12.0-b13.html",
         "ui://commandcore/task-0.12.0-b12.html",
         "ui://commandcore/task-0.12.0-b11.html",
@@ -468,3 +473,44 @@ def test_task_lifecycle(monkeypatch, tmp_path):
         asyncio.run(main())
     finally:
         m.web_asset = original_asset
+
+
+def test_browser_close_task_tracking_uses_owned_viewer(monkeypatch, tmp_path):
+    monkeypatch.setenv("COMMANDCORE_UI_TASK_DB", str(tmp_path / "tasks.sqlite3"))
+
+    async def scenario():
+        principal = Principal(
+            "owner", "client", "oauth2", (STANDARD_SCOPE,), "https://issuer.test"
+        )
+        tools = Tools()
+        handler = m.MCPHandler(tools, Metrics(), "fixture")
+        watch = await handler._call_tools(principal, "commandcore.watch", {}, "chat-a")
+        task_id, ref = watch["task_id"], watch["session_ref"]
+        owner, tag = handler._task_context(principal, {"session_ref": ref}, None)
+        await handler._call_tools(
+            principal,
+            "browser.close",
+            {"session_ref": ref, "expected_session_id": "session-a"},
+            None,
+        )
+        assert (
+            handler.tasks.public(handler.tasks.get(owner, tag, task_id))["total"] == 1
+        )
+
+        # This fake tool always succeeds; this assertion tests tracking only.
+        # Browser gateway tests cover actual close authorization and stale IDs.
+        foreign = Principal(
+            "other", "client", "oauth2", (STANDARD_SCOPE,), "https://issuer.test"
+        )
+        foreign_ref = tools.live_activity.issue_viewer(foreign, "chat-a")["session_ref"]
+        await handler._call_tools(
+            principal,
+            "browser.close",
+            {"session_ref": foreign_ref, "expected_session_id": "session-a"},
+            None,
+        )
+        assert (
+            handler.tasks.public(handler.tasks.get(owner, tag, task_id))["total"] == 1
+        )
+
+    asyncio.run(scenario())

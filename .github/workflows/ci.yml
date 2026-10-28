@@ -199,3 +199,27 @@ jobs:
         run: |
           cargo install cargo-audit --locked
           cargo audit --file agent/rust/Cargo.lock
+
+  collaboration-webauthn:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated collaboration test dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install fido2==2.2.1
+          npm ci --prefix tests/ui
+          npx --prefix tests/ui playwright install --with-deps chromium
+      - name: Check browser and Docker prerequisites
+        run: |
+          docker version
+      - name: WebAuthn and review staged acceptance (never authorize delivery)
+        run: ./scripts/collaboration_staged_acceptance.sh

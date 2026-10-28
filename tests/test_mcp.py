@@ -51,6 +51,10 @@ async def test_brand_icon_discovery_preserves_older_protocols(protocol):
         Principal("owner"),
     )
     result = json.loads(response.body)["result"]
+    instructions = result["instructions"]
+    assert "browser.watch" in instructions
+    assert "shell.exec without commandcore.watch" in instructions
+    assert "explicitly requested aggregate task" in instructions
     info = (
         result["_meta"]["io.modelcontextprotocol/serverInfo"]
         if modern
@@ -99,13 +103,54 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
         "commandcore.viewer",
         "commandcore.finish",
         "commandcore.workspace",
+        "operation.render",
+        "shell.native",
     }
-    assert len(CORE_TOOL_NAMES) == 48
+    assert len(CORE_TOOL_NAMES) == 50
     response = await handler.handle(
         await request_for("tools/call", {"name": "system.reboot", "arguments": {}}),
         Principal("owner"),
     )
     assert json.loads(response.body)["result"]["isError"] is True
+
+
+@pytest.mark.asyncio
+async def test_oauth_discovery_preserves_browser_close_safety_contract():
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+            ).encode(),
+            "more_body": False,
+        }
+
+    request = Request(
+        {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+        receive,
+    )
+    principal = Principal(
+        "owner", "client", "oauth2", ("commandcore:standard",), "https://idp.test"
+    )
+    response = await handler.handle(request, principal)
+    tools = json.loads(response.body)["result"]["tools"]
+    close = next(tool for tool in tools if tool["name"] == "browser.close")
+    assert close["inputSchema"] == {
+        "type": "object",
+        "properties": {
+            "session_ref": {"type": "string", "maxLength": 128},
+            "expected_session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        },
+        "required": [],
+        "additionalProperties": False,
+    }
+    assert {"type": "oauth2", "scopes": ["commandcore:standard"]} in close[
+        "securitySchemes"
+    ]
 
 
 @pytest.mark.asyncio
@@ -255,3 +300,119 @@ async def test_oauth_scope_failure_gives_mcp_reauthorization_challenge():
     assert result["isError"] is True
     assert result["_meta"]["mcp/www_authenticate"] == [challenge]
     assert "io.modelcontextprotocol/serverInfo" in result["_meta"]
+
+
+@pytest.mark.asyncio
+async def test_discovery_preserves_independent_shell_and_browser_guidance():
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    descriptions = {
+        entry["name"]: entry["description"] for entry in handler.definitions
+    }
+    assert "explicitly requested" in descriptions["commandcore.watch"]
+    for tool in ("shell.exec", "browser.open"):
+        assert "do not start commandcore.watch automatically" in descriptions[tool]
+        assert "per-operation terminal widget" in descriptions["shell.exec"]
+        assert "Before a new user device/Browser task" not in descriptions[tool]
+
+
+@pytest.mark.asyncio
+async def test_standalone_resources_resolve_for_existing_cards():
+    from commandcore_server.mcp import ACTIVITY_UI_URI, BROWSER_WIDGET_URI
+
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    definitions = {entry["name"]: entry for entry in handler.definitions}
+    assert (
+        definitions["browser.watch"]["_meta"]["ui"]["resourceUri"] == BROWSER_WIDGET_URI
+    )
+    assert (
+        definitions["activity.watch"]["_meta"]["ui"]["resourceUri"] == ACTIVITY_UI_URI
+    )
+    assert ACTIVITY_UI_URI != BROWSER_WIDGET_URI
+    for uri, view in ((BROWSER_WIDGET_URI, "browser"), (ACTIVITY_UI_URI, "activity")):
+
+        async def receive():
+            return {
+                "type": "http.request",
+                "body": json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "resources/read",
+                        "params": {"uri": uri},
+                    }
+                ).encode(),
+            }
+
+        response = await handler.handle(
+            Request(
+                {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+                receive,
+            ),
+            Principal(
+                "owner",
+                "client",
+                "oauth2",
+                ("commandcore:standard",),
+                "https://issuer.test",
+            ),
+        )
+        content = json.loads(response.body)["result"]["contents"][0]
+        assert content["uri"] == uri
+        assert f'function select(view){{view="{view}";' in content["text"]
+
+
+@pytest.mark.asyncio
+async def test_operation_card_resource_display_metadata():
+    from commandcore_server.mcp import RENDER_UI_URI, SHELL_UI_URI, TIMELINE_UI_URI
+
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    owner = Principal(
+        "owner", "client", "oauth2", ("commandcore:standard",), "https://issuer.test"
+    )
+
+    async def invoke(method, params):
+        async def receive():
+            return {
+                "type": "http.request",
+                "body": json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+                ).encode(),
+            }
+
+        response = await handler.handle(
+            Request(
+                {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+                receive,
+            ),
+            owner,
+        )
+        return json.loads(response.body)["result"]
+
+    listed = {
+        item["uri"]: item["_meta"]
+        for item in (await invoke("resources/list", {}))["resources"]
+    }
+    for uri, height in (
+        (RENDER_UI_URI, 180),
+        (TIMELINE_UI_URI, 520),
+        (SHELL_UI_URI, None),
+    ):
+        metadata = (await invoke("resources/read", {"uri": uri}))["contents"][0][
+            "_meta"
+        ]
+        for meta in (listed[uri], metadata):
+            assert meta["openai/ui"] == {
+                "availableDisplayModes": ["inline"],
+                "preferredDisplayMode": "inline",
+            }
+            if height is not None:
+                assert meta["openai/widgetHeightHint"] == height
+                assert meta["openai/widgetMinFrameHeight"] == 1
+            else:
+                assert "openai/widgetHeightHint" not in meta

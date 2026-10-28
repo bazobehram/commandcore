@@ -341,7 +341,10 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "5c5e34137fbc54cda2dcc6ebb9d24bd15c2b40fc840fec27d22b514aa826b52e",
+            # Timeline integration adds observation hooks to ToolService;
+            # The finished-output hook is gated on explicit capture completion;
+            # Browser ownership and lease handling remain covered below.
+            "18b06f777de9ad7f8a7675eabb4454c785543a8a201fad8872a4f4fc4d4086dd",
         )
 
 

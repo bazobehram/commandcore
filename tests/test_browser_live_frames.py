@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from commandcore_server.browser_gateway import (
     BrowserError,
@@ -82,6 +82,116 @@ class BrowserLiveFrameTests(unittest.IsolatedAsyncioTestCase):
         assert frame["state"] == "awaiting_human"
         with self.assertRaises(BrowserError):
             await self.gateway.human_resume(token, self.owner[1], self.owner[0])
+
+    async def test_stale_stop_does_not_close_replacement_session(self):
+        with self.assertRaisesRegex(BrowserError, "session changed"):
+            await self.send("browser.close", {"expected_session_id": "old-session"})
+        self.assertIs(self.gateway.sessions[self.owner], self.entry)
+        for invalid in ("", 3, "x" * 129):
+            with self.assertRaisesRegex(BrowserError, "invalid expected"):
+                await self.send("browser.close", {"expected_session_id": invalid})
+        self.assertIs(self.gateway.sessions[self.owner], self.entry)
+
+    async def test_expired_handoff_cleanup_waits_and_rechecks_renewals(self):
+        self.entry.paused_for_human = True
+        self.entry.handoff_token = "private-fixture"
+        self.entry.handoff_until = 100.0
+        with patch(
+            "commandcore_server.browser_gateway.time.monotonic", return_value=99.0
+        ):
+            with self.assertRaisesRegex(BrowserError, "still valid"):
+                await self.gateway._release(
+                    self.owner,
+                    expected_session_id=self.entry.id,
+                    allow_expired_human=True,
+                )
+        with patch.object(self.gateway, "_release", new_callable=AsyncMock) as release:
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=101.0
+            ):
+                await self.gateway._cleanup_expired_handoffs()
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=190.0
+            ):
+                await self.gateway._cleanup_expired_handoffs()
+            release.assert_not_awaited()
+            # Renewed private control resets the old expiry timer.
+            self.entry.handoff_until = 400.0
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=200.0
+            ):
+                await self.gateway._cleanup_expired_handoffs()
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=401.0
+            ):
+                await self.gateway._cleanup_expired_handoffs()
+            release.assert_not_awaited()
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=492.0
+            ):
+                await self.gateway._cleanup_expired_handoffs()
+            release.assert_awaited_once_with(
+                self.owner, expected_session_id=self.entry.id, allow_expired_human=True
+            )
+
+    async def test_expired_handoff_cleanup_rechecks_replacement_identity(self):
+        self.entry.paused_for_human = True
+        self.entry.handoff_token = "fixture"
+        self.entry.handoff_until = 1.0
+        with patch(
+            "commandcore_server.browser_gateway.time.monotonic", return_value=2.0
+        ):
+            await self.gateway._cleanup_expired_handoffs()
+        replacement = OwnedSession("b" * 36)
+        replacement.paused_for_human = True
+        replacement.handoff_token = "replacement"
+        replacement.handoff_until = 1.0
+        self.gateway.sessions[self.owner] = replacement
+        with patch.object(self.gateway, "_release", new_callable=AsyncMock) as release:
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=200.0
+            ):
+                await self.gateway._cleanup_expired_handoffs()
+            release.assert_not_awaited()
+
+    async def test_expired_release_never_closes_a_new_or_active_handoff(self):
+        self.entry.paused_for_human = True
+        self.entry.handoff_token = "fixture"
+        self.entry.handoff_until = 100.0
+        response = MagicMock()
+        response.json.return_value = {"status": "released"}
+        client = MagicMock()
+        client.post = AsyncMock(return_value=response)
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=client)
+        context.__aexit__ = AsyncMock(return_value=False)
+        with patch(
+            "commandcore_server.browser_gateway.httpx.AsyncClient", return_value=context
+        ):
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=99.0
+            ):
+                with self.assertRaisesRegex(BrowserError, "still valid"):
+                    await self.gateway._release(
+                        self.owner,
+                        expected_session_id=self.entry.id,
+                        allow_expired_human=True,
+                    )
+            with patch(
+                "commandcore_server.browser_gateway.time.monotonic", return_value=101.0
+            ):
+                with self.assertRaisesRegex(BrowserError, "session changed"):
+                    await self.gateway._release(
+                        self.owner, expected_session_id="old", allow_expired_human=True
+                    )
+                client.post.assert_not_awaited()
+                assert await self.gateway._release(
+                    self.owner,
+                    expected_session_id=self.entry.id,
+                    allow_expired_human=True,
+                ) == {"closed": True}
+        assert self.owner not in self.gateway.sessions
+        client.post.assert_awaited_once()
 
     async def test_expired_manual_handoff_requires_new_link_not_ai_resume(self):
         self.publish()

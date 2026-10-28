@@ -18,7 +18,9 @@ def test_baseline_is_unchanged():
 
     baseline = json.loads(gate.BASELINE.read_text())
     assert gate.check(gate.snapshot(gate.TOOL_DEFINITIONS), baseline) == []
-    assert len(gate.TOOL_DEFINITIONS) < 57
+    from commandcore_server.tools import CORE_TOOL_NAMES
+
+    assert {tool["name"] for tool in gate.TOOL_DEFINITIONS} == CORE_TOOL_NAMES
 
 
 def test_added_tool_requires_refresh():

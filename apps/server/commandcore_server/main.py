@@ -457,6 +457,10 @@ enrollment_service = install_routes(
 )
 
 
+from .collaboration_review_routes import install_collaboration_review_routes
+
+install_collaboration_review_routes(app, tools, require_principal, _same_origin)
+
 install_browser_console(app, browser, require_principal, _same_origin, db)
 install_browser_viewer(app, browser, require_principal, _same_origin, db)
 
