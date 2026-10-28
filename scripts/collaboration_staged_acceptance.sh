@@ -33,4 +33,13 @@ trap 'rm -rf "$NATIVE_FIXTURE_DIR"' EXIT
 export COMMANDCORE_NATIVE_ASSERTION_FIXTURE="$NATIVE_FIXTURE_DIR/assertion.json"
 "$NODE_BIN" tests/ui/test_webauthn_virtual_authenticator.cjs
 PYTHONPATH=apps/server python3 tests/ui/verify_webauthn_native_assertion.py
+# End-to-end native browser registration against the actual staging ceremony.
+NATIVE_REG_DIR=$(mktemp -d)
+trap 'rm -rf "$NATIVE_FIXTURE_DIR" "$NATIVE_REG_DIR"' EXIT
+export CC_NATIVE_REG_DB="$NATIVE_REG_DIR/state.sqlite"
+export CC_NATIVE_REG_OPTIONS="$NATIVE_REG_DIR/options.json"
+export CC_NATIVE_REG_RESULT="$NATIVE_REG_DIR/result.json"
+PYTHONPATH=/tmp/cc-webauthn-fido2:apps/server python3 tests/ui/native_registration_begin.py > "$CC_NATIVE_REG_OPTIONS"
+"$NODE_BIN" tests/ui/native_registration_chrome.cjs
+PYTHONPATH=/tmp/cc-webauthn-fido2:apps/server python3 tests/ui/native_registration_finish.py
 echo 'COLLABORATION_STAGED_ACCEPTANCE_PASS (production approval remains disabled)'
