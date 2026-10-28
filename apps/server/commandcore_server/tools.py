@@ -2038,6 +2038,33 @@ class ToolService:
                             chunks.get(stream),
                             offset=forwarded.get("offset", 0),
                         )
+                    offset = forwarded.get("offset", 0)
+                    captures = (
+                        chunks.get("stdout_capture"),
+                        chunks.get("stderr_capture"),
+                    )
+                    if (
+                        chunks.get("available") is True
+                        and chunks.get("running") is False
+                        and chunks.get("stdout") == ""
+                        and chunks.get("stderr") == ""
+                        and type(offset) is int
+                        and offset >= 0
+                        and all(
+                            isinstance(capture, dict)
+                            and capture.get("complete") is True
+                            and capture.get("truncated") is False
+                            and type(capture.get("retained_bytes")) is int
+                            and 0 <= capture["retained_bytes"] <= offset
+                            for capture in captures
+                        )
+                    ):
+                        self.timeline.complete_process_output(
+                            principal,
+                            host_session,
+                            process_id,
+                            offset=forwarded.get("offset", 0),
+                        )
             if name == "shell.exec" and result.status in {"ok", "completed", "started"}:
                 self.timeline.output(live_key, "stdout", result.stdout)
                 self.timeline.output(live_key, "stderr", result.stderr)

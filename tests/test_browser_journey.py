@@ -342,8 +342,9 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
             # Timeline integration adds observation hooks to ToolService;
+            # The finished-output hook is gated on explicit capture completion;
             # Browser ownership and lease handling remain covered below.
-            "caf58a4b4cefd1ef1cf75ddbd57a2cb89f8f1d65e8bb6ac4af439d79cffc9c74",
+            "18b06f777de9ad7f8a7675eabb4454c785543a8a201fad8872a4f4fc4d4086dd",
         )
 
 

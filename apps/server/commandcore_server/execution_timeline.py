@@ -355,6 +355,33 @@ class LiveExecutionTimeline:
         self._process_offsets[key] = offset + len(chunk)
         self.output(op, stream, chunk, source_process=process_id)
 
+    def complete_process_output(
+        self,
+        principal: Principal,
+        host_session: str | None,
+        process_id: str,
+        *,
+        offset: int,
+    ) -> None:
+        """Flush only streams whose observed end matches an empty terminal poll."""
+        op = self._managed_processes.get(process_id)
+        row = self._rows.get(op or "")
+        if (
+            not row
+            or self._identity(principal, host_session)
+            != (row.issuer, row.subject, row.client_id, row.session_tag)
+            or type(offset) is not int
+            or offset < 0
+        ):
+            return
+        for stream, pending in tuple(row.pending.items()):
+            if (
+                stream not in row.discarding
+                and self._process_offsets.get((process_id, stream)) == offset
+            ):
+                self._emit_line(row, stream, pending)
+                row.pending.pop(stream, None)
+
     def finish(
         self,
         operation_id: str | None,

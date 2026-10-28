@@ -50,10 +50,14 @@ class ManagedProcess:
     stdout: bytearray = field(default_factory=bytearray)
     stderr: bytearray = field(default_factory=bytearray)
     max_capture: int = 4 * 1024 * 1024
+    completed_streams: set[str] = field(default_factory=set)
+    truncated_streams: set[str] = field(default_factory=set)
 
     def append(self, stream: str, data: bytes) -> None:
         target = self.stderr if stream == "stderr" else self.stdout
         remaining = self.max_capture - len(target)
+        if len(data) > remaining:
+            self.truncated_streams.add(stream)
         if remaining > 0:
             target.extend(data[:remaining])
 
@@ -486,6 +490,7 @@ class Executor:
             while True:
                 chunk = await stream.read(8192)
                 if not chunk:
+                    managed.completed_streams.add(name)
                     break
                 managed.append(name, chunk)
 
@@ -601,6 +606,16 @@ class Executor:
             "stdout": out.decode("utf-8", errors="replace"),
             "stderr": err.decode("utf-8", errors="replace"),
             "next_offset": offset + max(len(out), len(err)),
+            "stdout_capture": {
+                "complete": "stdout" in m.completed_streams,
+                "retained_bytes": len(m.stdout),
+                "truncated": "stdout" in m.truncated_streams,
+            },
+            "stderr_capture": {
+                "complete": "stderr" in m.completed_streams,
+                "retained_bytes": len(m.stderr),
+                "truncated": "stderr" in m.truncated_streams,
+            },
             "running": m.process.returncode is None,
             "exit_code": m.process.returncode,
         }

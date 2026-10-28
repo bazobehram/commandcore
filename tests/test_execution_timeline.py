@@ -348,3 +348,200 @@ def test_managed_process_output_redacts_across_offset_polls():
     rendered = json.dumps(events)
     assert "fixture-secret" not in rendered
     assert "[REDACTED]" in rendered
+
+
+def test_managed_process_tail_requires_owned_exact_offset_and_redacts():
+    activity = LiveActivity()
+    timeline = LiveExecutionTimeline(activity.session_tag)
+    operation, process = str(uuid.uuid4()), str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, "process.start", {"command": "hostname"}
+    )
+    timeline.device(operation, "device-a")
+    timeline.finish(operation, status="started", exit_code=None, duration_ms=1)
+    timeline.attach_process(operation, process)
+    timeline.process_output(
+        OWNER, "chat-a", process, "stdout", "token=private-value", offset=0
+    )
+    timeline.complete_process_output(OWNER, "chat-b", process, offset=19)
+    timeline.complete_process_output(OWNER, "chat-a", process, offset=20)
+    assert not any(
+        event["kind"] == "output"
+        for event in timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    )
+    timeline.complete_process_output(OWNER, "chat-a", process, offset=19)
+    result = json.dumps(timeline.read(OWNER, "chat-a", [DEVICE])["events"])
+    assert "private-value" not in result
+    assert "[REDACTED]" in result
+
+
+@pytest.mark.asyncio
+async def test_finished_empty_poll_releases_managed_process_tail(tmp_path):
+    from commandcore_server.db import Database
+    from commandcore_server.models import JobResult
+
+    process = str(uuid.uuid4())
+
+    class Agent:
+        polls = 0
+
+        async def dispatch(self, **kwargs):
+            if kwargs["tool"] == "process.start":
+                return JobResult("start", "ok", {"process_id": process}, 0)
+            self.polls += 1
+            offset = kwargs["arguments"].get("offset", 0)
+            output = "fixture-host" if offset == 0 else ""
+            return JobResult(
+                "poll",
+                "ok",
+                {
+                    "available": True,
+                    "running": False,
+                    "stdout": output,
+                    "stderr": "",
+                    "stdout_capture": {
+                        "complete": self.polls >= 3,
+                        "retained_bytes": len("fixture-host"),
+                        "truncated": False,
+                    },
+                    "stderr_capture": {
+                        "complete": self.polls >= 3,
+                        "retained_bytes": 0,
+                        "truncated": False,
+                    },
+                },
+                0,
+            )
+
+    db = Database(str(tmp_path / "timeline.sqlite3"))
+    device = db.register_device(
+        owner_id="owner",
+        display_name="fixture",
+        hostname="fixture",
+        platform="Linux",
+        architecture="x86_64",
+        agent_version="candidate",
+        agent_protocol_version="1",
+        public_key_b64="AAAA",
+        capabilities={},
+        auto_approve=True,
+    )["device_id"]
+    db.mark_online(
+        device,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={},
+        agent_protocol_version="1",
+    )
+    svc = ToolService(db, Agent(), 60)
+    await svc.call(
+        OWNER,
+        "process.start",
+        {"device_id": device, "command": "hostname"},
+        host_session="chat-a",
+    )
+    await svc.call(
+        OWNER,
+        "process.output",
+        {"device_id": device, "process_id": process, "offset": 0},
+        host_session="chat-a",
+    )
+    before = await svc.call(OWNER, "execution.timeline", {}, host_session="chat-a")
+    assert "fixture-host" not in json.dumps(before)
+    await svc.call(
+        OWNER,
+        "process.output",
+        {"device_id": device, "process_id": process, "offset": len("fixture-host")},
+        host_session="chat-a",
+    )
+    capture_incomplete = await svc.call(
+        OWNER, "execution.timeline", {}, host_session="chat-a"
+    )
+    assert "fixture-host" not in json.dumps(capture_incomplete)
+    await svc.call(
+        OWNER,
+        "process.output",
+        {"device_id": device, "process_id": process, "offset": len("fixture-host")},
+        host_session="chat-a",
+    )
+    after = await svc.call(OWNER, "execution.timeline", {}, host_session="chat-a")
+    assert "fixture-host" in json.dumps(after)
+
+
+@pytest.mark.asyncio
+async def test_python_agent_reports_capture_completion_only_after_readers_finish():
+    import os
+
+    if os.name != "posix":
+        pytest.skip("POSIX agent fixture")
+    from commandcore_agent.executor import Executor, ManagedProcess
+
+    executor = Executor()
+    process_id = str(uuid.uuid4())
+    managed = ManagedProcess(
+        process_id,
+        SimpleNamespace(pid=10, returncode=0),
+        "hostname",
+        0,
+        None,
+        max_capture=4,
+    )
+    managed.append("stdout", b"abcdef")
+    executor.managed[process_id] = managed
+
+    async def output(_stream, _chunk):
+        pass
+
+    before = await executor._process_output(
+        "fixture", {"process_id": process_id}, output
+    )
+    assert before["running"] is False
+    assert before["stdout_capture"] == {
+        "complete": False,
+        "retained_bytes": 4,
+        "truncated": True,
+    }
+    managed.completed_streams.update({"stdout", "stderr"})
+    after = await executor._process_output(
+        "fixture", {"process_id": process_id}, output
+    )
+    assert after["stdout_capture"]["complete"] is True
+    assert after["stderr_capture"] == {
+        "complete": True,
+        "retained_bytes": 0,
+        "truncated": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_python_agent_marks_real_output_complete_after_pipe_eof():
+    import asyncio
+    import os
+
+    if os.name != "posix":
+        pytest.skip("POSIX agent fixture")
+    from commandcore_agent.executor import Executor
+
+    executor = Executor()
+
+    async def output(_stream, _chunk):
+        pass
+
+    started = await executor._process_start(
+        "fixture", {"command": "printf fixture-tail"}, output
+    )
+    for _ in range(100):
+        result = await executor._process_output(
+            "fixture", {"process_id": started["process_id"]}, output
+        )
+        if (
+            result["stdout_capture"]["complete"]
+            and result["stderr_capture"]["complete"]
+        ):
+            break
+        await asyncio.sleep(0.01)
+    else:
+        pytest.fail("managed output readers did not reach EOF")
+    assert result["stdout"] == "fixture-tail"
+    assert result["stdout_capture"]["retained_bytes"] == len(b"fixture-tail")
+    assert result["stdout_capture"]["truncated"] is False
