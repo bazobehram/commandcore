@@ -1,4 +1,4 @@
-"""Explicit panel OAuth scope selection must not silently elevate sessions."""
+"""Panel requests full scope by default, retaining explicit standard-only login."""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +11,7 @@ from commandcore_server.db import Database
 from commandcore_server.onboarding_routes import install_routes
 
 
-def test_oauth_login_requires_explicit_full_access_query(tmp_path):
+def test_oauth_login_requests_full_by_default_and_supports_standard(tmp_path):
     app = FastAPI()
     db = Database(str(tmp_path / "panel.sqlite3"))
     settings = SimpleNamespace(
@@ -34,11 +34,11 @@ def test_oauth_login_requires_explicit_full_access_query(tmp_path):
         object(),
     )
     client = TestClient(app, base_url="https://panel.example", follow_redirects=False)
-    standard = client.get("/auth/login")
+    standard = client.get("/auth/login?access=standard")
     assert standard.status_code == 302
     std_params = parse_qs(urlsplit(standard.headers["location"]).query)
     assert std_params["scope"] == ["commandcore:read commandcore:standard"]
-    full = client.get("/auth/login?access=full")
+    full = client.get("/auth/login")
     assert full.status_code == 302
     full_params = parse_qs(urlsplit(full.headers["location"]).query)
     assert full_params["scope"] == [
@@ -48,5 +48,5 @@ def test_oauth_login_requires_explicit_full_access_query(tmp_path):
     typo = client.get("/auth/login?access=invalid")
     assert (
         parse_qs(urlsplit(typo.headers["location"]).query)["scope"]
-        == std_params["scope"]
+        == full_params["scope"]
     )
