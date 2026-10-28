@@ -471,3 +471,44 @@ def test_task_lifecycle(monkeypatch, tmp_path):
         asyncio.run(main())
     finally:
         m.web_asset = original_asset
+
+
+def test_browser_close_task_tracking_uses_owned_viewer(monkeypatch, tmp_path):
+    monkeypatch.setenv("COMMANDCORE_UI_TASK_DB", str(tmp_path / "tasks.sqlite3"))
+
+    async def scenario():
+        principal = Principal(
+            "owner", "client", "oauth2", (STANDARD_SCOPE,), "https://issuer.test"
+        )
+        tools = Tools()
+        handler = m.MCPHandler(tools, Metrics(), "fixture")
+        watch = await handler._call_tools(principal, "commandcore.watch", {}, "chat-a")
+        task_id, ref = watch["task_id"], watch["session_ref"]
+        owner, tag = handler._task_context(principal, {"session_ref": ref}, None)
+        await handler._call_tools(
+            principal,
+            "browser.close",
+            {"session_ref": ref, "expected_session_id": "session-a"},
+            None,
+        )
+        assert (
+            handler.tasks.public(handler.tasks.get(owner, tag, task_id))["total"] == 1
+        )
+
+        # This fake tool always succeeds; this assertion tests tracking only.
+        # Browser gateway tests cover actual close authorization and stale IDs.
+        foreign = Principal(
+            "other", "client", "oauth2", (STANDARD_SCOPE,), "https://issuer.test"
+        )
+        foreign_ref = tools.live_activity.issue_viewer(foreign, "chat-a")["session_ref"]
+        await handler._call_tools(
+            principal,
+            "browser.close",
+            {"session_ref": foreign_ref, "expected_session_id": "session-a"},
+            None,
+        )
+        assert (
+            handler.tasks.public(handler.tasks.get(owner, tag, task_id))["total"] == 1
+        )
+
+    asyncio.run(scenario())
