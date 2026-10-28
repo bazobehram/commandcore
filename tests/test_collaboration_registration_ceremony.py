@@ -15,6 +15,14 @@ class CeremonyTests(unittest.TestCase):
   self.assertEqual(result["options"]["publicKey"]["authenticatorSelection"]["residentKey"],"required")
   self.assertEqual(result["options"]["publicKey"]["challenge"],result["challenge"])
   self.assertEqual(self.ceremony.db.execute("SELECT json_extract(state,'$.user_verification') FROM registration_ceremonies").fetchone()[0],"required")
+ def test_user_handle_length_limit(self):
+  for owner in ("x"*65, "é"*33, ""):
+   with self.subTest(owner_length=len(owner)):
+    with self.assertRaises(AuthorizationDenied):
+     self.ceremony.begin(owner=owner,rp_id="panel.example.test",
+                         origin="https://panel.example.test",now=100)
+  self.assertEqual(self.ceremony.db.execute(
+      "SELECT count(*) FROM registration_ceremonies").fetchone()[0],0)
  def test_separate_credential_store_denied(self):
   from commandcore_server.collaboration_webauthn_credentials import CredentialRegistry
   registry=CredentialRegistry(os.path.join(self.tmp.name,"different.sqlite"))

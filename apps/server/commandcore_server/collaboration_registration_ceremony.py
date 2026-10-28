@@ -25,7 +25,10 @@ class RegistrationCeremonies:
                 PublicKeyCredentialParameters,PublicKeyCredentialType,ResidentKeyRequirement)
         except ImportError:
             raise AuthorizationDenied("fido2_dependency_missing") from None
-        if not owner or not rp_id or origin != "https://"+rp_id:
+        if (not isinstance(owner,str) or not 1 <= len(owner.encode("utf-8")) <= 64
+                or not rp_id or origin != "https://"+rp_id):
+            # WebAuthn user handles are limited to 64 bytes. Reject rather
+            # than minting a challenge that browsers cannot enroll.
             raise AuthorizationDenied("registration_identity_invalid")
         server=Fido2Server(PublicKeyCredentialRpEntity(id=rp_id,name="CommandCore"),
                            verify_origin=lambda presented: presented == origin)
