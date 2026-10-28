@@ -28,6 +28,9 @@ fi
 "$NODE_BIN" tests/ui/test_webauthn_enroll_success.cjs
 "$NODE_BIN" tests/ui/test_webauthn_review.cjs
 "$NODE_BIN" tests/ui/test_webauthn_review_page.cjs
+NATIVE_FIXTURE_DIR=$(mktemp -d)
+trap 'rm -rf "$NATIVE_FIXTURE_DIR"' EXIT
+export COMMANDCORE_NATIVE_ASSERTION_FIXTURE="$NATIVE_FIXTURE_DIR/assertion.json"
 "$NODE_BIN" tests/ui/test_webauthn_virtual_authenticator.cjs
 PYTHONPATH=apps/server python3 tests/ui/verify_webauthn_native_assertion.py
 echo 'COLLABORATION_STAGED_ACCEPTANCE_PASS (production approval remains disabled)'

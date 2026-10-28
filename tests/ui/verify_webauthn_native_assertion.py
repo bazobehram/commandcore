@@ -1,11 +1,12 @@
 """Verify the actual Chrome virtual-authenticator assertion through server crypto."""
 import json
+import os
 from pathlib import Path
 from cryptography.hazmat.primitives.serialization import load_der_public_key
 from commandcore_server.collaboration_approval import AuthorizationDenied
 from commandcore_server.collaboration_webauthn_assertion import verify_assertion
 
-data=json.loads(Path('/tmp/cc-native-webauthn-assertion.json').read_text())
+data=json.loads(Path(os.environ['COMMANDCORE_NATIVE_ASSERTION_FIXTURE']).read_text())
 raw=lambda k:bytes(data[k])
 args=dict(public_key=load_der_public_key(raw('publicKey')),
           authenticator_data=raw('authenticatorData'),

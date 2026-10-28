@@ -24,7 +24,8 @@ return {ok:!!c&&!!assertion,alg,rawIdLength:c.rawId.byteLength,
  Array.from(new Uint8Array(assertion.rawId)).every((v,i)=>v===new Uint8Array(c.rawId)[i]),
  userVerified:!!(authData[32]&4),signatureBytes:assertion.response.signature.byteLength};}catch(e){return {ok:false,alg,error:e.name,message:e.message}}},alg);
 if(!out.ok || !out.discoverableAssertion || !out.userVerified || !out.signatureBytes) throw Error(JSON.stringify(out));
-fs.writeFileSync('/tmp/cc-native-webauthn-assertion.json',JSON.stringify(out.fixture));
+if(!process.env.COMMANDCORE_NATIVE_ASSERTION_FIXTURE)throw Error('missing isolated fixture path');
+fs.writeFileSync(process.env.COMMANDCORE_NATIVE_ASSERTION_FIXTURE,JSON.stringify(out.fixture),{flag:'wx',mode:0o600});
 const {fixture,...summary}=out;console.log('BROWSER_NATIVE_WEBAUTHN_ED25519_ASSERTION_PASS '+JSON.stringify(summary));
 }
 }finally{await b.close()}
