@@ -1,7 +1,7 @@
 const {chromium}=require('playwright'),fs=require('fs');
 (async()=>{
  const options=JSON.parse(fs.readFileSync(process.env.CC_NATIVE_REG_OPTIONS,'utf8'));
- const b=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),args:['--no-sandbox']});
+ const b=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:process.arch==='arm64'?{executablePath:chromium.executablePath()}:{}),args:['--no-sandbox']});
  try {
   const ctx=await b.newContext(),page=await ctx.newPage();
   await page.route('https://panel.example.test/**',r=>r.fulfill({status:200,contentType:'text/html',body:'test'}));
