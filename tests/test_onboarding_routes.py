@@ -282,6 +282,19 @@ def test_managed_permission_upgrade_requires_full_scope_online_local_helper(pane
     assert client.put(path, headers=full, json=body).status_code == 409
     agents.online_ids = [device_id]
     assert client.put(path, headers=full, json=body).status_code == 409
+    # A healthy helper alone cannot override the Agent's STANDARD ceiling.
+    db.mark_online(
+        device_id,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={
+            "privileged_helper": True,
+            "local_max_permission_profile": "STANDARD",
+        },
+        agent_protocol_version="1",
+    )
+    assert client.put(path, headers=full, json=body).status_code == 409
+    assert db.get_device(device_id)["permission_profile"] == "STANDARD"
     db.mark_online(
         device_id,
         ip="127.0.0.1",
