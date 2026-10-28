@@ -49,3 +49,40 @@ def test_untrusted_directory_refused(tmp_path):
     root.chmod(0o777)
     with pytest.raises(PermissionError):
         module.stage_layout(root, "rc8")
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "releases/",
+        "releases/.",
+        "releases/..",
+        "releases/../agent",
+        "releases/bad\\name",
+        "releases/a/b",
+        "releases/" + "x" * 81,
+    ],
+)
+def test_rollback_target_rejects_invalid_names(target):
+    with pytest.raises(ValueError):
+        module.rollback_target({"previous": target})
+
+
+def test_valid_rollback_target_preserved():
+    assert (
+        module.rollback_target({"previous": "releases/0.9.0-rc7"})
+        == "releases/0.9.0-rc7"
+    )
+
+
+@pytest.mark.parametrize(
+    "target", ["releases/..", "releases/.", "releases/", "releases/bad/name"]
+)
+def test_current_pointer_rejects_invalid_rollback_target(tmp_path, target):
+    root = tmp_path / "helper"
+    root.mkdir()
+    (root / "current").symlink_to(target)
+    if root.stat().st_uid != 0:
+        pytest.skip("requires root")
+    with pytest.raises(ValueError, match="current helper pointer"):
+        module.stage_layout(root, "new-release")
