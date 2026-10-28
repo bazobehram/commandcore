@@ -78,10 +78,13 @@ def _safe_display(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     command_name = metadata.get("command_name", "[hidden]")
     raw = args.get("command")
     # No raw args in event history by default; only full names for strictly
-    # allowlisted zero-argument, simple read-only commands.
+    # allowlisted zero-argument, simple read-only commands without caller
+    # environment or working-directory overrides that can change resolution.
     is_safe = (
         tool in {"shell.exec", "process.start"}
         and isinstance(raw, str)
+        and args.get("env") in (None, {})
+        and args.get("cwd") in (None, "")
         and raw.strip() in _SAFE_OUTPUT_COMMANDS
     )
     return {

@@ -227,3 +227,63 @@ async def test_timeline_scope_and_verified_client_contract():
     )
     assert result["session_available"] is True
     assert result["session_ref"]
+
+
+@pytest.mark.parametrize("tool", ["shell.exec", "process.start"])
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"env": {"PATH": "/tmp/fixture"}},
+        {"env": {"BASH_ENV": "/tmp/fixture"}},
+        {"cwd": "/tmp/fixture"},
+    ],
+)
+def test_timeline_hides_allowlisted_command_output_with_execution_overrides(
+    tool, override
+):
+    activity = LiveActivity()
+    timeline = LiveExecutionTimeline(activity.session_tag)
+    operation = str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, tool, {"command": "hostname", **override}
+    )
+    timeline.device(operation, "device-a")
+    timeline.output(operation, "stdout", "fixture-private-output")
+    timeline.finish(operation, status="ok", exit_code=0, duration_ms=1)
+    events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    assert events[0]["summary"]["output_policy"] == "hidden"
+    assert "fixture-private-output" not in json.dumps(events)
+    assert not any(event["kind"] == "output" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_path_override_can_change_allowlisted_command_output(tmp_path):
+    import os
+    from commandcore_agent.executor import Executor
+
+    if os.name != "posix":
+        pytest.skip("POSIX shell fixture")
+    executable = tmp_path / "hostname"
+    executable.write_text("#!/bin/sh\nprintf fixture-private-output\\n\n")
+    executable.chmod(0o700)
+    args = {"command": "hostname", "env": {"PATH": str(tmp_path)}}
+    activity = LiveActivity()
+    timeline = LiveExecutionTimeline(activity.session_tag)
+    operation = str(uuid.uuid4())
+    assert timeline.begin(OWNER, "chat-a", operation, "shell.exec", args)
+    timeline.device(operation, "device-a")
+    shell_output = []
+
+    async def on_output(stream, chunk):
+        shell_output.append(chunk)
+        timeline.output(operation, stream, chunk)
+
+    result = await Executor()._shell_exec(operation, args, on_output)
+    timeline.finish(
+        operation, status="ok", exit_code=result["exit_code"], duration_ms=1
+    )
+    assert result["exit_code"] == 0
+    assert "fixture-private-output" in "".join(shell_output)
+    assert "fixture-private-output" not in json.dumps(
+        timeline.read(OWNER, "chat-a", [DEVICE])
+    )
