@@ -363,3 +363,56 @@ async def test_standalone_resources_resolve_for_existing_cards():
         content = json.loads(response.body)["result"]["contents"][0]
         assert content["uri"] == uri
         assert f'function select(view){{view="{view}";' in content["text"]
+
+
+@pytest.mark.asyncio
+async def test_operation_card_resource_display_metadata():
+    from commandcore_server.mcp import RENDER_UI_URI, SHELL_UI_URI, TIMELINE_UI_URI
+
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    owner = Principal(
+        "owner", "client", "oauth2", ("commandcore:standard",), "https://issuer.test"
+    )
+
+    async def invoke(method, params):
+        async def receive():
+            return {
+                "type": "http.request",
+                "body": json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+                ).encode(),
+            }
+
+        response = await handler.handle(
+            Request(
+                {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+                receive,
+            ),
+            owner,
+        )
+        return json.loads(response.body)["result"]
+
+    listed = {
+        item["uri"]: item["_meta"]
+        for item in (await invoke("resources/list", {}))["resources"]
+    }
+    for uri, height in (
+        (RENDER_UI_URI, 180),
+        (TIMELINE_UI_URI, 520),
+        (SHELL_UI_URI, None),
+    ):
+        metadata = (await invoke("resources/read", {"uri": uri}))["contents"][0][
+            "_meta"
+        ]
+        for meta in (listed[uri], metadata):
+            assert meta["openai/ui"] == {
+                "availableDisplayModes": ["inline"],
+                "preferredDisplayMode": "inline",
+            }
+            if height is not None:
+                assert meta["openai/widgetHeightHint"] == height
+                assert meta["openai/widgetMinFrameHeight"] == 1
+            else:
+                assert "openai/widgetHeightHint" not in meta
