@@ -1708,7 +1708,9 @@ class MCPHandler:
             try:
                 owner, tag = self._task_context(
                     principal,
-                    args if name in {"browser.back", "browser.forward"} else {},
+                    args
+                    if name in {"browser.back", "browser.forward", "browser.close"}
+                    else {},
                     host_session,
                 )
             except ToolError:
