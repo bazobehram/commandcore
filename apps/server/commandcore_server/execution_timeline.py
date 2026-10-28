@@ -98,7 +98,7 @@ def _sanitized_chunk(value: Any) -> str:
         return ""
     text = "".join(
         char
-        for char in value[:_MAX_CHUNK]
+        for char in value[: _MAX_CHUNK + 1]
         if char == "\n" or char == "\t" or ord(char) >= 32
     )
     return _SECRET_PATTERN.sub("[REDACTED]", text)
@@ -121,6 +121,8 @@ class _Row:
     stdout: str = ""
     stderr: str = ""
     output_truncated: bool = False
+    pending: dict[str, str] = field(default_factory=dict)
+    discarding: set[str] = field(default_factory=set)
     finished: float | None = None
     last_seq: int = 0
 
@@ -278,21 +280,48 @@ class LiveExecutionTimeline:
             return
         if row.finished is not None and not source_process:
             return
-        sanitized = _sanitized_chunk(chunk)
+        if not isinstance(chunk, str) or not chunk:
+            return
+        # Hold incomplete lines so a secret label/value split across transport
+        # chunks is redacted together. Drop oversized lines rather than emit a
+        # potentially sensitive prefix before its meaning is known.
+        for char in chunk[:_MAX_CHUNK]:
+            if char == "\n":
+                if stream not in row.discarding:
+                    self._emit_line(row, stream, row.pending.get(stream, "") + "\n")
+                row.pending.pop(stream, None)
+                row.discarding.discard(stream)
+            elif stream not in row.discarding:
+                pending = row.pending.get(stream, "") + char
+                if len(pending) > _MAX_CHUNK:
+                    row.pending.pop(stream, None)
+                    row.discarding.add(stream)
+                    row.output_truncated = True
+                else:
+                    row.pending[stream] = pending
+        if len(chunk) > _MAX_CHUNK:
+            row.pending.pop(stream, None)
+            row.discarding.add(stream)
+            row.output_truncated = True
+
+    def _emit_line(self, row: _Row, stream: str, value: str) -> None:
+        sanitized = _sanitized_chunk(value)
         if not sanitized:
             return
         prior = getattr(row, stream)
         room = max(0, _MAX_OUTPUT - len(prior))
-        if room == 0:
-            row.output_truncated = True
-            return
         retained = sanitized[:room]
-        setattr(row, stream, prior + retained)
-        if len(sanitized) > room or len(chunk) > _MAX_CHUNK:
+        if len(sanitized) > room:
             row.output_truncated = True
-        self._emit(
-            row, "output", stream=stream, chunk=retained, truncated=row.output_truncated
-        )
+        if retained:
+            setattr(row, stream, prior + retained)
+            self._emit(
+                row,
+                "output",
+                stream=stream,
+                chunk=retained,
+                truncated=row.output_truncated,
+            )
 
     def process_output(
         self,
@@ -337,6 +366,12 @@ class LiveExecutionTimeline:
         row = self._rows.get(operation_id or "")
         if row is None or row.finished is not None:
             return
+        if row.tool == "shell.exec":
+            for stream, pending in tuple(row.pending.items()):
+                if stream not in row.discarding:
+                    self._emit_line(row, stream, pending)
+            row.pending.clear()
+            row.discarding.clear()
         row.status = status if status in _ALLOWED_STATUSES else "error"
         if type(exit_code) is int and exit_code != 0:
             row.status = "error"

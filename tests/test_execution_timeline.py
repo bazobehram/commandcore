@@ -288,3 +288,63 @@ async def test_path_override_can_change_allowlisted_command_output(tmp_path):
     assert "fixture-private-output" not in json.dumps(
         timeline.read(OWNER, "chat-a", [DEVICE])
     )
+
+
+def test_timeline_redacts_credentials_split_across_output_chunks():
+    activity = LiveActivity()
+    timeline = LiveExecutionTimeline(activity.session_tag)
+    operation = str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, "shell.exec", {"command": "hostname"}
+    )
+    timeline.device(operation, "device-a")
+    timeline.output(operation, "stdout", "to")
+    timeline.output(operation, "stdout", "ken=private-")
+    assert "private-" not in json.dumps(timeline.read(OWNER, "chat-a", [DEVICE]))
+    timeline.output(operation, "stdout", "value\nnormal\npassword=another-")
+    timeline.output(operation, "stdout", "secret")
+    timeline.finish(operation, status="ok", exit_code=0, duration_ms=1)
+    events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    rendered = json.dumps(events)
+    assert "private-value" not in rendered
+    assert "another-secret" not in rendered
+    assert "normal" in rendered
+    assert rendered.count("[REDACTED]") >= 2
+
+
+def test_timeline_discards_oversized_incomplete_output_line():
+    activity = LiveActivity()
+    timeline = LiveExecutionTimeline(activity.session_tag)
+    operation = str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, "shell.exec", {"command": "hostname"}
+    )
+    timeline.device(operation, "device-a")
+    timeline.output(operation, "stdout", "x" * 1024)
+    timeline.output(operation, "stdout", "private-value\nvisible\n")
+    timeline.finish(operation, status="ok", exit_code=0, duration_ms=1)
+    events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    rendered = json.dumps(events)
+    assert "private-value" not in rendered
+    assert "visible" in rendered
+    assert events[-1]["truncated"] is True
+
+
+def test_managed_process_output_redacts_across_offset_polls():
+    activity = LiveActivity()
+    timeline = LiveExecutionTimeline(activity.session_tag)
+    operation, process = str(uuid.uuid4()), str(uuid.uuid4())
+    assert timeline.begin(
+        OWNER, "chat-a", operation, "process.start", {"command": "hostname"}
+    )
+    timeline.device(operation, "device-a")
+    timeline.finish(operation, status="started", exit_code=None, duration_ms=1)
+    timeline.attach_process(operation, process)
+    timeline.process_output(OWNER, "chat-a", process, "stdout", "tok", offset=0)
+    timeline.process_output(
+        OWNER, "chat-a", process, "stdout", "en=fixture-secret\n", offset=3
+    )
+    events = timeline.read(OWNER, "chat-a", [DEVICE])["events"]
+    rendered = json.dumps(events)
+    assert "fixture-secret" not in rendered
+    assert "[REDACTED]" in rendered
