@@ -47,7 +47,7 @@ def run():
             path = line[3:]
             if (path.startswith("apps/server/commandcore_server/")
                     or path in {"pyproject.toml", "requirements.txt",
-                                "requirements-server.lock"}
+                                "requirements-server.lock", ".github/workflows/ci.yml"}
                     or path.startswith("scripts/collaboration_")
                     or path.startswith("tests/test_collaboration_")
                     or path.startswith("tests/ui/test_webauthn_")
