@@ -400,10 +400,11 @@ class LiveExecutionTimeline:
         """Flush only streams whose observed end matches their verified capture."""
         op = self._managed_processes.get(process_id)
         row = self._rows.get(op or "")
-        if (
-            not row
-            or self._identity(principal, host_session)
-            != (row.issuer, row.subject, row.client_id, row.session_tag)
+        if not row or self._identity(principal, host_session) != (
+            row.issuer,
+            row.subject,
+            row.client_id,
+            row.session_tag,
         ):
             return
         for stream, pending in tuple(row.pending.items()):
