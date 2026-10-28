@@ -27,6 +27,7 @@ public visibility.
 - [ ] SECURITY.md is current.
 - [ ] GitHub Private Vulnerability Reporting is enabled before public launch.
 - [ ] Threat model and security model match current behavior.
+- [ ] `make session-security-gate` passes without expected failures; actual ChatGPT acceptance and independent review are complete (see [session trust](SESSION_TRUST.md)).
 - [ ] OAuth, enrollment, grants, helper IPC, path handling, and signed update negative tests pass.
 - [ ] Dependency vulnerability audits pass or accepted exceptions are documented.
 

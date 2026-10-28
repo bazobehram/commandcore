@@ -29,6 +29,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python scripts/mcp_release_gate.py
           make test
+          make session-security-gate
       - name: Verify release artifact policy
         run: |
           git archive --format=zip HEAD > "$RUNNER_TEMP/release-source.zip"
