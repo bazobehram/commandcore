@@ -259,10 +259,11 @@ def test_timeline_hides_allowlisted_command_output_with_execution_overrides(
 @pytest.mark.asyncio
 async def test_path_override_can_change_allowlisted_command_output(tmp_path):
     import os
-    from commandcore_agent.executor import Executor
 
     if os.name != "posix":
         pytest.skip("POSIX shell fixture")
+    from commandcore_agent.executor import Executor
+
     executable = tmp_path / "hostname"
     executable.write_text("#!/bin/sh\nprintf fixture-private-output\\n\n")
     executable.chmod(0o700)
