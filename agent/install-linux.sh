@@ -3,7 +3,9 @@ set -euo pipefail
 
 PREFIX="${COMMANDCORE_AGENT_PREFIX:-/opt/commandcore-agent}"
 SERVICE_USER="${COMMANDCORE_AGENT_USER:-commandcore}"
-MAX_PROFILE="${COMMANDCORE_MAX_PERMISSION_PROFILE:-STANDARD}"
+# Explicit sudo installation opts into the fully capable local helper by default.
+# Operators can still select --max-profile STANDARD or READ_ONLY.
+MAX_PROFILE="${COMMANDCORE_MAX_PERMISSION_PROFILE:-FULL_CONTROL}"
 UPDATE_PUBLIC_KEY="${COMMANDCORE_UPDATE_PUBLIC_KEY_B64:-}"
 UPDATE_MANIFEST_ORIGIN="${COMMANDCORE_UPDATE_MANIFEST_ORIGIN:-}"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
