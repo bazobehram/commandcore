@@ -586,6 +586,33 @@ def _operation_html(html: str) -> str:
     )
 
 
+def _resource_height_hint(uri: str) -> dict[str, int]:
+    height = (
+        112
+        if uri in TASK_UI_URIS
+        else 180
+        if uri == RENDER_UI_URI
+        else 520
+        if uri == TIMELINE_UI_URI
+        else None
+    )
+    return (
+        {"openai/widgetMinFrameHeight": 1, "openai/widgetHeightHint": height}
+        if height is not None
+        else {}
+    )
+
+
+def _inline_card_preference(uri: str) -> dict[str, Any]:
+    if uri in {RENDER_UI_URI, TIMELINE_UI_URI, SHELL_UI_URI}:
+        return {"availableDisplayModes": ["inline"], "preferredDisplayMode": "inline"}
+    return {
+        "availableDisplayModes": ["inline"]
+        if uri in TASK_UI_URIS
+        else ["inline", "fullscreen"]
+    }
+
+
 def _standalone_view_html(view: str) -> str:
     """Lock the reviewed workspace to one view for independent saved cards."""
     if view not in {"browser", "activity"}:
@@ -1418,18 +1445,16 @@ class MCPHandler:
                         "name": spec[3],
                         "mimeType": spec[1],
                         "_meta": {
-                            **(
-                                {
-                                    "openai/widgetMinFrameHeight": 1,
-                                    "openai/widgetHeightHint": 112,
-                                }
-                                if uri in TASK_UI_URIS
-                                else {}
-                            ),
+                            **_resource_height_hint(uri),
                             "ui": {
                                 "prefersBorder": True,
                                 "csp": {"connectDomains": [], "resourceDomains": []},
                             },
+                            **(
+                                {"openai/ui": _inline_card_preference(uri)}
+                                if uri in {RENDER_UI_URI, TIMELINE_UI_URI, SHELL_UI_URI}
+                                else {}
+                            ),
                         },
                     }
                     for uri, spec in self.ui_resources.items()
@@ -1461,23 +1486,12 @@ class MCPHandler:
                         if uri in OPERATION_UI_URIS
                         else web_asset(asset).read_text(encoding="utf-8"),
                         "_meta": {
-                            **(
-                                {
-                                    "openai/widgetMinFrameHeight": 1,
-                                    "openai/widgetHeightHint": 112,
-                                }
-                                if uri in TASK_UI_URIS
-                                else {}
-                            ),
+                            **_resource_height_hint(uri),
                             "ui": {
                                 "prefersBorder": True,
                                 "csp": {"connectDomains": [], "resourceDomains": []},
                             },
-                            "openai/ui": {
-                                "availableDisplayModes": ["inline"]
-                                if uri in TASK_UI_URIS
-                                else ["inline", "fullscreen"]
-                            },
+                            "openai/ui": _inline_card_preference(uri),
                         },
                     }
                 ]
