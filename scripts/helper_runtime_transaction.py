@@ -35,8 +35,12 @@ def stage_layout(root: Path, release_name: str) -> dict:
         raise ValueError("current helper pointer is not a symlink")
     if current.is_symlink():
         target = os.readlink(current)
-        if not target.startswith("releases/") or "/" in target[len("releases/") :]:
-            raise ValueError("current helper pointer escapes release directory")
+        try:
+            rollback_target({"previous": target})
+        except ValueError as exc:
+            raise ValueError(
+                "current helper pointer escapes release directory"
+            ) from exc
     return {
         "release": str(release),
         "current": str(current),
@@ -49,8 +53,12 @@ def stage_layout(root: Path, release_name: str) -> dict:
 def rollback_target(plan: dict) -> str | None:
     """Return only a prevalidated previous helper target, never an Agent path."""
     old = plan.get("previous")
+    import re
+
     if old is not None and (
-        not isinstance(old, str) or not old.startswith("releases/") or "/" in old[9:]
+        not isinstance(old, str)
+        or re.fullmatch(r"releases/[A-Za-z0-9][A-Za-z0-9._-]{0,79}", old) is None
+        or old[9:] in (".", "..")
     ):
         raise ValueError("unsafe previous helper target")
     return old

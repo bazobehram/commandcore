@@ -70,3 +70,27 @@ def test_unsigned_change_rejected(tmp_path):
     manifest.write_text(json.dumps(document))
     with pytest.raises(Exception):
         verify(manifest, artifact, key, architecture="x86_64")
+
+
+def test_duplicate_top_level_manifest_field_rejected(tmp_path):
+    manifest, artifact, key = make_release(tmp_path)
+    raw = manifest.read_text()
+    manifest.write_text(
+        raw.replace(
+            '"schema_version": 1', '"schema_version": 1, "schema_version": 1', 1
+        )
+    )
+    with pytest.raises(ValueError, match="duplicate signed manifest"):
+        verify(manifest, artifact, key, architecture="x86_64")
+
+
+def test_duplicate_nested_artifact_field_rejected(tmp_path):
+    manifest, artifact, key = make_release(tmp_path)
+    raw = manifest.read_text()
+    manifest.write_text(
+        raw.replace(
+            '"platform": "linux"', '"platform": "linux", "platform": "linux"', 1
+        )
+    )
+    with pytest.raises(ValueError, match="duplicate signed manifest"):
+        verify(manifest, artifact, key, architecture="x86_64")

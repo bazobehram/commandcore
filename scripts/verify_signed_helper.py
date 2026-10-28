@@ -15,13 +15,22 @@ MAX_MANIFEST = 1_048_576
 MAX_HELPER = 134_217_728
 
 
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate signed manifest JSON field")
+        result[key] = value
+    return result
+
+
 def verify(
     manifest_path: Path, artifact_path: Path, public_key_b64: str, *, architecture: str
 ) -> dict:
     raw = manifest_path.read_bytes()
     if not 0 < len(raw) <= MAX_MANIFEST:
         raise ValueError("manifest size invalid")
-    document = json.loads(raw)
+    document = json.loads(raw, object_pairs_hook=_unique_json_object)
     if not isinstance(document, dict):
         raise ValueError("manifest must be an object")
     signature = base64.b64decode(document.get("signature", ""), validate=True)
