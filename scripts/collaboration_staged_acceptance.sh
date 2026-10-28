@@ -28,4 +28,5 @@ fi
 "$NODE_BIN" tests/ui/test_webauthn_enroll_success.cjs
 "$NODE_BIN" tests/ui/test_webauthn_review.cjs
 "$NODE_BIN" tests/ui/test_webauthn_review_page.cjs
+"$NODE_BIN" tests/ui/test_webauthn_virtual_authenticator.cjs
 echo 'COLLABORATION_STAGED_ACCEPTANCE_PASS (production approval remains disabled)'
