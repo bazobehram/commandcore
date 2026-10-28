@@ -29,6 +29,8 @@ jobs:
         run: python scripts/mcp_release_gate.py
       - name: Python tests
         run: make test
+      - name: Authenticated conversation boundary gate
+        run: make session-security-gate
       - name: Package exact verified Git commit
         run: |
           set -euo pipefail

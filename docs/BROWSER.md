@@ -36,7 +36,7 @@ status; it does not replay a website action or device command.
 Browser is disabled by default. Enabling `COMMANDCORE_BROWSER_ENABLED` alone is
 insufficient. The existing deployment must provide all of these boundaries:
 
-- OAuth/OIDC, HTTPS, account grants, and verified conversation viewer scope;
+- OAuth/OIDC, HTTPS, account grants, and conversation-scoped viewers; the host metadata trust limitation is documented in [session trust](SESSION_TRUST.md);
 - a distinct private Steel process and immutable owner binding per worker;
 - isolated browser, control, and outbound networks, with no public CDP/Steel
   port and no Docker socket in the API container;

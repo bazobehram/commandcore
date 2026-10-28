@@ -24,6 +24,7 @@ from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
 from .browser_worker_pool import OwnerBrowserWorkerPool
 from .db import Database
 from .live_activity import LiveActivity
+from .execution_timeline import LiveExecutionTimeline
 from .models import Principal
 from .permissions import allowed, risk_class
 
@@ -768,6 +769,24 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             }
         ),
     },
+    {
+        "name": "execution.timeline.watch",
+        "title": "Watch live execution timeline",
+        "description": "Open one conversation-scoped live operation timeline with verified device activity, bounded authorized terminal output and file summaries. Activity and Browser existing views remain available.",
+        "inputSchema": _obj({}),
+    },
+    {
+        "name": "execution.timeline",
+        "title": "Read live execution timeline",
+        "description": "Read bounded, conversation-specific ordered execution events. Only authenticated STANDARD OAuth and current device grants may see details. No filesystem payloads, arbitrary shell arguments or unapproved command output are exposed.",
+        "inputSchema": _obj(
+            {
+                "session_ref": {"type": "string", "maxLength": 128},
+                "after_seq": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            }
+        ),
+    },
 ]
 
 # Optional server-local visual browser; disabled unless explicitly configured.
@@ -910,8 +929,17 @@ TOOL_DEFINITIONS.extend(
         {
             "name": "browser.close",
             "title": "Close visual browser session",
-            "description": "Release only this authenticated caller's browser session.",
-            "inputSchema": _obj({}),
+            "description": "Release this authenticated caller's Browser using its conversation correlation. The embedded Stop control supplies a viewer reference and expected session ID so an old card cannot close a replacement Browser. Private human control must be resumed before closing.",
+            "inputSchema": _obj(
+                {
+                    "session_ref": {"type": "string", "maxLength": 128},
+                    "expected_session_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                }
+            ),
         },
     ]
 )
@@ -950,7 +978,13 @@ TOOL_DEFINITIONS.extend(
 )
 
 # Read-only owner-scoped CommandCore tool activity, not a browser screen.
-ACTIVITY_TOOL_NAMES = {"activity.feed", "activity.watch", "commandcore.watch"}
+ACTIVITY_TOOL_NAMES = {
+    "activity.feed",
+    "activity.watch",
+    "commandcore.watch",
+    "execution.timeline",
+    "execution.timeline.watch",
+}
 TOOL_DEFINITIONS.extend(
     [
         {
@@ -981,6 +1015,7 @@ TOOL_DEFINITIONS.extend(
         },
     ]
 )
+
 
 # MCP annotations are UX/risk hints for clients, never security boundaries.
 _READ_ONLY_HINTS = {
@@ -1125,6 +1160,8 @@ CORE_TOOL_NAMES = {
     "transfer.download",
     "activity.feed",
     "activity.watch",
+    "execution.timeline",
+    "execution.timeline.watch",
     "commandcore.watch",
     "agents.sessions",
     "agents.observe",
@@ -1201,6 +1238,7 @@ class ToolService:
         self.browser = browser
         self.public_base_url = public_base_url.rstrip("/")
         self.live_activity = LiveActivity()
+        self.timeline = LiveExecutionTimeline(self.live_activity.session_tag)
         self._browser_conversation_leases: dict[tuple[str, str, str], str] = {}
         self._browser_lease_cipher = None
         self._browser_lease_file = None
@@ -1330,10 +1368,10 @@ class ToolService:
         args: dict[str, Any],
         host_session: str | None,
     ) -> dict[str, Any]:
-        """Fail-closed conversation gate ahead of all owner-bound Browser calls.
+        """Gate owner-bound Browser calls by the supplied conversation tag.
 
-        A viewer ref is minted with verified ChatGPT host metadata by
-        commandcore.watch; arbitrary browser session IDs are not credentials.
+        Viewer references are principal-bound, but the host session metadata
+        used to mint them is not independently authenticated. See SESSION_TRUST.
         """
         ref = args.get("session_ref")
         host_tag = self.live_activity.session_tag(host_session)
@@ -1353,7 +1391,7 @@ class ToolService:
         if not host_tag:
             raise ToolError(
                 "browser_conversation_required",
-                "Verified conversation context is required for Browser access",
+                "Conversation context is required for Browser access",
             )
         owner = (principal.issuer, principal.subject, principal.client_id)
         bound = self._browser_conversation_leases.get(owner)
@@ -1398,7 +1436,7 @@ class ToolService:
                 if owner in worker.sessions:
                     raise ToolError(
                         "browser_conversation_unbound",
-                        "Existing Browser session has no verified conversation binding; administrator recovery required",
+                        "Existing Browser session has no conversation association; administrator recovery required",
                     )
             except ToolError:
                 raise
@@ -1566,6 +1604,43 @@ class ToolService:
         live_key: str | None = None
         try:
             self._require_scope(principal, name)
+            if name == "execution.timeline.watch":
+                if not (
+                    principal.auth_kind == "oauth2"
+                    and principal.issuer
+                    and principal.subject
+                    and principal.client_id not in {"", "unknown", "oauth-client"}
+                    and scope_allows(principal.scopes, STANDARD_SCOPE)
+                ):
+                    raise ToolError("insufficient_scope")
+                return {
+                    "state": "timeline_ready",
+                    **self.live_activity.issue_viewer(principal, host_session),
+                    "mode": "read_only",
+                }
+            if name == "execution.timeline":
+                cursor = args.get("after_seq", 0)
+                limit = args.get("limit", 50)
+                ref = args.get("session_ref")
+                devices = self.db.list_accessible_devices(principal.subject)
+                try:
+                    if ref is not None:
+                        if not isinstance(ref, str):
+                            raise ValueError("Invalid viewer reference")
+                        tag = self.live_activity.resolve_viewer(principal, ref)
+                        host_tag = self.live_activity.session_tag(host_session)
+                        if host_tag and tag != host_tag:
+                            raise PermissionError(
+                                "Viewer belongs to another conversation"
+                            )
+                        return self.timeline.read_verified_viewer(
+                            principal, tag, devices, after_seq=cursor, limit=limit
+                        )
+                    return self.timeline.read(
+                        principal, host_session, devices, after_seq=cursor, limit=limit
+                    )
+                except (PermissionError, ValueError) as exc:
+                    raise ToolError("invalid_timeline_view", str(exc)) from exc
             if name == "activity.feed":
                 limit = args.get("limit", 25)
                 if type(limit) is not int or not 1 <= limit <= 50:
@@ -1611,7 +1686,7 @@ class ToolService:
                     if session_tag is None:
                         raise ToolError(
                             "invalid_session_view",
-                            "Verified conversation attribution unavailable",
+                            "Conversation attribution unavailable",
                         )
                 return self.live_activity.snapshot(
                     principal,
@@ -1666,12 +1741,15 @@ class ToolService:
                 "browser.frame",
                 "browser.watch",
                 "activity.feed",
+                "execution.timeline",
+                "execution.timeline.watch",
                 "activity.watch",
                 "commandcore.watch",
             }:
                 live_key = self.live_activity.begin(
                     principal, name, args, host_session=host_session
                 )
+                self.timeline.begin(principal, host_session, live_key, name, args)
                 source.get()["operation_id"] = live_key
                 ui_sink = operation_ui_context.get()
                 if isinstance(ui_sink, dict):
@@ -1752,6 +1830,7 @@ class ToolService:
                 except (KeyError, ValueError, PermissionError) as exc:
                     raise ToolError(str(exc).strip("'")) from exc
                 self.live_activity.set_device(live_key, device["id"])
+                self.timeline.device(live_key, device["id"])
                 sel = self.db.create_selection(
                     principal.subject, device["id"], self.selection_ttl_seconds
                 )
@@ -1837,6 +1916,7 @@ class ToolService:
             device = self._resolve_device(principal, args)
             device_id = device["id"]
             self.live_activity.set_device(live_key, device_id)
+            self.timeline.device(live_key, device_id)
             if device["status"] != "online":
                 raise ToolError("device_offline")
             access_max = str(
@@ -1945,6 +2025,52 @@ class ToolService:
                 )
             if result.error:
                 payload["error"] = result.error
+            if name == "process.output" and result.status in {"ok", "completed"}:
+                process_id = forwarded.get("process_id")
+                chunks = result.result if isinstance(result.result, dict) else {}
+                if isinstance(process_id, str):
+                    for stream in ("stdout", "stderr"):
+                        self.timeline.process_output(
+                            principal,
+                            host_session,
+                            process_id,
+                            stream,
+                            chunks.get(stream),
+                            offset=forwarded.get("offset", 0),
+                        )
+                    offset = forwarded.get("offset", 0)
+                    captures = (
+                        chunks.get("stdout_capture"),
+                        chunks.get("stderr_capture"),
+                    )
+                    if (
+                        chunks.get("available") is True
+                        and chunks.get("running") is False
+                        and chunks.get("stdout") == ""
+                        and chunks.get("stderr") == ""
+                        and type(offset) is int
+                        and offset >= 0
+                        and all(
+                            isinstance(capture, dict)
+                            and capture.get("complete") is True
+                            and capture.get("truncated") is False
+                            and type(capture.get("retained_bytes")) is int
+                            and 0 <= capture["retained_bytes"] <= offset
+                            for capture in captures
+                        )
+                    ):
+                        self.timeline.complete_process_output(
+                            principal,
+                            host_session,
+                            process_id,
+                            retained_bytes={
+                                "stdout": captures[0]["retained_bytes"],
+                                "stderr": captures[1]["retained_bytes"],
+                            },
+                        )
+            if name == "shell.exec" and result.status in {"ok", "completed", "started"}:
+                self.timeline.output(live_key, "stdout", result.stdout)
+                self.timeline.output(live_key, "stderr", result.stderr)
             if result.status not in {"ok", "completed", "started"}:
                 raise ToolError("remote_execution_failed", str(payload))
             return payload
@@ -1985,3 +2111,11 @@ class ToolService:
                     exit_code=exit_code,
                     managed_process_id=managed_process_id,
                 )
+                self.timeline.finish(
+                    live_key,
+                    status=status,
+                    exit_code=exit_code,
+                    duration_ms=duration_ms,
+                )
+                if managed_process_id:
+                    self.timeline.attach_process(live_key, managed_process_id)

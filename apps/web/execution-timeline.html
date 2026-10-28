@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommandCore · Live Execution</title>
+<style>
+:root{font:13px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Arial;color-scheme:light dark}
+*{box-sizing:border-box}body{margin:0;padding:10px;background:var(--color-background-primary,#fff);color:var(--color-text-primary,#252525)}
+#shell{border:1px solid var(--color-border-primary,#e4e4e7);border-radius:14px;overflow:hidden;max-width:100%}
+#bar{padding:13px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid var(--color-border-primary,#e4e4e7)}
+#heading{font-size:14px;font-weight:720;letter-spacing:-.2px}.subtle{color:var(--color-text-secondary,#777);font-size:11px}
+#state{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.dot{width:7px;height:7px;background:#888;border-radius:50%;display:inline-block}
+#state.online .dot{background:#299365}
+#feed{padding:8px;display:flex;flex-direction:column;gap:8px;max-height:540px;overflow:auto}
+.entry{padding:9px 11px;border:1px solid var(--color-border-primary,#e7e7e7);border-radius:10px;background:var(--color-background-primary,#fff)}
+.entry summary{cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;min-height:23px}
+.entry summary::-webkit-details-marker{display:none}
+.entry summary:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.entry .tool{font-weight:690}.entry .device{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.entry .badge{border:1px solid var(--color-border-primary,#ddd);padding:1px 6px;border-radius:99px;font-size:10px}
+.entry .meta{display:grid;grid-template-columns:85px minmax(0,1fr);column-gap:9px;row-gap:5px;margin-top:11px}
+.entry .meta dt{color:var(--color-text-secondary,#888)}.entry .meta dd{margin:0;overflow-wrap:anywhere;font-family:ui-monospace,monospace}
+.terminal{background:#151515;color:#eee;border-radius:9px;padding:10px 12px;margin-top:9px;overflow:auto}
+.terminal .prompt{color:#b9c2ce;font-size:11px;margin-bottom:7px}
+.terminal pre{white-space:pre-wrap;word-break:break-word;margin:0;font:12px/1.55 ui-monospace,Consolas,monospace}
+.diff{background:var(--color-background-secondary,#f5f5f6);padding:9px;border-radius:8px;margin-top:8px;white-space:pre-wrap}
+.hint{font-size:11px;color:var(--color-text-secondary,#777);margin-top:8px}
+#empty{padding:23px 14px;text-align:center;color:var(--color-text-secondary,#777)}
+#bottom{border-top:1px solid var(--color-border-primary,#e4e4e7);padding:9px 14px;font-size:10px;color:var(--color-text-secondary,#777);display:flex;gap:8px;justify-content:space-between}
+@media(max-width:450px){#bar{padding:10px}.entry{padding:9px}.entry .device{max-width:100px}.entry .meta{grid-template-columns:73px 1fr}}
+@media(prefers-color-scheme:dark){.terminal{background:#080808}.diff{background:#292929}#shell,.entry{border-color:#444}}
+</style>
+</head>
+<body>
+<section id="shell">
+<header id="bar">
+<div><div id="heading">CC · Live Execution</div><div class="subtle">Conversation-scoped activity · prototype 0.1</div></div>
+<span id="state"><span class="dot"></span><span id="state-label">Waiting for verified session</span></span>
+</header>
+<div id="feed" aria-live="polite"><div id="empty">Waiting for CommandCore activity…</div></div>
+<footer id="bottom"><span id="counter">0 operations</span><span>Output bounded · private session</span></footer>
+</section>
+<script>
+(() => {
+"use strict";
+const by = id => document.getElementById(id);
+const entries = new Map();
+const items = new Map();
+const pending = new Map();
+let sessionRef="",sequence=0,connection=null,busy=false,order=0,bridgeReady;
+const el=(tag,content,cls)=>{
+ const node=document.createElement(tag);
+ if(content!==undefined)node.textContent=String(content??"");
+ if(cls)node.className=cls;
+ return node;
+};
+const setStatus=(text,online)=>{
+ by("state-label").textContent=text;
+ by("state").classList.toggle("online",!!online);
+};
+function rpc(method,params){
+ const id="cc-timeline-"+(++order);
+ return new Promise((resolve,reject)=>{
+   pending.set(id,{resolve,reject});
+   window.parent.postMessage({jsonrpc:"2.0",id,method,params},"*");
+ });
+}
+window.addEventListener("message",event=>{
+ if(event.source!==window.parent)return;
+ const msg=event.data;
+ if(!msg||typeof msg!=="object")return;
+ if(msg.jsonrpc==="2.0"&&pending.has(msg.id)){
+   const item=pending.get(msg.id);pending.delete(msg.id);
+   if(msg.error)item.reject(Error(msg.error.message||"UI bridge request failed"));
+   else item.resolve(msg.result);
+ }
+ if(msg.method==="ui/notifications/tool-result")readViewer(msg.params);
+});
+window.addEventListener("openai:set_globals",event=>{
+ const g=event?.detail?.globals;
+ readViewer(g?.toolOutput);readViewer(g?.toolResponseMetadata?.mcp_tool_result);
+});
+const native=typeof window.openai?.callTool==="function";
+bridgeReady=native?Promise.resolve():rpc("ui/initialize",{
+ protocolVersion:"2026-01-26",
+ appInfo:{name:"CommandCore Live Execution",version:"0.1.0"},
+ appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+}).then(()=>window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"));
+async function callTool(name,args){await bridgeReady;return native?window.openai.callTool(name,args):rpc("tools/call",{name,arguments:args});}
+function readViewer(data){
+ const ref=data?.structuredContent?.session_ref||data?.session_ref||data?.result?.structuredContent?.session_ref;
+ if(typeof ref==="string"&&ref.length>10&&!sessionRef){
+   sessionRef=ref;sequence=0;entries.clear();items.clear();by("feed").replaceChildren();
+   setStatus("Connected",true);
+   poll();
+ }
+}
+function createEntry(event){
+ const id=event.operation_id;
+ const wrap=el("details",undefined,"entry");
+ const summary=el("summary");wrap.append(summary);
+ const badge=el("span","Running","badge");
+ const title=el("span",event.tool||"operation","tool");
+ const device=el("span",event.device_id||"—","device subtle");
+ summary.append(title,badge,device);
+ const body=el("div");
+ const dl=el("dl",undefined,"meta");
+ const fields={};
+ for(const [key,label] of [["operation_id","Operation ID"],["device_id","Device"],["status","Status"],["exit_code","Exit code"],["duration_ms","Duration"]]){
+   dl.append(el("dt",label));const cell=el("dd","—");dl.append(cell);fields[key]=cell;
+ }
+ body.append(dl);
+ const detail=el("div",undefined,"detail-slot");body.append(detail);
+ wrap.append(body);
+ const root=by("feed");
+ const empty=by("empty");if(empty)empty.remove();
+ root.append(wrap);
+ items.set(id,{wrap,fields,badge,device,detail,summary:null,stdout:"",stderr:""});
+ entries.set(id,wrap);
+ updateEntry(id,event);
+ return items.get(id);
+}
+function updateEntry(id,event){
+ const item=items.get(id);
+ if(!item)return;
+ if(event.device_id)item.device.textContent=event.device_id;
+ const status=event.status||"running";
+ item.badge.textContent=status;
+ const vals={operation_id:id,device_id:event.device_id||item.device.textContent,
+  status,exit_code:event.exit_code,duration_ms:event.duration_ms};
+ for(const [key,value] of Object.entries(vals))if(value!==undefined&&value!==null)item.fields[key].textContent=
+   key==="duration_ms"?String(value)+" ms":String(value);
+ if(event.summary&&typeof event.summary==="object"){
+  item.summary=event.summary;
+ }
+ if(event.kind==="output"&&["stdout","stderr"].includes(event.stream)){
+   item[event.stream]+=String(event.chunk||"");
+ }
+ drawDetail(item);
+}
+function drawDetail(item){
+ item.detail.replaceChildren();
+ const summary=item.summary||{};
+ if(summary.command){
+   const pane=el("div",undefined,"terminal");
+   pane.append(el("div","$ "+summary.command,"prompt"));
+   const pre=el("pre");
+   const output=[item.stdout,item.stderr&&("stderr:\n"+item.stderr)].filter(Boolean).join("\n");
+   pre.textContent=output||"Awaiting authorized output…";
+   pane.append(pre);item.detail.append(pane);
+ }
+ if(summary.path||summary.diff){
+   const box=el("div",undefined,"diff");
+   box.textContent=(summary.path||"[restricted path]")+"\n"+(summary.diff||"");
+   item.detail.append(box);
+ }
+ if(summary.output_policy==="hidden")item.detail.append(el("div",
+   "Command output withheld by the privacy policy.","hint"));
+}
+function apply(events){
+ if(!Array.isArray(events))return;
+ for(const event of events){
+  if(!event||typeof event.operation_id!=="string")continue;
+  if(!items.has(event.operation_id))createEntry(event);
+  else updateEntry(event.operation_id,event);
+  if(Number.isSafeInteger(event.seq))sequence=Math.max(sequence,event.seq);
+ }
+ by("counter").textContent=items.size+" operations";
+ const feed=by("feed");if(items.size&&feed.scrollHeight-feed.scrollTop-feed.clientHeight<180)feed.scrollTop=feed.scrollHeight;
+}
+async function poll(){
+ if(!sessionRef||busy)return;
+ busy=true;
+ try{
+  const payload=await callTool("execution.timeline",{session_ref:sessionRef,after_seq:sequence,limit:100});
+  const data=payload?.structuredContent||payload?.result?.structuredContent||payload?.result||payload;
+  if(!data||!Array.isArray(data.events))throw Error("Timeline unavailable");
+  apply(data.events);setStatus("Live",true);
+ }catch(_){setStatus("Connection unavailable",false);}
+ finally{busy=false;}
+}
+readViewer(window.openai?.toolOutput);
+readViewer(window.openai?.toolResponseMetadata?.mcp_tool_result);
+connection=setInterval(poll,1200);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll();});
+})();
+</script>
+</body>
+</html>

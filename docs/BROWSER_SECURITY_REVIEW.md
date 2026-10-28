@@ -6,7 +6,7 @@ remain required before broad public availability.
 
 | Boundary | Enforcement and regression evidence |
 |---|---|
-| Account and conversation | OAuth issuer, subject, client, verified host conversation and scoped ephemeral viewer; foreign task/viewer requests denied |
+| Account and conversation | OAuth issuer, subject and client with scoped ephemeral viewers; host conversation metadata is not independently authenticated, see [session trust](SESSION_TRUST.md) |
 | Restart identity | Private durable HMAC key binds task tags; viewer capabilities stay ephemeral; legacy lost tags never rebound by task ID |
 | Private control | Authenticated owner handoff/resume; immediately withhold screenshots and AI actions; expiry/restart preserves pause |
 | Website effects | Search uses encoded public query; link references revalidate visible page, label and target; consequential controls denied before dispatch; history uses GET |

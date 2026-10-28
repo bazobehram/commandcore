@@ -105,10 +105,6 @@ def eventually(check, timeout=25):
 
 
 def main():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    base = f"http://127.0.0.1:{port}"
     secret = secrets.token_urlsafe(48)
     native = os.getenv("COMMANDCORE_ENROLLMENT_AGENT_BIN")
     systemd = os.getenv("COMMANDCORE_ENROLLMENT_SYSTEMD") == "true"
@@ -157,6 +153,12 @@ def main():
     keys_thread = threading.Thread(target=keys_server.serve_forever, daemon=True)
     keys_thread.start()
     issuer = f"http://127.0.0.1:{keys_server.server_port}/"
+    # Choose the application port while the JWKS listener is already bound,
+    # so the two disposable services cannot reserve the same port.
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    base = f"http://127.0.0.1:{port}"
     if installer:
         native_version = (
             subprocess.check_output([native, "--version"], text=True)
@@ -260,7 +262,15 @@ def main():
                     )
 
                 server = start_server()
-                eventually(lambda: httpx.get(base + "/healthz").status_code == 200)
+                try:
+                    eventually(lambda: httpx.get(base + "/healthz").status_code == 200)
+                except RuntimeError as exc:
+                    # Avoid printing server logs or environment values: they
+                    # may include credentials in non-fixture configurations.
+                    raise RuntimeError(
+                        "Disposable server failed readiness; "
+                        f"process_exit={server.poll()}"
+                    ) from exc
                 enrollment_command = [
                     *agent_command,
                     "enroll",

@@ -1,10 +1,13 @@
-.PHONY: dev test integration lint format format-check package
+.PHONY: dev test session-security-gate integration lint format format-check package
 
 dev:
 	PYTHONPATH=apps/server python -m commandcore_server.main
 
 test:
 	PYTHONPATH=apps/server:agent pytest -q tests
+
+session-security-gate:
+	PYTHONPATH=apps/server:agent python -m pytest --runxfail -q tests/test_host_session_trust.py
 
 integration:
 	PYTHONPATH=apps/server:agent python scripts/integration_smoke.py

@@ -1,0 +1,1748 @@
+{
+  "activity.feed": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "maxLength": 128,
+        "type": "string"
+      },
+      "include_details": {
+        "type": "boolean"
+      },
+      "limit": {
+        "maximum": 50,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "session_ref": {
+        "maxLength": 128,
+        "type": "string"
+      },
+      "view": {
+        "enum": [
+          "all",
+          "conversation"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "activity.watch": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "agent.update.activate": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "health_timeout_seconds": {
+        "maximum": 300,
+        "minimum": 5,
+        "type": "number"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "stage_metadata_path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "stage_metadata_path"
+    ],
+    "type": "object"
+  },
+  "agent.update.rollback": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "health_timeout_seconds": {
+        "maximum": 300,
+        "minimum": 5,
+        "type": "number"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "agent.update.stage": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "manifest_url": {
+        "format": "uri",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "manifest_url"
+    ],
+    "type": "object"
+  },
+  "agent.update.status": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "agents.approval.inbox": {
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "maximum": 30,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "agents.deliver": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "draft_id": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "draft_id"
+    ],
+    "type": "object"
+  },
+  "agents.observe": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "expected_title": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "window_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window_id"
+    ],
+    "type": "object"
+  },
+  "agents.prepare": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "expected_title": {
+        "type": "string"
+      },
+      "input_x": {
+        "description": "X coordinate in xdotool-root absolute screen coordinates",
+        "type": "integer"
+      },
+      "input_y": {
+        "description": "Y coordinate in xdotool-root absolute screen coordinates",
+        "type": "integer"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "send_key": {
+        "enum": [
+          "Return",
+          "ctrl+Return"
+        ],
+        "type": "string"
+      },
+      "text": {
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
+      },
+      "window_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window_id",
+      "expected_title",
+      "text",
+      "input_x",
+      "input_y"
+    ],
+    "type": "object"
+  },
+  "agents.sessions": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "auth.whoami": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "browser.back": {
+    "additionalProperties": false,
+    "properties": {
+      "session_ref": {
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "browser.click": {
+    "additionalProperties": false,
+    "properties": {
+      "x": {
+        "maximum": 1280,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "y": {
+        "maximum": 800,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "x",
+      "y"
+    ],
+    "type": "object"
+  },
+  "browser.close": {
+    "additionalProperties": false,
+    "properties": {
+      "expected_session_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "type": "string"
+      },
+      "session_ref": {
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "browser.elements": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "browser.follow": {
+    "additionalProperties": false,
+    "properties": {
+      "link_ref": {
+        "maxLength": 24,
+        "minLength": 24,
+        "type": "string"
+      }
+    },
+    "required": [
+      "link_ref"
+    ],
+    "type": "object"
+  },
+  "browser.forward": {
+    "additionalProperties": false,
+    "properties": {
+      "session_ref": {
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "browser.frame": {
+    "additionalProperties": false,
+    "properties": {
+      "after_sequence": {
+        "maximum": 9007199254740991,
+        "minimum": -1,
+        "type": "integer"
+      },
+      "session_ref": {
+        "description": "ChatGPT embedded viewer reference, issued by commandcore.watch",
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "browser.handoff": {
+    "additionalProperties": false,
+    "properties": {
+      "reason": {
+        "enum": [
+          "login_or_approval",
+          "sign_in",
+          "verification",
+          "approval"
+        ],
+        "type": "string"
+      },
+      "session_ref": {
+        "description": "ChatGPT embedded viewer reference, issued by commandcore.watch",
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "browser.keypress": {
+    "additionalProperties": false,
+    "properties": {
+      "key": {
+        "enum": [
+          "Enter",
+          "Tab",
+          "Escape",
+          "Backspace",
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ],
+    "type": "object"
+  },
+  "browser.links": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "browser.move": {
+    "additionalProperties": false,
+    "properties": {
+      "x": {
+        "maximum": 1280,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "y": {
+        "maximum": 800,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "x",
+      "y"
+    ],
+    "type": "object"
+  },
+  "browser.observe": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "browser.open": {
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "maxLength": 2048,
+        "minLength": 12,
+        "type": "string"
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "type": "object"
+  },
+  "browser.scroll": {
+    "additionalProperties": false,
+    "properties": {
+      "delta_y": {
+        "maximum": 1000,
+        "minimum": -1000,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "delta_y"
+    ],
+    "type": "object"
+  },
+  "browser.type": {
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "type": "object"
+  },
+  "browser.watch": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "clipboard.read": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "clipboard.write": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "type": "object"
+  },
+  "commandcore.watch": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "desktop.focus": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "window_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window_id"
+    ],
+    "type": "object"
+  },
+  "desktop.pause": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "desktop.windows": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "devices.info": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "device_ref": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "devices.list": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "devices.select": {
+    "additionalProperties": false,
+    "properties": {
+      "device": {
+        "description": "Immutable ID, exact display name, or exact hostname.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "device"
+    ],
+    "type": "object"
+  },
+  "docker.exec": {
+    "additionalProperties": false,
+    "properties": {
+      "argv": {
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "type": "array"
+      },
+      "container": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "timeout_ms": {
+        "maximum": 600000,
+        "minimum": 100,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "container",
+      "argv"
+    ],
+    "type": "object"
+  },
+  "docker.inspect": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "object": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "object"
+    ],
+    "type": "object"
+  },
+  "docker.logs": {
+    "additionalProperties": false,
+    "properties": {
+      "container": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "tail": {
+        "maximum": 10000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "timestamps": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "container"
+    ],
+    "type": "object"
+  },
+  "docker.ps": {
+    "additionalProperties": false,
+    "properties": {
+      "all": {
+        "type": "boolean"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "docker.run": {
+    "additionalProperties": false,
+    "properties": {
+      "args": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "image": {
+        "type": "string"
+      },
+      "remove": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "timeout_ms": {
+        "maximum": 3600000,
+        "minimum": 100,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "image"
+    ],
+    "type": "object"
+  },
+  "execution.timeline": {
+    "additionalProperties": false,
+    "properties": {
+      "after_seq": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "limit": {
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "session_ref": {
+        "maxLength": 128,
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "execution.timeline.watch": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "fs.copy": {
+    "additionalProperties": false,
+    "properties": {
+      "destination": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "overwrite": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "source": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "source",
+      "destination"
+    ],
+    "type": "object"
+  },
+  "fs.delete": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "recursive": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "fs.list": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 5000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "fs.move": {
+    "additionalProperties": false,
+    "properties": {
+      "destination": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "overwrite": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "source": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "source",
+      "destination"
+    ],
+    "type": "object"
+  },
+  "fs.patch": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "follow_symlinks": {
+        "type": "boolean"
+      },
+      "patches": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "replace": {
+              "type": "string"
+            },
+            "replace_all": {
+              "type": "boolean"
+            },
+            "search": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "search",
+            "replace"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "patches"
+    ],
+    "type": "object"
+  },
+  "fs.read": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "encoding": {
+        "enum": [
+          "text",
+          "base64"
+        ],
+        "type": "string"
+      },
+      "length": {
+        "maximum": 1048576,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "fs.search": {
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "type": "boolean"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "exclude_dirs": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 100,
+        "type": "array"
+      },
+      "max_file_bytes": {
+        "maximum": 2097152,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "max_results": {
+        "maximum": 1000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "query": {
+        "type": "string"
+      },
+      "regex": {
+        "type": "boolean"
+      },
+      "root": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "root",
+      "query"
+    ],
+    "type": "object"
+  },
+  "fs.stat": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "fs.write": {
+    "additionalProperties": false,
+    "properties": {
+      "create_parents": {
+        "type": "boolean"
+      },
+      "data": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "encoding": {
+        "enum": [
+          "text",
+          "base64"
+        ],
+        "type": "string"
+      },
+      "mode": {
+        "enum": [
+          "rewrite",
+          "append"
+        ],
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "data"
+    ],
+    "type": "object"
+  },
+  "git.diff": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "max_bytes": {
+        "maximum": 1048576,
+        "minimum": 1024,
+        "type": "integer"
+      },
+      "paths": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "repo": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "staged": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "repo"
+    ],
+    "type": "object"
+  },
+  "git.log": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "repo": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "repo"
+    ],
+    "type": "object"
+  },
+  "git.run": {
+    "additionalProperties": false,
+    "properties": {
+      "args": {
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "type": "array"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "repo": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "timeout_ms": {
+        "maximum": 600000,
+        "minimum": 100,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "repo",
+      "args"
+    ],
+    "type": "object"
+  },
+  "git.status": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "repo": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "repo"
+    ],
+    "type": "object"
+  },
+  "keyboard.keypress": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "keys": {
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "type": "array"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "keys"
+    ],
+    "type": "object"
+  },
+  "keyboard.type": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "type": "object"
+  },
+  "mouse.click": {
+    "additionalProperties": false,
+    "properties": {
+      "button": {
+        "enum": [
+          "left",
+          "middle",
+          "right"
+        ],
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "double": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "x": {
+        "type": "integer"
+      },
+      "y": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "x",
+      "y"
+    ],
+    "type": "object"
+  },
+  "mouse.drag": {
+    "additionalProperties": false,
+    "properties": {
+      "button": {
+        "enum": [
+          "left",
+          "middle",
+          "right"
+        ],
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "from_x": {
+        "type": "integer"
+      },
+      "from_y": {
+        "type": "integer"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "to_x": {
+        "type": "integer"
+      },
+      "to_y": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "from_x",
+      "from_y",
+      "to_x",
+      "to_y"
+    ],
+    "type": "object"
+  },
+  "mouse.move": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "x": {
+        "type": "integer"
+      },
+      "y": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "x",
+      "y"
+    ],
+    "type": "object"
+  },
+  "mouse.scroll": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "direction": {
+        "enum": [
+          "up",
+          "down",
+          "left",
+          "right"
+        ],
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "steps": {
+        "maximum": 30,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "direction"
+    ],
+    "type": "object"
+  },
+  "package.install": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "manager": {
+        "enum": [
+          "auto",
+          "apt-get",
+          "dnf",
+          "yum",
+          "zypper",
+          "pacman",
+          "apk"
+        ],
+        "type": "string"
+      },
+      "packages": {
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "type": "array"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "timeout_ms": {
+        "maximum": 3600000,
+        "minimum": 100,
+        "type": "integer"
+      },
+      "update": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "packages"
+    ],
+    "type": "object"
+  },
+  "process.list": {
+    "additionalProperties": false,
+    "properties": {
+      "contains_any": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 100,
+        "type": "array"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "filter": {
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 2000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "parent_pid": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "pid": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "state": {
+        "enum": [
+          "R",
+          "S",
+          "D",
+          "Z",
+          "T",
+          "t",
+          "I"
+        ],
+        "type": "string"
+      },
+      "uid": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "process.output": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 1048576,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "process_id": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "process_id"
+    ],
+    "type": "object"
+  },
+  "process.start": {
+    "additionalProperties": false,
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "env": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  },
+  "process.status": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "pid": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "process_id": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "process.stop": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "force": {
+        "type": "boolean"
+      },
+      "pid": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "process_id": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "screen.capture": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "services.manage": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "status",
+          "start",
+          "stop",
+          "restart",
+          "reload",
+          "enable",
+          "disable"
+        ],
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "service": {
+        "type": "string"
+      },
+      "timeout_ms": {
+        "maximum": 600000,
+        "minimum": 100,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "service",
+      "action"
+    ],
+    "type": "object"
+  },
+  "shell.exec": {
+    "additionalProperties": false,
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "env": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      },
+      "timeout_ms": {
+        "maximum": 3600000,
+        "minimum": 100,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  },
+  "system.info": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "system.metrics": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "system.reboot": {
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "type": "boolean"
+      },
+      "delay_seconds": {
+        "maximum": 3600,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "dry_run": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "confirm"
+    ],
+    "type": "object"
+  },
+  "system.shutdown": {
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "type": "boolean"
+      },
+      "delay_seconds": {
+        "maximum": 3600,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "dry_run": {
+        "type": "boolean"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "confirm"
+    ],
+    "type": "object"
+  },
+  "transfer.download": {
+    "additionalProperties": false,
+    "properties": {
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "transfer.upload": {
+    "additionalProperties": false,
+    "properties": {
+      "data_base64": {
+        "type": "string"
+      },
+      "device_id": {
+        "description": "Explicit immutable CommandCore device ID. Overrides selection_id.",
+        "type": "string"
+      },
+      "overwrite": {
+        "type": "boolean"
+      },
+      "path": {
+        "type": "string"
+      },
+      "selection_id": {
+        "description": "Selection handle returned by devices.select.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "data_base64"
+    ],
+    "type": "object"
+  }
+}

@@ -270,6 +270,10 @@ class BrowserGateway:
         self.egress_policy_url = policy_url.rstrip("/")
         self.sessions: dict[tuple[str, str, str], OwnedSession] = {}
         self._create_lock = asyncio.Lock()
+        self._expired_handoffs: dict[
+            tuple[str, str, str], tuple[str, float, float]
+        ] = {}
+        self._cleanup_task: asyncio.Task | None = None
         # Steel may retain cookies after release. Never transfer this process to
         # another owner, even after the previous session has been closed.
         self._bound_owner: tuple[str, str, str] | None = None
@@ -800,16 +804,29 @@ class BrowserGateway:
                 {"behavior": "deny", "eventsEnabled": True},
             )
 
-    async def _release(self, owner: tuple[str, str, str]) -> dict[str, Any]:
+    async def _release(
+        self,
+        owner: tuple[str, str, str],
+        *,
+        expected_session_id: str | None = None,
+        allow_expired_human: bool = False,
+    ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
             if not entry:
                 return {"closed": False}
             async with entry.lock:
+                if expected_session_id is not None and entry.id != expected_session_id:
+                    raise BrowserError(
+                        "Browser session changed; refresh before stopping"
+                    )
                 # An agent cannot terminate a browser while the operator is
                 # typing credentials or approving a sensitive action.
                 if entry.paused_for_human:
-                    raise BrowserError("browser paused for human; cannot close")
+                    if not allow_expired_human:
+                        raise BrowserError("browser paused for human; cannot close")
+                    if entry.handoff_token and time.monotonic() < entry.handoff_until:
+                        raise BrowserError("private human control is still valid")
                 async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
                     r = await client.post(
                         self.base_url + "/v1/sessions/" + entry.id + "/release"
@@ -824,6 +841,40 @@ class BrowserGateway:
                         raise BrowserError("browser journal cleanup failed") from exc
                 self.sessions.pop(owner, None)
         return {"closed": True}
+
+    def _start_expired_cleanup(self) -> None:
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._expired_cleanup_loop())
+
+    async def _expired_cleanup_loop(self) -> None:
+        while True:
+            await asyncio.sleep(30)
+            await self._cleanup_expired_handoffs()
+
+    async def _cleanup_expired_handoffs(self) -> None:
+        now = time.monotonic()
+        for owner, entry in list(self.sessions.items()):
+            if not entry.paused_for_human or (
+                entry.handoff_token and now < entry.handoff_until
+            ):
+                self._expired_handoffs.pop(owner, None)
+                continue
+            seen = self._expired_handoffs.get(owner)
+            if seen is None or seen[:2] != (entry.id, entry.handoff_until):
+                self._expired_handoffs[owner] = (entry.id, entry.handoff_until, now)
+                continue
+            if now - seen[2] < 90:
+                continue
+            try:
+                await self._release(
+                    owner, expected_session_id=entry.id, allow_expired_human=True
+                )
+            except Exception:
+                # Keep ownership and retry; never resume or reassign the worker.
+                continue
+            self._expired_handoffs.pop(owner, None)
+        for owner in set(self._expired_handoffs) - self.sessions.keys():
+            self._expired_handoffs.pop(owner, None)
 
     async def _cdp_socket_uri(self, session_id: str) -> str:
         """Reach self-hosted Steel by a private IP, not its Docker DNS alias.
@@ -1173,6 +1224,7 @@ class BrowserGateway:
         if name not in BROWSER_TOOL_NAMES and not (human and name == "browser.reload"):
             raise BrowserError("unknown browser tool")
         owner = (issuer, subject, client_id)
+        self._start_expired_cleanup()
         # Revalidate durable ownership on every existing-session access, not
         # just at open time. A deleted or replaced binding file invalidates
         # the live session instead of retaining access in gateway memory.
@@ -1214,7 +1266,12 @@ class BrowserGateway:
             async with entry.lock:
                 return self._handoff(owner, args.get("reason", "login_or_approval"))
         if name == "browser.close":
-            return await self._release(owner)
+            expected = args.get("expected_session_id")
+            if expected is not None and (
+                not isinstance(expected, str) or not 1 <= len(expected) <= 128
+            ):
+                raise BrowserError("invalid expected browser session ID")
+            return await self._release(owner, expected_session_id=expected)
         if name == "browser.open":
             check_url(args.get("url", ""), self.allow_hosts)
             entry = await self._new_session(owner)

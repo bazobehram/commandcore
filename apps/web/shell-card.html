@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CommandCore · Shell Execution</title>
+<style>
+:root{color-scheme:light dark;font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;padding:0;background:var(--color-background-primary,#fff);color:var(--color-text-primary,#252525);min-width:220px}
+#card{border:0;border-radius:0;overflow:hidden;box-shadow:none}
+#bar{display:flex;align-items:center;gap:8px;padding:10px 12px}
+#logo{display:grid;place-items:center;border:1px solid var(--color-border-primary,#d1d5db);border-radius:7px;width:25px;height:25px;font-size:11px;font-weight:800}
+#heading{font-weight:740;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cc-build{font-size:10px;color:var(--color-text-secondary,#888);border:1px solid var(--color-border-primary,#ddd);padding:2px 5px;border-radius:5px;white-space:nowrap}
+#status{font-size:11px;color:var(--color-text-secondary,#888)}
+#details{border-top:1px solid var(--color-border-primary,#ddd);margin:0}
+summary{list-style:none;cursor:pointer;padding:10px 12px;display:flex;gap:8px;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+#device{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-text-secondary,#888);font-size:11px}
+#toggle{font-size:11px;color:var(--color-text-secondary,#888)}
+#body{padding:0 12px 12px}
+#terminal{background:#101318;color:#dbe1e8;padding:11px;border-radius:9px;overflow:auto;max-height:340px}
+#prompt{font:12px/1.5 ui-monospace,Consolas,monospace;color:#a7d7ba;white-space:pre-wrap;overflow-wrap:anywhere}
+#output-block{border-top:1px solid #343b46;margin-top:12px;padding-top:10px}
+#output-label,#command-label{font:700 10px/1.4 system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#aeb8c5;margin-bottom:7px}
+[hidden]{display:none!important}
+#preview-note{font-size:11px;color:var(--color-text-secondary,#888);margin:8px 0}
+pre{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,Consolas,monospace}
+#err{color:#f3abab}
+dl{display:grid;grid-template-columns:82px minmax(0,1fr);gap:5px 10px;margin:10px 0 0}
+dt{color:var(--color-text-secondary,#888)}
+dd{margin:0;font:11px/1.5 ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+#note{font-size:11px;color:var(--color-text-secondary,#888);margin-top:9px}
+@media(prefers-color-scheme:dark){#terminal{background:#080a0e}}
+</style>
+</head>
+<body>
+<section id="card" aria-label="CommandCore shell execution">
+ <div id="bar"><strong id="heading">Shell execution</strong><span id="status">Waiting…</span><span id="cc-build" aria-label="CommandCore UI build">V23</span></div>
+ <details id="details" open>
+  <summary><span id="device">Authorized device</span><span id="toggle">Details ▾</span></summary>
+  <div id="body">
+   <div id="terminal"><div id="command-block"><div id="command-label">Command</div><div id="prompt">$ [command pending]</div></div><div id="output-block"><div id="output-label">Output</div><pre id="out">Running or waiting for result…</pre><pre id="err" hidden></pre></div></div>
+   <div id="preview-note" hidden>Command preview protected because the text may contain credentials.</div>
+   <dl><dt>Exit code</dt><dd id="exit">—</dd><dt>Duration</dt><dd id="duration">—</dd></dl>
+   <div id="note" hidden>Output truncated. Full authorized tool result is available separately.</div>
+  </div>
+ </details>
+</section>
+<script>
+(() => {
+"use strict";
+const by=id=>document.getElementById(id);
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let bound=null;
+let initial=true;
+const unwrap=p=>{
+ if(!p||typeof p!=="object")return null;
+ const candidates=[p.structuredContent,p.toolOutput,p.toolOutput?.structuredContent,p.result?.structuredContent,p.result,p];
+ return candidates.find(x=>x&&typeof x==="object"&&((x.activity_step&&x.activity_step.tool==="shell.exec")||x.shell_card))||null;
+};
+function render(p){
+ const v=unwrap(p);if(!v)return;
+ const step=v.activity_step||{},card=v.shell_card||{};
+ const operationId=card.operation_id||step.operation_id;
+ if(!uuid.test(operationId||"")||(bound&&bound!==operationId))return;
+ bound=operationId;
+ const code=Number.isInteger(v.exit_code)?v.exit_code:(Number.isInteger(card.exit_code)?card.exit_code:null);
+ const status=card.status||v.command_status||(code===0?"completed":code===null?"running":"failed");
+ by("heading").textContent="shell.exec · "+status;
+ by("status").textContent=code===null?"Running":"Exit "+code;
+ by("device").textContent=card.device||step.device||"Authorized device";
+ 
+ by("exit").textContent=code===null?"—":String(code);
+ const duration=card.duration_ms??step.duration_ms;
+ if(Number.isFinite(duration))by("duration").textContent=String(duration)+" ms";
+ const command=typeof card.command==="string"&&card.command.length?card.command:null;
+ by("prompt").textContent=command?"$ "+command:"";
+ by("terminal").hidden=!command;
+ by("preview-note").hidden=!!command||code===null;
+ by("toggle").textContent=!command&&code!==null?"Preview protected · Details ▾":"Details ▾";
+ if(initial){by("details").open=!!command||code===null;initial=false;}
+ const stdout=typeof card.stdout==="string"?card.stdout:"";
+ const stderr=typeof card.stderr==="string"?card.stderr:"";
+ by("out").textContent=command?(stdout||(code===null?"Running…":"No stdout")):"";
+ by("output-block").hidden=!command;
+ by("err").textContent=stderr?"stderr:\n"+stderr:"";
+ by("err").hidden=!stderr||!command;
+ by("note").hidden=card.truncated!==true;
+}
+window.addEventListener("openai:set_globals",e=>{
+ render(e?.detail?.globals?.toolOutput);
+ render(e?.detail?.globals?.toolResponseMetadata?.mcp_tool_result);
+});
+window.addEventListener("message",e=>{
+ if(e.source!==window.parent)return;
+ if(e.data?.method==="ui/notifications/tool-result")render(e.data.params);
+});
+render(window.openai?.toolOutput);
+render(window.openai?.toolResponseMetadata?.mcp_tool_result);
+})();
+</script>
+</body>
+</html>
