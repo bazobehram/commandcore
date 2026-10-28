@@ -318,6 +318,22 @@ def test_managed_permission_upgrade_requires_full_scope_online_local_helper(pane
         == 200
     )
     assert db.get_device(device_id)["permission_profile"] == "STANDARD"
+    # A panel downgrade must not require reinstalling the healthy local helper.
+    restored = client.put(
+        path,
+        headers=full,
+        json={"profile": "FULL_CONTROL", "expected_profile": "STANDARD"},
+    )
+    assert restored.status_code == 200, restored.text
+    assert db.get_device(device_id)["permission_profile"] == "FULL_CONTROL"
+    assert (
+        client.put(
+            path,
+            headers=headers,
+            json={"profile": "STANDARD", "expected_profile": "FULL_CONTROL"},
+        ).status_code
+        == 200
+    )
     events = client.get(path.replace("/permissions", "/audit"), headers=full).json()[
         "events"
     ]
