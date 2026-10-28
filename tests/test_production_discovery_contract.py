@@ -44,6 +44,7 @@ async def test_authenticated_discovery_preserves_live_tools_and_cards(
     actual = {item["name"]: item for item in tools}
     assert len(actual) == len(tools), "duplicate discovered names"
     missing = sorted(baseline.keys() - actual.keys())
+    unexpected = sorted(actual.keys() - baseline.keys())
     changed = sorted(
         name
         for name in baseline.keys() & actual.keys()
@@ -55,9 +56,43 @@ async def test_authenticated_discovery_preserves_live_tools_and_cards(
         if baseline[name]["uri"]
         and not actual[name].get("_meta", {}).get("ui", {}).get("resourceUri")
     )
-    assert not missing and not changed and not missing_cards, (
-        f"missing={missing}, changed_schemas={changed}, missing_cards={missing_cards}"
+    assert not missing and not unexpected and not changed and not missing_cards, (
+        f"missing={missing}, unexpected={unexpected}, changed_schemas={changed}, missing_cards={missing_cards}"
     )
+
+    # Discovery may advertise a new version to avoid host caches; previously
+    # issued card URIs must remain resolvable to an authenticated caller.
+    for name, contract in baseline.items():
+        uri = contract["uri"]
+        if not uri:
+            continue
+
+        async def read():
+            return {
+                "type": "http.request",
+                "body": json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "resources/read",
+                        "params": {"uri": uri},
+                    }
+                ).encode(),
+                "more_body": False,
+            }
+
+        response = await handler.handle(
+            Request(
+                {"type": "http", "method": "POST", "path": "/mcp", "headers": []}, read
+            ),
+            principal,
+        )
+        result = json.loads(response.body)
+        assert "error" not in result, f"captured card unavailable: {name}"
+        resource = result["result"]["contents"][0]
+        assert resource["uri"] == uri
+        assert resource["mimeType"] == "text/html;profile=mcp-app"
+        assert "<html" in resource["text"].lower()
 
 
 @pytest.mark.asyncio
