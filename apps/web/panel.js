@@ -142,7 +142,7 @@ function detail(d){
       '<details class="detail-disclosure" id="cc-permissions"><summary>Permission breakdown <span>OAuth, server, account, device</span></summary><div class="permission-lines">'+summary.layers.map(layer=>'<div class="permission-line"><span>'+esc(layer.label)+'</span><strong>'+esc(displayPermissionName(layer.display??layer.profile??'Unknown'))+'</strong></div>').join('')+'</div><p class="muted">The lowest access layer determines effective permission. Local policy cannot be raised remotely.</p></details>'+
       '<details class="detail-disclosure" id="cc-device-info"><summary>Agent and device information <span>Version, identity, connection</span></summary><dl class="detail-data">'+row('Device ID',d.id)+row('Hostname',d.hostname)+row('OS / architecture',d.platform+' / '+d.architecture)+row('Agent / protocol',d.agent_version+' / '+d.agent_protocol_version)+row('Key generation',d.key_generation)+row('Approved',time(d.approved_at))+row('Last seen',time(d.last_seen))+row('Update status',updateStatus(d))+'</dl></details>'+
       '<details class="detail-disclosure" id="cc-capabilities"><summary>Capabilities <span>'+available.filter(c=>caps[c]===true).length+' available</span></summary><div class="capabilities">'+available.map(c=>'<span class="cap '+(caps[c]===true?'available':'')+'">'+esc(c.replaceAll('_',' '))+': '+(caps[c]===true?'available':'unavailable')+'</span>').join('')+'</div></details>';
-    if(d.managed_by_me){const section=document.createElement('section');section.className='section';section.innerHTML='<h3>Device access</h3><p class="muted">Only listed accounts can operate this device. Grants remain bounded by OAuth scopes, server permission and the local ceiling.</p>';for(const grant of d.grants||[]){const line=document.createElement('div');line.className='grant';const text=document.createElement('span');text.className='mono';text.textContent=grant.subject+' · '+grant.max_permission_profile;const remove=document.createElement('button');remove.textContent='Remove grant';remove.onclick=()=>action('/api/managed-devices/'+d.id+'/grants?subject='+encodeURIComponent(grant.subject),'DELETE');line.append(text,remove);section.append(line)}const form=document.createElement('form');form.innerHTML='<label>Account subject<input name="subject" required maxlength="255"></label><label>Grant<select name="profile"><option>READ_ONLY</option><option>STANDARD</option></select></label><button>Save explicit grant</button>';form.onsubmit=e=>{e.preventDefault();action('/api/managed-devices/'+d.id+'/grants','PUT',Object.fromEntries(new FormData(form)))};section.append(form);const rename=document.createElement('form');rename.innerHTML=`<label>Display name<input name="display_name" required maxlength="120" value="${esc(d.display_name)}"></label><button>Rename device</button>`;rename.onsubmit=e=>{e.preventDefault();action('/api/managed-devices/'+d.id,'PATCH',Object.fromEntries(new FormData(rename)))};section.append(rename);const revoke=document.createElement('button');revoke.textContent='Revoke device';revoke.className='danger';revoke.onclick=()=>{
+    if(d.managed_by_me){const section=document.createElement('section');section.className='section';section.innerHTML='<h3>Device access</h3><p class="muted">Only listed accounts can operate this device. Grants remain bounded by OAuth scopes, server permission and the local ceiling.</p>';for(const grant of d.grants||[]){const line=document.createElement('div');line.className='grant';const text=document.createElement('span');text.className='mono';text.textContent=grant.subject+' · '+grant.max_permission_profile;const remove=document.createElement('button');remove.textContent='Remove grant';remove.onclick=()=>action('/api/managed-devices/'+d.id+'/grants?subject='+encodeURIComponent(grant.subject),'DELETE');line.append(text,remove);section.append(line)}const form=document.createElement('form');form.innerHTML='<label>Account subject<input name="subject" required maxlength="255"></label><label>Permission for another account<select name="profile"><option>READ_ONLY</option><option>STANDARD</option></select></label><button>Save delegated access</button>';form.onsubmit=e=>{e.preventDefault();action('/api/managed-devices/'+d.id+'/grants','PUT',Object.fromEntries(new FormData(form)))};section.append(form);const rename=document.createElement('form');rename.innerHTML=`<label>Display name<input name="display_name" required maxlength="120" value="${esc(d.display_name)}"></label><button>Rename device</button>`;rename.onsubmit=e=>{e.preventDefault();action('/api/managed-devices/'+d.id,'PATCH',Object.fromEntries(new FormData(rename)))};section.append(rename);const revoke=document.createElement('button');revoke.textContent='Revoke device';revoke.className='danger';revoke.onclick=()=>{
     revoke.disabled=true;
     const confirmation=document.createElement('section');
     confirmation.className='section';
@@ -172,7 +172,7 @@ section.prepend(permissionForm);
 const activeForm=document.createElement('form');
 activeForm.className='device-active-permission-form';
 const activeLabel=document.createElement('label');
-activeLabel.textContent='Active device permission';
+activeLabel.textContent='Device permission mode';
 const activeSelect=document.createElement('select');
 activeSelect.name='profile';
 activeSelect.setAttribute('aria-label','Active device permission');
@@ -260,13 +260,13 @@ if(currentSubject){
     const grantAdvanced=document.createElement('details');
     grantAdvanced.className='detail-disclosure';
     const grantAdvancedSummary=document.createElement('summary');
-    grantAdvancedSummary.textContent='Advanced: delegate access to another account';
+    grantAdvancedSummary.textContent='Advanced: share this device with another account (not device mode)';
     grantAdvanced.append(grantAdvancedSummary,form);
     section.append(grantAdvanced);
     const myForm=document.createElement('form');
     myForm.className='my-account-access-form';
     const myLabel=document.createElement('label');
-    myLabel.textContent='My account permission';
+    myLabel.textContent='My account access (separate from device mode)';
     const mySelect=document.createElement('select');
     mySelect.setAttribute('aria-label','My account permission');
     for(const level of ['READ_ONLY','STANDARD','FULL_CONTROL']){
