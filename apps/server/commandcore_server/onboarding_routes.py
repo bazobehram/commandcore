@@ -262,7 +262,7 @@ def install_routes(
                     "code_challenge_method": "S256",
                     "scope": (
                         "commandcore:read commandcore:standard commandcore:full"
-                        if request.query_params.get("access") == "full"
+                        if request.query_params.get("access") != "standard"
                         else "commandcore:read commandcore:standard"
                     ),
                     "resource": settings.oauth_audience,
