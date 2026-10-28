@@ -21,7 +21,10 @@ def run():
             "tests/ui/test_webauthn_enroll_success.cjs",
             "tests/ui/test_webauthn_review.cjs",
             "tests/ui/test_webauthn_virtual_authenticator.cjs",
-            "tests/ui/verify_webauthn_native_assertion.py")),
+            "tests/ui/verify_webauthn_native_assertion.py",
+            "tests/ui/native_registration_begin.py",
+            "tests/ui/native_registration_chrome.cjs",
+            "tests/ui/native_registration_finish.py")),
         "pinned_fido2_in_lock": "fido2==2.2.1" in (ROOT/"requirements-server.lock").read_text(),
     }
     # These are evidence gates, not guesses. No local unit test may set them true.
@@ -48,7 +51,8 @@ def run():
                     or path.startswith("scripts/collaboration_")
                     or path.startswith("tests/test_collaboration_")
                     or path.startswith("tests/ui/test_webauthn_")
-                    or path == "tests/ui/verify_webauthn_native_assertion.py"):
+                    or path == "tests/ui/verify_webauthn_native_assertion.py"
+                    or path.startswith("tests/ui/native_registration_")):
                 scoped_dirty.append(path)
     report = {
         "staging_checks": checks,
