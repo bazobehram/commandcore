@@ -344,7 +344,9 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
             # Timeline integration adds observation hooks to ToolService;
             # Finished-output uses verified capture completion and per-stream lengths;
             # Browser ownership and lease handling remain covered below.
-            "46a1249e246a01e4bd9038a88dbe1d8f5b726ddd8b89fc989eb2d92b5260eb75",
+            # Reviewed wording-only changes remove claims that host metadata
+            # authenticates a conversation; authorization logic is unchanged.
+            "4f058d1be8e86c8002516ad0ed6a6ca09be20c5d1d81d9513afd19d41d0e5b6d",
         )
 
 

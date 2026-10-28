@@ -929,7 +929,7 @@ TOOL_DEFINITIONS.extend(
         {
             "name": "browser.close",
             "title": "Close visual browser session",
-            "description": "Release only this authenticated caller's Browser in this verified conversation. The embedded Stop control supplies a viewer reference and expected session ID so an old card cannot close a replacement Browser. Private human control must be resumed before closing.",
+            "description": "Release this authenticated caller's Browser using its conversation correlation. The embedded Stop control supplies a viewer reference and expected session ID so an old card cannot close a replacement Browser. Private human control must be resumed before closing.",
             "inputSchema": _obj(
                 {
                     "session_ref": {"type": "string", "maxLength": 128},
@@ -1368,10 +1368,10 @@ class ToolService:
         args: dict[str, Any],
         host_session: str | None,
     ) -> dict[str, Any]:
-        """Fail-closed conversation gate ahead of all owner-bound Browser calls.
+        """Gate owner-bound Browser calls by the supplied conversation tag.
 
-        A viewer ref is minted with verified ChatGPT host metadata by
-        commandcore.watch; arbitrary browser session IDs are not credentials.
+        Viewer references are principal-bound, but the host session metadata
+        used to mint them is not independently authenticated. See SESSION_TRUST.
         """
         ref = args.get("session_ref")
         host_tag = self.live_activity.session_tag(host_session)
@@ -1391,7 +1391,7 @@ class ToolService:
         if not host_tag:
             raise ToolError(
                 "browser_conversation_required",
-                "Verified conversation context is required for Browser access",
+                "Conversation context is required for Browser access",
             )
         owner = (principal.issuer, principal.subject, principal.client_id)
         bound = self._browser_conversation_leases.get(owner)
@@ -1436,7 +1436,7 @@ class ToolService:
                 if owner in worker.sessions:
                     raise ToolError(
                         "browser_conversation_unbound",
-                        "Existing Browser session has no verified conversation binding; administrator recovery required",
+                        "Existing Browser session has no conversation association; administrator recovery required",
                     )
             except ToolError:
                 raise
@@ -1686,7 +1686,7 @@ class ToolService:
                     if session_tag is None:
                         raise ToolError(
                             "invalid_session_view",
-                            "Verified conversation attribution unavailable",
+                            "Conversation attribution unavailable",
                         )
                 return self.live_activity.snapshot(
                     principal,

@@ -1190,7 +1190,7 @@ class MCPHandler:
                 dict(
                     original_watch,
                     name="commandcore.viewer",
-                    description="Renew this widget's verified conversation viewer; no new task or UI is opened.",
+                    description="Renew this widget's conversation viewer; no new task or UI is opened.",
                     _meta={
                         "ui": {"visibility": ["app"]},
                         "openai/widgetAccessible": True,
@@ -1580,8 +1580,9 @@ class MCPHandler:
                     meta["ui/resourceUri"] = spec[0]
                     meta["openai/outputTemplate"] = spec[0]
                     # On direct execution-tool rendering, bind the embedded Activity
-                    # panel to the verified ChatGPT conversation, not account-wide
-                    # activity. This metadata is widget-only, never command output.
+                    # panel to the supplied conversation correlation tag. This
+                    # metadata is widget-only, never command output; the host
+                    # session value is not independently authenticated.
                     if name in OPERATION_TOOLS:
                         meta["commandcore/viewer"] = (
                             self.tools.live_activity.issue_viewer(
@@ -1646,9 +1647,7 @@ class MCPHandler:
             and principal.client_id not in {"", "unknown", "oauth-client"}
             and scope_allows(principal.scopes, READ_SCOPE)
         ):
-            raise ToolError(
-                "invalid_task_view", "Verified conversation context required"
-            )
+            raise ToolError("invalid_task_view", "Conversation context required")
         host_tag = self.tools.live_activity.session_tag(host_session)
         if "session_ref" in args:
             tag = (
@@ -1663,9 +1662,7 @@ class MCPHandler:
                 "invalid_task_view", "Task unavailable in this conversation"
             )
         if not tag:
-            raise ToolError(
-                "invalid_session_view", "Verified conversation context required"
-            )
+            raise ToolError("invalid_session_view", "Conversation context required")
         return self.tasks.owner(principal), tag
 
     @staticmethod
