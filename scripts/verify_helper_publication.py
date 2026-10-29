@@ -50,6 +50,14 @@ def verify(
     entries = sorted(wheels.iterdir())
     if not 1 <= len(entries) <= 128:
         raise ValueError("signed wheelhouse must contain 1..128 wheels")
+    if (
+        sum(
+            bool(re.fullmatch(r"pip-[0-9][A-Za-z0-9_.+-]*-py3-none-any\.whl", p.name))
+            for p in entries
+        )
+        != 1
+    ):
+        raise ValueError("signed pip bootstrap wheel missing or ambiguous")
     if any(p.is_symlink() or not p.is_file() or p.suffix != ".whl" for p in entries):
         raise ValueError("unexpected signed wheelhouse member")
     if len({p.name for p in entries}) != len(entries):

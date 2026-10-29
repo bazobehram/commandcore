@@ -34,6 +34,12 @@ def assets(tmp_path):
             "commandcore_agent-0.9.0rc7.dist-info/entry_points.txt",
             "[console_scripts]\ncommandcore-helper=commandcore_agent.privileged_helper:main\n",
         )
+    pip_wheel = wheels / "pip-25.3-py3-none-any.whl"
+    with zipfile.ZipFile(pip_wheel, "w") as archive:
+        archive.writestr(
+            "pip-25.3.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: pip\nVersion: 25.3\n",
+        )
     bundle = tmp_path / "commandcore-helper-linux-x86_64.tar.gz"
     load("build_helper_bundle").build(wheel, bundle, version="0.9.0-rc7")
     private = Ed25519PrivateKey.generate()
@@ -64,7 +70,7 @@ def test_offline_signer_produces_publisher_verifiable_assets(tmp_path):
         "x86_64",
     )
     assert verified["result"] == "SIGNED_OFFLINE_WHEELHOUSE_VERIFIED"
-    assert verified["wheel_count"] == 1
+    assert verified["wheel_count"] == 2
     with pytest.raises(FileExistsError):
         signer.sign_to_directory(
             key, bundle, wheels, root, "0.9.0-rc7", "x86_64", "3.13", "a" * 40
