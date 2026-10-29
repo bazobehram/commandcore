@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 type View = 'workspace'|'hardware'|'browser'|'activity'|'access'|'files';
 type Device = {
  id:string; display_name:string; hostname?:string; platform?:string; architecture?:string;
- status?:string; connected?:boolean; revoked_at?:string|null; is_owner?:boolean; approved_at?:string; agent_protocol_version?:string; key_generation?:number|string; recommended_agent_version?:string; agent_update_available?:boolean;
+ status?:string; connected?:boolean; revoked_at?:string|null; is_owner?:boolean; approved_at?:string; agent_protocol_version?:string; key_generation?:number|string; recommended_agent_version?:string; agent_update_available?:boolean; agent_update?:{state:string;available:boolean;can_start:boolean;installed_version?:string;recommended_version?:string;blockers?:string[];automatic_updates?:boolean};
  permission_profile?:string; access_max_permission_profile?:string; agent_version?:string; active_jobs?:any[];
  last_seen?:number|string; managed_by_me?:boolean; capabilities?:Record<string,any>; grants?:any[];
 };
@@ -38,6 +38,7 @@ export class App implements OnInit, OnDestroy {
  overlay=signal<'none'|'add'|'palette'|'confirm'|'pending'|'settings'|'permission-confirm'|'permission-reauthorize'|'grant-confirm'|'restore-confirm'|'audit'>('none');
  commandQuery=signal(''); typedCode=''; grantMyself=true; confirmName=''; confirmation: (()=>Promise<void>)|null=null;
  search=signal(''); helperAvailable=signal(false); installChecked=signal(false);
+ installOS=signal<'linux'|'windows'|null>(null); updateBusy=signal(false); updateConfirm=signal(false); manualUpdateStatus=signal('');
  permissionChoice='STANDARD'; userIntent=''; installPrompt:any=null;
  managerError=signal(false); permissionBusy=signal(false); permissionError=signal(''); pendingPermission:{deviceId:string;level:string;expected_profile:string|null;expected_grant:string|null}|null=null; renameValue=''; grantSubject=''; grantLevel='STANDARD'; initialPermission='FULL_CONTROL';
  selectedGrantSubject=''; grantToRemove=''; awaitingGrantRemoval=false;
@@ -127,7 +128,8 @@ export class App implements OnInit, OnDestroy {
  canFull=computed(()=>this.localFullReady()&&!!this.selectedDevice()?.managed_by_me);
  canStandard=computed(()=>this.localCeiling()!=='READ_ONLY');
  myGrantNeedsRestore=computed(()=>!!this.selectedDevice()?.managed_by_me&&!this.ownGrant());
- updateAvailable=computed(()=>this.selectedDevice()?.agent_update_available===true);
+ updateAvailable=computed(()=>this.selectedDevice()?.agent_update?.available??(this.selectedDevice()?.agent_update_available===true));
+ canManualAgentUpdate=computed(()=>this.selectedDevice()?.agent_update?.can_start===true&&this.effectivePermission()==='FULL_CONTROL'&&!!this.selectedDevice()?.managed_by_me);
  tabs:{key:View;label:string;icon:string}[]=[
   {key:'workspace',label:'Workspace',icon:'◈'}, {key:'hardware',label:'Hardware',icon:'▤'},
   {key:'browser',label:'Browser',icon:'◎'},{key:'activity',label:'Activity',icon:'≋'},
@@ -268,10 +270,66 @@ export class App implements OnInit, OnDestroy {
   this.browserPrivateLink.set(data.handoff_path);this.browserFrame.set('');this.browserState.set('awaiting_human');this.browserBusy.set(false);
   this.message('Private control is ready. Open it to sign in or approve, then resume AI control there.');
  }catch(e){if(this.browserClient()===id&&this.browserEpoch===epoch){this.browserState.set('unavailable');this.browserBusy.set(false);void this.loadBrowserSessions();}this.message(this.err(e));}}
- async checkInstall(){this.installChecked.set(false);try{const res=await fetch('/install/linux-ready',{method:'HEAD',credentials:'same-origin',cache:'no-store'});this.helperAvailable.set(res.ok);}catch{this.helperAvailable.set(false);}this.installChecked.set(true);}
- openAdd(){this.overlay.set('add');void this.checkInstall();}
+ detectBrowserOS(): 'linux'|'windows'|null {
+  const ua=String(navigator.userAgent||'');const platform=String((navigator as any).userAgentData?.platform||navigator.platform||'');
+  if(/Android|iPhone|iPad|iPod|Macintosh|MacIntel|Mac OS/i.test(platform+' '+ua))return null;
+  if(/Windows|Win32|Win64/i.test(platform+' '+ua))return 'windows';
+  if(/Linux|Ubuntu|X11/i.test(platform+' '+ua))return 'linux';
+  return null;
+ }
+ chooseInstallOS(os:'linux'|'windows'){this.installOS.set(os);void this.checkInstall();}
+ async checkInstall(){
+  const os=this.installOS();this.installChecked.set(false);this.helperAvailable.set(false);
+  if(!os){this.installChecked.set(true);return;}
+  try{
+   const res=await fetch(os==='linux'?'/install/linux-ready':'/install/windows',{method:os==='linux'?'HEAD':'GET',credentials:'same-origin',cache:'no-store'});
+   if(this.installOS()!==os)return;
+   let safe=res.ok;
+   if(safe&&os==='windows'){
+    const body=await res.text();
+    safe=body.length<=65536&&!body.includes('__COMMANDCORE_')&&!body.includes('commandcore.example.com')&&body.includes('ReleasePublicKey')&&body.includes('VerifierSha256');
+   }
+   if(this.installOS()===os)this.helperAvailable.set(safe);
+  }catch{if(this.installOS()===os)this.helperAvailable.set(false);}
+  if(this.installOS()===os)this.installChecked.set(true);
+ }
+ openAdd(){const suggested=this.detectBrowserOS();this.installOS.set(suggested);this.overlay.set('add');void this.checkInstall();}
  openPending(){this.initialPermission=this.oauthFullReady()?'FULL_CONTROL':'STANDARD';this.overlay.set('pending');void this.refresh(true);}
- cmd(kind:'full'|'standard'='full'):string{return kind==='full'?'bash -o pipefail -c \x27curl -fsSL '+location.origin+'/install/linux-ready | bash\x27':'curl -fsSL '+location.origin+'/install/linux | sh';}
+ cmd(kind:'full'|'standard'='full'):string{
+  if(this.installOS()==='windows')return "$setup = Join-Path $env:TEMP 'commandcore-install.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '"+location.origin+"/install/windows' -OutFile $setup; & $setup";
+  return kind==='full'?"bash -o pipefail -c 'curl -fsSL "+location.origin+"/install/linux-ready | bash'":'curl -fsSL '+location.origin+'/install/linux | sh';
+ }
+ installNote(){if(!this.installOS())return 'Choose the target computer operating system.';
+  if(!this.installChecked())return 'Checking signed installation package…';
+  if(this.installOS()==='windows')return this.helperAvailable()?'Pinned Windows PowerShell installer available. Confirm enrollment and reported capabilities.':'Signed Windows installer is not published or verified; copy is disabled.';
+  return this.helperAvailable()?'Signed Linux Agent and helper installer available. Local administrator approval is required once.':'Signed Linux helper is not published. Use Standard-only installation if appropriate.';
+ }
+ async confirmManualAgentUpdate(){
+  const d=this.selectedDevice();
+  if(!d||!this.canManualAgentUpdate()||this.updateBusy())return;
+  this.updateBusy.set(true);this.updateConfirm.set(false);this.manualUpdateStatus.set('Preparing signed Agent update…');
+  try{
+   const encoded=encodeURIComponent(d.id);
+   const response=await request<any>('/api/devices/'+encoded+'/agent-update','POST');
+   const rollout=encodeURIComponent(response.rollout.id),path='/api/devices/'+encoded+'/agent-update/'+rollout;
+   await request<any>(path+'/advance','POST');
+   let terminal=false;
+   for(let attempt=0;attempt<24;attempt++){
+    const snapshot=await request<any>(path);
+    const rolloutState=String(snapshot.rollout.status||'running');
+    const deviceState=String(snapshot.rollout.devices?.[0]?.state||'pending');
+    this.manualUpdateStatus.set('Update '+rolloutState+' · '+deviceState);
+    if(['completed','failed','paused','canceled'].includes(rolloutState)){terminal=true;break;}
+    // This loop only runs after the operator confirmed this update. A brief
+    // disconnect may leave the rollout pending or staged; advance one step.
+    if(['pending','staged'].includes(deviceState))await request(path+'/advance','POST');
+    await new Promise(resolve=>setTimeout(resolve,3000));
+   }
+   await this.refresh(true);
+   this.manualUpdateStatus.update(v=>v+(terminal?' · Verify installed Agent version.':' · Still pending; review the update status before retrying.'));
+  }catch(e){this.manualUpdateStatus.set('Update not completed: '+this.err(e));}
+  finally{this.updateBusy.set(false);}
+ }
  async copy(value:string){try{await navigator.clipboard.writeText(value);this.message('Copied to clipboard');}catch{this.message('Copy unavailable. Select the command and copy manually.');}}
  async decide(enrollment:Pending,approve:boolean){
   if(!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(this.typedCode.trim().toUpperCase())){this.message('Enter the 9-character verification code displayed by your device.');return;}
