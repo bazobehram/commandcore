@@ -195,17 +195,29 @@ def sign_to_directory(
 
 
 def local_approval(version: str, arch: str, python_minor: str) -> None:
-    with open("/dev/tty", "r+", encoding="utf-8") as terminal:
-        terminal.write(
-            f"Sign privileged helper {version}, {arch}, Python {python_minor}? "
-            "This may authorize root-level code on other computers.\n"
-            "Only proceed on a trusted offline signing machine after reviewing "
-            "the source and candidate bundle.\n"
-            "Type SIGN HELPER RELEASE to authorize: "
-        )
-        terminal.flush()
-        if terminal.readline().strip() != "SIGN HELPER RELEASE":
+    # Text-mode read/write streams on /dev/tty may attempt to seek between
+    # a write and a readline, which terminal devices do not support.
+    # Use explicit descriptor I/O with a bounded, local-only confirmation.
+    message = (
+        f"Sign privileged helper {version}, {arch}, Python {python_minor}? "
+        "This may authorize root-level code on other computers.\n"
+        "Only proceed on a trusted offline signing machine after reviewing "
+        "the source and candidate bundle.\n"
+        "Type SIGN HELPER RELEASE to authorize: "
+    )
+    fd = os.open("/dev/tty", os.O_RDWR | os.O_CLOEXEC)
+    try:
+        os.write(fd, message.encode("utf-8"))
+        answer = bytearray()
+        while len(answer) < 128:
+            char = os.read(fd, 1)
+            if not char or char in (b"\n", b"\r"):
+                break
+            answer.extend(char)
+        if answer.decode("utf-8", errors="replace").strip() != "SIGN HELPER RELEASE":
             raise PermissionError("offline signer authorization declined")
+    finally:
+        os.close(fd)
 
 
 def main() -> int:
