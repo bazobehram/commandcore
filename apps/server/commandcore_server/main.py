@@ -44,6 +44,7 @@ from .security import (
     panel_session_claims,
 )
 from .tools import CORE_TOOL_DEFINITIONS, TOOL_DEFINITIONS, ToolError, ToolService
+from .update_policy import manual_update_info
 from .web_assets import web_asset, web_page
 
 settings = Settings()
@@ -627,6 +628,30 @@ async def api_overview(
     return snapshot
 
 
+def _panel_can_authorize_full(principal: Principal) -> bool:
+    return principal.auth_kind in {"panel-cookie", "bootstrap-bearer"} or scope_allows(
+        principal.scopes, "commandcore:full"
+    )
+
+
+def _decorate_agent_update(
+    device: dict[str, Any], *, connected: bool, principal: Principal
+) -> None:
+    device["connected"] = connected
+    device["recommended_agent_version"] = settings.recommended_agent_version
+    info = manual_update_info(
+        device,
+        target_version=settings.recommended_agent_version,
+        manifest_url=settings.agent_update_manifest_url,
+        connected=connected,
+        operator_full=_panel_can_authorize_full(principal),
+    )
+    device["agent_update"] = info
+    device["agent_update_available"] = info["available"]
+    # Don't leak release manifest URLs to untrusted panel inputs. All update
+    # dispatches use the configured server URL, never a client-submitted URL.
+
+
 @app.get("/api/devices")
 async def api_devices(
     principal: Principal = Depends(require_principal),
@@ -638,16 +663,12 @@ async def api_devices(
         if d["status"] != "revoked"
     ]
     for device in devices:
-        device["connected"] = device["id"] in connected
-        device["recommended_agent_version"] = settings.recommended_agent_version
-        device["agent_update_available"] = (
-            device.get("agent_version") != settings.recommended_agent_version
+        _decorate_agent_update(
+            device, connected=device["id"] in connected, principal=principal
         )
-        device["agent_update_manifest_url"] = settings.agent_update_manifest_url or None
     return {
         "devices": devices,
         "recommended_agent_version": settings.recommended_agent_version,
-        "agent_update_manifest_url": settings.agent_update_manifest_url or None,
     }
 
 
@@ -656,18 +677,116 @@ async def api_device(
     device_id: str, principal: Principal = Depends(require_principal)
 ) -> dict[str, Any]:
     device = _accessible_device(principal, device_id)
-    device["connected"] = device_id in set(await agents.online_device_ids())
+    _decorate_agent_update(
+        device,
+        connected=device_id in set(await agents.online_device_ids()),
+        principal=principal,
+    )
     device["active_jobs"] = db.list_jobs(
         principal.subject, active_only=True, device_id=device_id, limit=100
     )
-    device["recommended_agent_version"] = settings.recommended_agent_version
-    device["agent_update_available"] = (
-        device.get("agent_version") != settings.recommended_agent_version
-    )
-    device["agent_update_manifest_url"] = settings.agent_update_manifest_url or None
     if device.get("is_owner"):
         device["grants"] = db.list_device_grants(principal.subject, device_id)
     return {"device": device}
+
+
+@app.post("/api/devices/{device_id}/agent-update")
+async def start_manual_agent_update(
+    device_id: str,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    """Create a user-initiated, signed Agent-only rollout for one owned device."""
+    _owned_device(principal, device_id, allow_revoked=False)
+    if not _panel_can_authorize_full(principal):
+        raise HTTPException(403, "full_control_scope_required")
+    device = _accessible_device(principal, device_id, allow_revoked=False)
+    info = manual_update_info(
+        device,
+        target_version=settings.recommended_agent_version,
+        manifest_url=settings.agent_update_manifest_url,
+        connected=device_id in set(await agents.online_device_ids()),
+        operator_full=_panel_can_authorize_full(principal),
+    )
+    if not info["can_start"]:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "manual_update_unavailable", "reasons": info["blockers"]},
+        )
+    # Prevent overlapping release transitions on one machine.
+    for existing in db.list_fleet_rollouts(principal.subject, limit=50):
+        if existing["status"] in {"planned", "running", "paused"}:
+            details = db.get_fleet_rollout(principal.subject, existing["id"])
+            if details and any(
+                item["device_id"] == device_id for item in details["devices"]
+            ):
+                raise HTTPException(409, "device_update_already_in_progress")
+    try:
+        rollout = db.create_fleet_rollout(
+            owner_id=principal.subject,
+            created_by=principal.subject,
+            target_version=settings.recommended_agent_version,
+            manifest_url=settings.agent_update_manifest_url,
+            device_ids=[device_id],
+            canary_count=1,
+            ring_size=1,
+            stop_on_failure=True,
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    _audit_admin(
+        principal,
+        tool="admin.device.agent_update_requested",
+        device_id=device_id,
+        arguments={
+            "rollout_id": rollout["id"],
+            "target_version": settings.recommended_agent_version,
+        },
+        risk="high",
+    )
+    return {"rollout": rollout}
+
+
+def _verify_single_device_update(
+    principal: Principal, device_id: str, rollout_id: str
+) -> dict[str, Any]:
+    # Owners need Full Control to progress their own update, but cannot invoke
+    # the admin-only bulk fleet endpoints or operate another device's rollout.
+    _owned_device(principal, device_id, allow_revoked=False)
+    if not _panel_can_authorize_full(principal):
+        raise HTTPException(403, "full_control_scope_required")
+    rollout = db.get_fleet_rollout(principal.subject, rollout_id)
+    members = rollout.get("devices", []) if rollout else []
+    if not rollout or len(members) != 1 or members[0]["device_id"] != device_id:
+        raise HTTPException(404, "manual_device_update_not_found")
+    return rollout
+
+
+@app.get("/api/devices/{device_id}/agent-update/{rollout_id}")
+async def manual_agent_update_status(
+    device_id: str,
+    rollout_id: str,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    _verify_single_device_update(principal, device_id, rollout_id)
+    return {"rollout": fleet.reconcile(principal.subject, rollout_id)}
+
+
+@app.post("/api/devices/{device_id}/agent-update/{rollout_id}/advance")
+async def advance_manual_agent_update(
+    device_id: str,
+    rollout_id: str,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    _verify_single_device_update(principal, device_id, rollout_id)
+    result = await fleet.advance(principal.subject, rollout_id)
+    _audit_admin(
+        principal,
+        tool="admin.device.agent_update.advance",
+        device_id=device_id,
+        arguments={"rollout_id": rollout_id, "action": result.get("action")},
+        risk="high",
+    )
+    return result
 
 
 @app.patch("/api/devices/{device_id}")
