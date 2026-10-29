@@ -1,0 +1,315 @@
+<div class="app-shell">
+  <div class="aurora" aria-hidden="true"><div class="aurora-a"></div><div class="aurora-b"></div><div class="aurora-c"></div></div>
+  <header class="topbar">
+    <div class="brand" (click)="show('workspace')" role="button" tabindex="0" (keydown.enter)="show('workspace')">
+      <img class="brand-octopus" [src]="logoFor(onlineCount()>0?'online':'idle')" alt="" aria-hidden="true"/>
+      <span class="brand-wordmark">Command<span>Core</span></span><span class="brand-slash">/</span><span class="brand-context">workspace</span>
+    </div>
+    <div class="top-actions">
+      @if(loggedIn()){
+        <span class="top-tag connection-count"><span class="status-dot" [class.is-offline]="onlineCount()===0"></span>{{onlineCount()}} / {{devices().length}} ONLINE</span>
+        <span class="sync-state" [class.sync-down]="!syncHealthy()" [attr.title]="syncHealthy()?'Device state synchronized automatically every few seconds':'Connection to the control plane needs attention'"><i></i>{{syncHealthy()?'Live':'Reconnecting'}}</span>
+        <button class="quiet-icon search-trigger" (click)="overlay.set('palette');accountMenu.set(false)" title="Command palette (Ctrl+K)" aria-label="Open command palette">⌕ <kbd>⌘ K</kbd></button>
+        <div class="account-wrap">
+          <button class="account-trigger" (click)="toggleAccount()" [attr.aria-expanded]="accountMenu()" aria-controls="account-menu" title="Account and sign out" aria-label="Account menu">
+            <span class="account-avatar" aria-hidden="true">◉</span><span class="account-caret" aria-hidden="true">⌄</span>
+          </button>
+          @if(accountMenu()){
+            <div class="account-popover" role="menu" id="account-menu">
+              <div class="account-meta"><span class="section-eyebrow">SIGNED IN</span><strong>{{session()?.subject||'CommandCore account'}}</strong><span class="account-scope">{{levelName(oauthProfile())}} session</span></div>
+              <button role="menuitem" (click)="accountMenu.set(false);installApp()"><span>⊞</span> Install workspace app</button>
+              <a role="menuitem" href="/admin"><span>⌁</span> Recovery dashboard</a>
+              <div class="account-separator"></div>
+              <button role="menuitem" class="account-logout" (click)="signOut()" [disabled]="logoutBusy()"><span>↪</span> {{logoutBusy()?'Signing out…':'Sign out'}}</button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </header>
+  @if(accountMenu()){<button class="account-dismiss" (click)="accountMenu.set(false)" aria-label="Close account menu" tabindex="-1"></button>}
+  @if(loading()){
+    <section class="central-state"><img class="octopus-loading" src="/brand/octopus-loading.svg?v=20261029-v8" alt="Connecting"/><h2>Connecting to CommandCore</h2><p>Checking your authorized devices…</p></section>
+  } @else if(!loggedIn()){
+    <section class="login-surface"><img src="/brand/octopus-idle.svg?v=20261029-v8" class="login-octopus" alt="CommandCore octopus"/><div class="mini-eyebrow">YOUR INFRASTRUCTURE, CONNECTED.</div><h1>All your machines.<br><em>One quiet workspace.</em></h1><p>Sign in with your CommandCore account to securely control connected devices.</p><a href="/auth/login" class="primary-button">Sign in to CommandCore <span>↗</span></a><a class="text-link" href="/admin">Administrator recovery</a>@if(error()){<small>{{error()}}</small>}</section>
+  } @else {
+    <main>
+      <section class="welcome">
+        <div class="mini-eyebrow"><img src="/brand/octopus-idle.svg?v=20261029-v8" class="tiny-octopus" alt="" aria-hidden="true"/> A DIFFERENT KIND OF CONTROL PLANE</div>
+        <h1>Your devices, <em>in flow.</em></h1>
+        <p>Everything your AI can reach. One place to understand, monitor and control.</p>
+      </section>
+      <div class="fleet-heading">
+        <div class="fleet-title"><span>YOUR MACHINES</span><span class="fleet-count">{{devices().length}} devices <span class="soft-divider">·</span> {{onlineCount()}} online</span></div>
+        <div class="fleet-operations"><button (click)="move(-1)" class="round-nav" aria-label="Previous device">←</button><button (click)="move(1)" class="round-nav" aria-label="Next device">→</button><button (click)="openAdd()" class="add-link">＋ Add device</button></div>
+      </div>
+      <section class="device-rail" aria-label="Connected devices">
+        <div class="fleet-hub" [class.hub-working]="anyWorking()" [class.hub-connected]="onlineCount()>0" aria-hidden="true"><div class="hub-head"><img src="/brand/octopus-head.svg?v=octopus-v10" alt=""/></div><span>YOUR CORE</span><i></i></div>
+        @if(!devices().length){
+          <button class="machine-empty" (click)="openAdd()"><span class="empty-plus">＋</span><strong>Connect your first device</strong><span>Linux agent · 3 steps</span></button>
+        }
+        @for(d of devices();track d.id;let i=$index){
+          <button class="device-tile" [class.active]="selected()===i" (click)="select(i)" [attr.aria-pressed]="selected()===i">
+            <div class="tile-top">
+              <span class="tile-hardware-glyph" [attr.data-role]="deviceRole(d)" aria-hidden="true">
+                @if(deviceRole(d)==='server'){
+                  <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="6" y="6" width="28" height="9" rx="2.5"/><rect x="6" y="17" width="28" height="9" rx="2.5"/><rect x="6" y="28" width="28" height="7" rx="2.5"/><circle cx="11" cy="10.5" r="1" fill="currentColor"/><circle cx="11" cy="21.5" r="1" fill="currentColor"/><circle cx="11" cy="31.5" r="1" fill="currentColor"/></svg>
+                } @else if(deviceRole(d)==='laptop'){
+                  <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="8" y="8" width="24" height="18" rx="2"/><path d="M4 30h32l-4 4H8l-4-4z"/></svg>
+                } @else if(deviceRole(d)==='workstation'){
+                  <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><rect x="4.5" y="6" width="25" height="21" rx="2"/><path d="M17 27v5m-7 0h14"/><rect x="33" y="7" width="4" height="28" rx="1"/><circle cx="35" cy="29" r=".65" fill="currentColor"/></svg>
+                } @else {
+                  <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="5" y="7" width="30" height="23" rx="2.5"/><path d="M20 30v5m-8 0h16"/></svg>
+                }
+              </span>
+              <span class="device-status" [class.is-offline]="!deviceOnline(d)"><i [class.offline]="!deviceOnline(d)"></i>{{deviceWorking(d)?'Working':deviceOnline(d)?'Connected':'Offline'}}</span>
+            </div>
+            <div class="tile-bottom"><div class="tile-category">{{deviceType(d)}}</div><strong>{{d.display_name}}</strong><small><span class="device-os-symbol">{{osSymbol(d)}}</span> {{deviceOS(d)}} <span>·</span> {{d.architecture||'Unknown architecture'}}</small><span class="tile-permission">Access · {{devicePermission(d)}}</span></div>
+            <div class="tile-corner">↗</div>
+          </button>
+        }
+        <button class="device-tile add-tile" (click)="openAdd()"><span class="giant-plus">＋</span><strong>Add a device</strong><small>Expand your workspace</small></button>
+      </section>
+      @if(selectedDevice();as d){
+      <section class="workspace-frame">
+        <div class="frame-top">
+          <div class="frame-breadcrumb"><span class="frame-device-icon frame-hardware-glyph" [attr.data-role]="deviceRole(d)" aria-hidden="true">{{deviceRole(d)==='server'?'▥':deviceRole(d)==='laptop'?'▰':deviceRole(d)==='workstation'?'▣':'▤'}}</span><div><div class="frame-device-name">{{d.display_name}} <span class="pill-online" [class.is-offline]="!deviceOnline(d)">{{deviceOnline(d)?'● connected':'○ offline'}}</span></div><span class="frame-subtitle">{{d.hostname||'Device'}} <span>·</span> {{d.agent_version||'Agent version unknown'}}</span></div></div>
+          <div class="frame-controls"><button class="permission-tag permission-shortcut" (click)="show('access')" title="Manage device permissions">Access: {{levelName(effectivePermission())}} ↗</button></div>
+        </div>
+        <nav class="workspace-tabs" aria-label="Device workspace sections">
+          @for(tab of tabs;track tab.key){<button [class.current]="view()===tab.key" (click)="show(tab.key)"><span class="tab-icon">{{tab.icon}}</span>{{tab.label}}</button>}
+        </nav>
+        <div class="frame-body">
+          @if(view()==='workspace'){
+            <div class="work-layout">
+              <div class="work-main">
+                <div class="section-eyebrow">LIVE WORKSPACE <span class="subtle-separator">/</span> {{d.display_name}}</div>
+                <h2>Machine overview<span class="headline-period">.</span></h2>
+                <p class="view-description">Current state and recent operations from your CommandCore agent.</p>
+                <div class="telemetry">
+                  <div class="telemetry-row"><span>CPU</span><div class="thin-track"><div class="thin-fill" [style.width.%]="pct(selectedMetrics()?.['cpu_percent'])"></div></div><strong>{{selectedMetrics()?.['cpu_percent']!=null?(pct(selectedMetrics()?.['cpu_percent']).toFixed(1)+'%'):'—'}}</strong></div>
+                  <div class="telemetry-row"><span>Memory</span><div class="thin-track"><div class="thin-fill" [style.width.%]="pct(selectedMetrics()?.['memory']?.percent)"></div></div><strong>{{selectedMetrics()?.['memory']?.percent!=null?(pct(selectedMetrics()?.['memory']?.percent).toFixed(1)+'%'):'—'}}</strong></div>
+                  <div class="telemetry-row"><span>Disk</span><div class="thin-track"><div class="thin-fill" [class.danger-fill]="pct(selectedMetrics()?.['disk']?.percent)>90" [style.width.%]="pct(selectedMetrics()?.['disk']?.percent)"></div></div><strong>{{selectedMetrics()?.['disk']?.percent!=null?(pct(selectedMetrics()?.['disk']?.percent).toFixed(1)+'%'):'—'}}</strong></div>
+                </div>
+                <div class="work-actions">
+                  <button class="subtle-action" (click)="show('activity')"><span>↗</span> View execution activity</button>
+                  <button class="subtle-action" (click)="show('browser')"><span>◎</span> Browser sessions</button>
+                </div>
+              </div>
+              <aside class="work-aside">
+                <div class="side-top"><span>DEVICE SUMMARY</span><span class="small-asterisk">✳</span></div>
+                <dl class="information-list">
+                  <div><dt>Architecture</dt><dd>{{d.architecture||'—'}}</dd></div>
+                  <div><dt>CPU cores</dt><dd>{{selectedInfo()?.['cpu_logical']||selectedInfo()?.['cpu_count']||'—'}}</dd></div>
+                  <div><dt>System memory</dt><dd>{{fmtBytes(selectedInfo()?.['memory_total']||selectedMetrics()?.['memory']?.total)}}</dd></div>
+                  <div><dt>Disk capacity</dt><dd>{{fmtBytes(selectedInfo()?.['disk_total']||selectedMetrics()?.['disk']?.total)}}</dd></div>
+                  <div><dt>GPU</dt><dd>{{selectedInfo()?.['gpu_name']||selectedMetrics()?.['health']?.accelerators?.name||'Not reported'}}</dd></div>
+                  <div><dt>Last seen</dt><dd>{{fmtTime(d.last_seen)}}</dd></div>
+                </dl>
+                <button class="side-foot" (click)="show('hardware')">Full specifications <span>↗</span></button>
+              </aside>
+            </div>
+            <section class="execution-dock" aria-label="Recent MCP tool executions">
+              <div class="execution-dock-head"><span><img class="exec-octopus" [src]="logoFor(activeOperations()>0?'working':'idle')" alt="" aria-hidden="true"/> RECENT EXECUTIONS <span class="exec-slash">/</span> {{d.display_name}}</span><button (click)="show('activity')">View full activity ↗</button></div>
+              <div class="execution-dock-body">
+                @for(item of activity().slice(0,4);track $index){<div class="execution-line"><span class="exec-seq">{{($index+1).toString().padStart(2,'0')}}</span><span class="exec-tool">{{dataItem(item)}}</span><span class="exec-detail">{{dataDetail(item)}}</span><span class="exec-state">{{item.status||'recorded'}}</span></div>}
+                @empty {<div class="exec-empty"><span>›</span> No recent executions for this account. Use CommandCore MCP from your connected AI client to start.</div>}
+              </div>
+            </section>
+            <div class="frame-footer"><span><span class="live-dot"></span> CommandCore · connected control plane</span><span>Use your AI client to execute commands securely over MCP</span></div>
+          } @else if(view()==='hardware'){
+            <div class="detail-pane">
+              <div class="pane-heading"><div><div class="section-eyebrow">DEVICE / HARDWARE AND CAPABILITIES</div><h2>Machine details<span class="headline-period">.</span></h2><p class="view-description">Hardware measurements from the connected agent and registered identity from CommandCore.</p></div></div>
+              <div class="spec-grid">
+                <div><span>PROCESSOR</span><strong>{{selectedInfo()?.['cpu_model']||selectedInfo()?.['processor']||'Not reported'}}</strong></div>
+                <div><span>PHYSICAL / LOGICAL CORES</span><strong>{{selectedInfo()?.['cpu_physical']??'—'}} / {{selectedInfo()?.['cpu_logical']??'—'}}</strong></div>
+                <div><span>MEMORY</span><strong>{{fmtBytes(selectedInfo()?.['memory_total']||selectedMetrics()?.['memory']?.total)}}</strong></div>
+                <div><span>DISK CAPACITY</span><strong>{{fmtBytes(selectedInfo()?.['disk_total']||selectedMetrics()?.['disk']?.total)}}</strong></div>
+                <div><span>ACCELERATOR</span><strong>{{selectedInfo()?.['gpu_name']||selectedMetrics()?.['health']?.['accelerators']?.['name']||'Not reported by agent'}}</strong></div>
+                <div><span>OPERATING SYSTEM</span><strong>{{selectedInfo()?.['platform']||d.platform||'—'}} / {{selectedInfo()?.['architecture']||d.architecture||'—'}}</strong></div>
+                <div><span>KERNEL</span><strong>{{selectedInfo()?.['platform_release']||'—'}}</strong></div>
+                <div><span>BOOT TIME</span><strong>{{fmtTime(selectedInfo()?.['boot_time'])}}</strong></div>
+                <div><span>AGENT VERSION</span><strong>{{d.agent_version||'—'}}</strong></div>
+              </div>
+              <div class="metrics-secondary"><div>CPU <strong>{{selectedMetrics()?.['cpu_percent']??'—'}}%</strong></div><div>RAM <strong>{{selectedMetrics()?.['memory']?.percent??'—'}}%</strong></div><div>DISK <strong [class.alert-text]="pct(selectedMetrics()?.['disk']?.percent)>90">{{selectedMetrics()?.['disk']?.percent??'—'}}%</strong></div><div>SWAP <strong>{{selectedMetrics()?.['swap']?.percent??'—'}}%</strong></div></div>
+              @if(pct(selectedMetrics()?.['disk']?.percent)>90){<p class="health-warning">⚠ Disk utilization exceeds 90%. Consider clearing unused files before large builds and downloads.</p>}
+              <div class="device-appearance"><div><span class="section-eyebrow">DEVICE APPEARANCE</span><strong>Card type</strong><p>The backend does not yet report physical form factors. Choose how this device looks in this browser.</p></div>
+                <select aria-label="Device card appearance" [ngModel]="roleSelection(d)" (ngModelChange)="setDeviceRole(d,$event)">
+                  <option value="auto">Automatic</option><option value="server">Server / rack</option><option value="workstation">Workstation</option><option value="desktop">Desktop PC</option><option value="laptop">Laptop</option><option value="computer">Computer</option>
+                </select>
+              </div>
+              <div class="details-divider"></div>
+              <div class="section-eyebrow">AGENT / IDENTITY</div>
+              <div class="identity-grid">
+                <div><span>DEVICE ID</span><strong>{{d.id}}</strong></div>
+                <div><span>HOSTNAME</span><strong>{{d.hostname||'—'}}</strong></div>
+                <div><span>AGENT IMPLEMENTATION</span><strong>{{d.capabilities?.['agent_implementation']||'Not reported'}}</strong></div>
+                <div><span>PROTOCOL VERSION</span><strong>{{d.agent_protocol_version||'Not reported'}}</strong></div>
+                <div><span>KEY GENERATION</span><strong>{{d.key_generation??'Not reported'}}</strong></div>
+                <div><span>LAST SEEN</span><strong>{{fmtTime(d.last_seen)}}</strong></div>
+              </div>
+              @if(updateAvailable()){<div class="update-note">A different recommended agent version is reported. Current: {{d.agent_version}}. Recommended: {{d.recommended_agent_version||'Unknown'}}. Verify the release before updating.</div>}
+              <div class="details-divider"></div>
+              <div class="section-eyebrow">ADVERTISED DEVICE CAPABILITIES</div>
+              <div class="capability-grid">
+                @for(c of capabilities;track c){<div [class.capability-available]="d.capabilities?.[c]===true"><span>{{d.capabilities?.[c]===true?'●':'○'}}</span> {{c.replaceAll('_',' ')}}</div>}
+              </div>
+              <p class="view-description capability-footnote">Capabilities are reported by the device; actual operations remain subject to OAuth, server permissions, account grant and local policy.</p>
+              <button class="subtle-action" (click)="show('access')">Manage device permissions ↗</button>
+            </div>
+          } @else if(view()==='browser'){
+            <div class="browser-pane">
+              <div class="pane-heading"><div><div class="section-eyebrow">REMOTE BROWSER / VERIFIED SESSIONS</div><h2>Browser control<span class="headline-period">.</span></h2><p class="view-description">Live AI browser sessions; sensitive human-controlled pages remain private.</p></div></div>
+              <div class="browser-session-state"><img [src]="logoFor(browserState()==='awaiting_human'?'attention':browserBusy()?'working':browserClient()?'online':'idle')" alt="" aria-hidden="true"/><div><strong>{{browserState()==='awaiting_human'?'Human control active':browserBusy()?'Agent is working':browserClient()?'Session connected':'No active browser session'}}</strong><small>{{browserClient()?(browserAction()||'Waiting for the next browser action'):'Start a Browser session from your connected AI client'}}</small></div></div>
+              <div class="browser-toolbar">
+                <label>SESSION <select [ngModel]="browserClient()" (ngModelChange)="chooseBrowser($event)"><option value="">Choose a session</option>@for(s of browsers();track s.client_id){<option [value]="s.client_id">{{(s.session_id||s.client_id).slice(0,12)}}</option>}</select></label>
+                <div class="browser-tools"><button (click)="browserPaused.set(!browserPaused());!browserPaused()&&refreshBrowserFrame()" [disabled]="!browserClient()">{{browserPaused()?'▶ Resume view':'Ⅱ Pause view'}}</button><button class="handoff" (click)="handoff()" [disabled]="!browserClient()||browserState()==='awaiting_human'">↗ Human control</button></div>
+              </div>
+              <div class="browser-canvas">
+               @if(browserState()==='awaiting_human'){
+                  <div class="browser-placeholder"><img class="browser-placeholder-octopus" src="/brand/octopus-attention.svg?v=20261029-v8" alt=""/><strong>Private human control</strong><p>AI viewing is paused. Resume AI control from the private Browser console when finished.</p>@if(browserPrivateLink()){<a class="inline-link" [href]="browserPrivateLink()" target="_blank" rel="noopener noreferrer">Open private console ↗</a>}</div>
+               } @else if(browserFrame()) {<img [src]="browserFrame()" alt="Live remote Browser screenshot" class="browser-shot"/>}
+               @else {<div class="browser-placeholder"><img class="browser-placeholder-octopus" src="/brand/octopus-idle.svg?v=20261029-v8" alt=""/><strong>{{browserState()==='unavailable'?'Browser viewer unavailable':'No live browser frame'}}</strong><p>{{browserState()==='empty'?'Open a Browser session from your connected AI client to see it here.':'Only sessions owned by your authenticated account can be viewed.'}}</p></div>}
+              </div><div class="browser-bottom"><span>{{browserPage()||'No page selected'}}</span><span>{{browserAction()||browserState()}}</span></div>
+            </div>
+          } @else if(view()==='activity'){
+            <div class="detail-pane"><div class="pane-heading"><div><div class="section-eyebrow">AUDITABLE EXECUTION</div><h2>Activity stream<span class="headline-period">.</span></h2><p class="view-description">Real tool activity associated with this device. Content may be omitted by account visibility policy.</p></div></div>
+              <div class="activity-toolbar">
+                <label class="activity-search-label"><span>⌕</span><input type="search" placeholder="Filter by tool or status" [ngModel]="activityFilter()" (ngModelChange)="activitySearch($event)" aria-label="Filter operations"/></label>
+                <span class="activity-count">{{filteredActivity().length}} {{filteredActivity().length===1?'operation':'operations'}} · {{activity().length}} loaded</span>
+              </div>
+              @if(activityLoading()&&!activityLoaded()){<div class="activity-pending"><img src="/brand/octopus-loading.svg?v=20261029-v8" alt="" aria-hidden="true"/> Loading activity…</div>}
+              @if(activityError()){<div class="form-error" role="alert">Could not load activity: {{activityError()}} <button class="subtle-action" (click)="loadActivity()">Retry</button></div>}
+              <div class="operation-list activity-scroll" role="region" tabindex="0" aria-label="Scrollable device activity">@for(row of pagedActivity();track $index;let i=$index){<details class="operation-detail"><summary class="operation"><span class="operation-index">{{((activityPage()-1)*activityPageSize+i+1).toString().padStart(2,'0')}}</span><span class="operation-mark">↳</span><div><strong>{{dataItem(row)}}</strong><small>{{dataDetail(row)}}</small></div><span class="operation-end">{{row.status||'recorded'}} · {{row.duration_ms??'—'}} ms</span></summary><pre>{{json(row)}}</pre></details>}@empty{@if(!activityLoading()&&!activityError()){<div class="empty-state"><span>⌁</span><strong>{{activityFilter()?'No matching operations':'No recent operations to display'}}</strong><p>Operations recorded for this account appear here when an authorized AI client uses the device.</p></div>}}</div>
+              @if(filteredActivity().length>activityPageSize){<div class="activity-pagination"><span>Page {{activityPage()}} / {{pageCount()}}</span><div><button (click)="activityPage.set(activityPage()-1)" [disabled]="activityPage()<=1">← Previous</button><button (click)="activityPage.set(activityPage()+1)" [disabled]="activityPage()>=pageCount()">Next →</button></div></div>}
+            </div>
+          } @else if(view()==='access'){
+            <div class="detail-pane access-pane">
+              <div class="pane-heading"><div><div class="section-eyebrow">SECURITY / FOUR INDEPENDENT LAYERS</div><h2>Device permissions<span class="headline-period">.</span></h2><p class="view-description">Every layer is enforced by the backend; the lowest authorized level becomes the effective permission.</p></div></div>
+              <div class="effective-banner">
+                <span class="effective-symbol">◇</span>
+                <div><small>EFFECTIVE ACCESS FOR THIS SESSION</small><strong>{{levelName(effectivePermission())}}</strong><p>{{effectivePermission()==='FULL_CONTROL'?'All reported layers allow Full Control.':effectivePermission()==='UNKNOWN'?'One or more required authorization layers were not reported.':effectivePermission()==='NOT_GRANTED'?'Your account currently lacks an explicit device grant.':'One or more authorization layers limit your access. See the breakdown below.'}}</p></div>
+                @if(oauthProfile()==='STANDARD'||oauthProfile()==='READ_ONLY'){
+                  <a class="reconnect-button" href="/auth/login?access=full">↗ Reconnect with Full Control</a>
+                }
+              </div>
+              <div class="layer-grid">
+                @for(layer of permissionLayers();track layer.name){
+                  <div class="layer-card" [class.layer-limit]="layer.value===effectivePermission()&&effectivePermission()!=='FULL_CONTROL'">
+                    <div class="layer-card-top"><span>{{layer.name}}</span><span class="layer-circle">◦</span></div>
+                    <strong>{{levelName(layer.value)}}</strong><p>{{layer.help}}</p>
+                  </div>
+                }
+              </div>
+              @if(d.capabilities?.['policy_error']){<div class="health-warning" role="status">Local policy error: {{d.capabilities?.['policy_error']}}</div>}
+              @if(managerError()){<div class="form-error" role="alert">Device management data could not be loaded. Permission controls may be unavailable. <button class="subtle-action" (click)="refresh()">Retry device management ↻</button></div>}
+              @if(d.managed_by_me){
+                <div class="permission-editor-box">
+                  <div class="section-eyebrow">ONE-STEP PERMISSION SWITCH</div><h3>My device permission</h3><p>Change the device's server policy <em>and</em> your account grant together. A confirmation is required because the server policy can affect other accounts.</p>
+                  <div class="permission-editor-row">
+                    <select [(ngModel)]="permissionChoice" aria-label="My device permission">
+                      <option value="READ_ONLY">Read Only</option>
+                      <option value="STANDARD" [disabled]="!canStandard()">Standard</option>
+                      <option value="FULL_CONTROL" [disabled]="!canFull()">Full Control</option>
+                    </select>
+                    <button class="primary-small" [disabled]="permissionBusy()" (click)="grantPermission()">Review permission change ↗</button>
+                  </div>
+                  @if(permissionError()){<div class="form-error" role="alert">{{permissionError()}}</div>}
+                  @if(localFullReady()&&!oauthFullReady()){
+                    <div class="scope-upgrade"><span class="scope-upgrade-symbol">↗</span><div><strong>Full Control is ready on this device</strong><p>The only detected blocker is your current {{levelName(oauthProfile())}} OAuth session. Reconnect with Full Control scope, then confirm the device permission here.</p></div><button (click)="beginFullOAuthReconnection()">Authorize Full Control</button></div>
+                  } @else if(!localFullReady()){
+                    <p class="local-setup-note">This device cannot currently enable Full Control. Local ceiling: <strong>{{levelName(localCeiling())}}</strong>. Helper: <strong>{{helperReady()?'available':'not ready'}}</strong>. Connection: <strong>{{d.connected?'Online':'Offline'}}</strong>.</p>
+                    <details><summary>Full Control requirements</summary><p>Full Control needs an online Linux agent with an approved local ceiling and healthy privileged helper. The web panel cannot silently raise these local limits. Existing agents should retain their identity.</p><button class="subtle-action" (click)="openAdd()">Linux setup guidance ↗</button></details>
+                  }
+                  @if(myGrantNeedsRestore()){<div class="restore-access"><strong>Grant missing for your account</strong><p>The device is still registered. Reconnect your account without reinstalling its agent.</p><button (click)="beginRestoreMyGrant()" [disabled]="permissionBusy()">Restore my access ↗</button></div>}
+                </div>
+                <div class="access-manage-grid">
+                  <section class="manage-surface"><div class="section-eyebrow">ACCOUNT ACCESS</div><h3>Authorized accounts</h3><p>Grants are distinct from server policy and the device's local ceiling.</p>
+                    @for(grant of d.grants||[];track grant.subject){
+                      <div class="grant-account"><div><strong>{{grant.subject}}</strong><small>{{levelName(grant.max_permission_profile)}}</small></div><button (click)="beginRemoveGrant(grant.subject)" [disabled]="permissionBusy()">Remove</button></div>
+                    } @empty {<div class="grant-empty">No account grants reported.</div>}
+                    <p class="grant-api-note">Individual account grants: Read Only / Standard. To change your own device permission, use the permission switch above.</p><div class="grant-create"><label>Account subject <input [(ngModel)]="grantSubject" placeholder="Exact account subject" maxlength="255" autocomplete="off"/></label><label>Permission<select [(ngModel)]="grantLevel"><option value="READ_ONLY">Read Only</option><option value="STANDARD" [disabled]="!canStandard()">Standard</option></select></label><button class="primary-small" (click)="beginGrant()" [disabled]="!grantSubject.trim()||permissionBusy()">Review grant ↗</button></div>
+                  </section>
+                  <section class="manage-surface"><div class="section-eyebrow">DEVICE MANAGEMENT</div><h3>Identity & diagnostics</h3><label>Display name <div class="rename-row"><input [(ngModel)]="renameValue" maxlength="120"/><button (click)="renameDevice(renameValue)" [disabled]="!renameValue.trim()||permissionBusy()">Rename</button></div></label>
+                    <div class="mini-data"><span>Device ID</span><code>{{d.id}}</code></div><div class="mini-data"><span>Agent version</span><strong>{{d.agent_version||'Unknown'}}</strong></div><div class="mini-data"><span>Protocol</span><strong>{{d.agent_protocol_version||'Not reported'}}</strong></div>
+                    <button class="subtle-action full-inline" (click)="loadAudit()">↗ View device audit trail</button>
+                    <details><summary>Rotate device key locally</summary><p>Run this on the machine as its Agent account. Never paste the private key into the web panel.</p><code class="inline-command">commandcore-agent rotate-key</code><button class="subtle-action" (click)="copy('commandcore-agent rotate-key')">Copy command</button></details>
+                  </section>
+                </div>
+                <div class="danger-zone"><strong>Revoke this device</strong><p>Disconnect the agent and invalidate its registration. This does not delete local files or uninstall software.</p><button class="danger-action" (click)="confirmDanger(revokeDevice.bind(this))">Revoke device…</button></div>
+              } @else {<div class="empty-state"><strong>Account is not a device manager</strong><p>Your current account can inspect this device but cannot modify server policy or grants. Sign in with the account that approved its enrollment; do not reinstall the agent to fix account access.</p><a class="subtle-action" href="/auth/login?access=full">↗ Sign in with Full Control</a></div>}
+            </div>
+          } @else if(view()==='files'){
+            <div class="detail-pane"><div class="section-eyebrow">DEVICE / FILE CAPABILITIES</div><h2>Filesystem access<span class="headline-period">.</span></h2><p class="view-description">Real filesystem capabilities and recent file operations from this device. File contents stay in your authorized MCP client.</p>
+              <div class="file-support-panel"><img [src]="logoFor(deviceOnline(d)?'online':'offline')" alt="" aria-hidden="true"/><div><strong>{{d.capabilities?.['filesystem']===true?'Filesystem MCP supported':'Filesystem MCP not reported'}}</strong><p>{{d.capabilities?.['filesystem']===true?'The device supports permission-scoped fs.* tools.':'This agent has not advertised filesystem capability.'}} {{deviceOnline(d)?'Agent is connected.':'Agent is offline.'}}</p></div><button (click)="show('access')" class="toolbar-button">Check access ↗</button></div>
+              <div class="pane-heading file-history-heading"><div><div class="section-eyebrow">RECENT FILE TOOL EXECUTIONS</div><p class="view-description">Only operations visible to your account are listed.</p></div><button (click)="loadActivity()" class="toolbar-button">↻ Refresh</button></div>
+              <div class="file-operation-list">
+                @for(row of fileActivity();track $index){<div class="file-operation"><span>▦</span><div><strong>{{dataItem(row)}}</strong><small>{{dataDetail(row)}}</small></div><span>{{row.status||'recorded'}}</span></div>}
+                @empty{<div class="empty-state"><strong>No recent file operations</strong><p>Run filesystem tools through your connected AI client to see audited activity here.</p></div>}
+              </div>
+              <div class="file-footer"><p>No unrestricted web file manager is exposed. This preserves the existing MCP permission and audit boundary.</p><button class="subtle-action" (click)="show('activity')">View all device activity ↗</button></div>
+            </div>
+          }
+        </div>
+      </section>
+      } @else {<div class="intro-foot">Your workspace is ready when a device connects.</div>}
+    </main>
+    <nav class="mobile-dock" aria-label="Mobile workspace navigation">
+      <button [class.active]="view()==='workspace'" (click)="show('workspace')" aria-label="Workspace"><span>◈</span><small>Home</small></button>
+      <button [class.active]="view()==='hardware'" (click)="show('hardware')" aria-label="Hardware"><span>▤</span><small>Device</small></button>
+      <button [class.active]="view()==='browser'" (click)="show('browser')" aria-label="Browser"><span>◎</span><small>Browser</small></button>
+      <button [class.active]="view()==='activity'" (click)="show('activity')" aria-label="Activity"><span>≋</span><small>Activity</small></button>
+      <button [class.active]="view()==='access'" (click)="show('access')" aria-label="Access"><span>◇</span><small>Access</small></button>
+    </nav>
+    <footer class="global-footer"><span>✳ <strong>CommandCore</strong> · Private infrastructure, open possibilities.</span><span>Built for people and their AI agents <span class="footer-mark">↗</span></span></footer>
+  }
+  @if(notice()){<div class="toast" role="status"><img src="/brand/octopus-completed.svg?v=20261029-v8" alt="" aria-hidden="true"/><span>{{notice()}}</span><button (click)="notice.set('')" aria-label="Dismiss">×</button></div>}
+  @if(overlay()!=='none'){
+   <div class="modal-backdrop" (click)="overlay.set('none')"></div>
+   @if(overlay()==='palette'){
+    <div class="command-palette" role="dialog" aria-label="Command palette"><div class="palette-search"><span>⌕</span><input type="search" placeholder="Jump to a workspace…" [ngModel]="commandQuery()" (ngModelChange)="commandQuery.set($event)" (keydown.enter)="runPalette(commandQuery())" autofocus/><kbd>ESC</kbd></div>
+      @for(item of ['Workspace','Hardware','Browser','Activity','Access','Files','Add device'];track item){@if(!commandQuery()||item.toLowerCase().includes(commandQuery().toLowerCase())){<button (click)="runPalette(item)"><span class="palette-glyph">↗</span>{{item}} <span>↵</span></button>}}
+      <div class="palette-footer">COMMANDCORE / NAVIGATE</div></div>
+   } @else if(overlay()==='add'){
+    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
+      <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>Run this in the new Linux machine's terminal as your regular user.</p><div class="command-copy"><code>{{cmd('full')}}</code><button [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
+        <p class="installer-note">{{!installChecked()?'Checking signed installer…':helperAvailable()?'Signed Full Control installer is available.':'Signed helper is not published. Full Control installation is unavailable; use the Standard-only option below.'}}</p>
+        <details><summary>Standard agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button (click)="copy(cmd('standard'))">Copy</button></div></details>
+      </div></div>
+      <div class="setup-step"><span class="step-index">02</span><div><strong>Approve enrollment</strong><p>Open the enrollment link printed on the device, compare the verification code and approve the device.</p><button class="subtle-action" (click)="overlay.set('none');openPending()">Review pending requests ({{pending().length}}) ↗</button></div></div>
+      <div class="setup-step"><span class="step-index">03</span><div><strong>Confirm connection</strong><p>When the device shows Online here, its Agent is connected. Approval alone is not proof of connectivity.</p></div></div>
+      <p class="sheet-disclaimer">Current installation flow supports Linux. Windows installation is not production-ready.</p>
+    </div>
+   } @else if(overlay()==='pending'){
+     <div class="sheet" role="dialog" aria-label="Pending enrollments"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE ENROLLMENT</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Pending approvals<span class="headline-period">.</span></h2>
+       @for(item of pending();track item.id){<div class="pending-item"><strong>{{item.metadata?.['display_name']||item.id}}</strong><p>{{item.metadata?.['hostname']||'Unknown hostname'}} · {{item.metadata?.['platform']||'Unknown platform'}} · {{item.metadata?.['architecture']||'Architecture not reported'}}</p><label>Verification code <input [(ngModel)]="typedCode" placeholder="Code from the new device" maxlength="9"/></label><label class="check-label"><input type="checkbox" [(ngModel)]="grantMyself"/> Give my account access</label><label>Initial device permission<select [(ngModel)]="initialPermission"><option value="STANDARD">Standard</option><option value="FULL_CONTROL" [disabled]="!oauthFullReady()">Full Control (requires full OAuth and healthy local helper)</option></select></label><p class="note">Full Control only becomes effective after all backend and locally approved agent checks succeed. Approval alone does not bypass a local ceiling.</p><div class="pending-actions"><button (click)="decide(item,false)">Reject</button><button class="primary-small" (click)="decide(item,true)">Approve device</button></div></div>}
+       @empty{<div class="empty-state"><strong>No pending enrollment requests</strong><p>When a new device starts enrollment, it will appear here.</p></div>}
+     </div>
+   } @else if(overlay()==='permission-reauthorize'){
+     <div class="sheet compact-sheet" role="dialog" aria-label="Authorize Full Control">
+       <div class="sheet-heading"><span class="mini-eyebrow">FULL CONTROL AUTHORIZATION</span><button class="x-close" (click)="overlay.set('none')">×</button></div>
+       <h2>One more authorization<span class="headline-period">.</span></h2>
+       <p>You selected <strong>{{levelName(permissionChoice)}}</strong> for <strong>{{selectedDevice()?.display_name}}</strong>. Your current session has <strong>{{levelName(oauthProfile())}}</strong> OAuth scope, which is insufficient for this change.</p>
+       <p>Reconnect with {{permissionChoice==='FULL_CONTROL'?'Full Control':'Standard'}} OAuth scope. The workspace will return to this device afterward. <strong>No device permission will change until you approve it.</strong></p>
+       <div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" (click)="beginPermissionOAuthReconnection()">Continue to authorization ↗</button></div>
+     </div>
+   } @else if(overlay()==='permission-confirm'){
+     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm permission change"><div class="sheet-heading"><span class="mini-eyebrow">REVIEW PERMISSION CHANGE</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Apply {{levelName(pendingPermission?.level)}}?</h2><p><strong>{{selectedDevice()?.display_name}}</strong> will receive {{levelName(pendingPermission?.level)}} for both server policy and your account grant. This may also limit other accounts on this device.</p><div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" [disabled]="permissionBusy()" (click)="applyPermission()">Confirm and apply</button></div></div>
+   } @else if(overlay()==='restore-confirm'){
+     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm access restoration"><div class="sheet-heading"><span class="mini-eyebrow">CONFIRM ACCESS RESTORATION</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Restore account grant?</h2><p>Grant <strong>{{session()?.subject}}</strong> access to <strong>{{selectedDevice()?.display_name}}</strong> within the existing server policy and local ceiling. Agent identity and registration will remain unchanged.</p><div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" (click)="restoreMyGrant()" [disabled]="permissionBusy()">Restore access</button></div></div>
+   } @else if(overlay()==='grant-confirm'){
+     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm account grant"><div class="sheet-heading"><span class="mini-eyebrow">REVIEW ACCOUNT ACCESS</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>{{awaitingGrantRemoval?'Remove grant?':'Save account grant?'}}</h2><p>Device: <strong>{{selectedDevice()?.display_name}}</strong></p><p>{{awaitingGrantRemoval?'Remove access for '+grantToRemove+'?':'Give '+grantSubject+' '+levelName(grantLevel)+' access?'}} Existing sessions may lose access immediately when a grant is removed.</p>
+       @if(awaitingGrantRemoval&&grantToRemove===session()?.subject){<label>Type the device name to remove your own access <input [(ngModel)]="confirmName" class="confirm-input" [placeholder]="selectedDevice()?.display_name||'Device'"/></label>}
+       <div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button [class.danger-action]="awaitingGrantRemoval" [class.primary-small]="!awaitingGrantRemoval" [disabled]="permissionBusy()||(awaitingGrantRemoval&&grantToRemove===session()?.subject&&confirmName!==selectedDevice()?.display_name)" (click)="applyGrant()">Confirm</button></div>
+     </div>
+   } @else if(overlay()==='audit'){
+     <div class="sheet" role="dialog" aria-label="Device audit history"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE AUDIT / {{selectedDevice()?.display_name}}</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Audit trail<span class="headline-period">.</span></h2><p>Recent server-recorded events for this device, newest first.</p>
+       @for(event of audit();track $index){<div class="audit-event"><strong>{{event.tool||'Event'}}</strong><small>{{event.timestamp||'—'}} · {{event.status||'recorded'}} · {{event.duration_ms??'—'}} ms</small></div>}
+       @empty{<div class="empty-state"><strong>{{auditBusy()?'Loading records…':'No audit events recorded'}}</strong></div>}
+     </div>
+   } @else if(overlay()==='confirm'){
+     <div class="sheet compact-sheet" role="alertdialog"><div class="sheet-heading"><span class="mini-eyebrow">CONFIRM HIGH-RISK ACTION</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Revoke device?</h2><p>This will invalidate the device registration. Type <strong>{{selectedDevice()?.display_name}}</strong> to confirm.</p><input class="confirm-input" [(ngModel)]="confirmName" [placeholder]="selectedDevice()?.display_name||'Device name'"/><button class="danger-action full-width" [disabled]="confirmName!==selectedDevice()?.display_name" (click)="confirmAction()">Revoke this device</button></div>
+
+   }
+  }
+</div>
