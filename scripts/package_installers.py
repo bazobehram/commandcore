@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import re
+import shlex
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -106,6 +107,13 @@ def package(
             raise ValueError("installer_template_pin_mismatch")
         windows = windows.replace(token, value)
     linux = (root / "install/linux.sh").read_text(encoding="utf-8")
+    if manifest_url:
+        origin = urlsplit(manifest_url)
+        server_origin = f"{origin.scheme}://{origin.netloc}"
+        placeholder = "server=https://commandcore.example.com"
+        if linux.count(placeholder) != 1:
+            raise ValueError("installer_template_server_pin_mismatch")
+        linux = linux.replace(placeholder, "server=" + shlex.quote(server_origin), 1)
     if manifest_url:
         linux = linux.replace(
             "manifest=\n",

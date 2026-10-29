@@ -61,6 +61,8 @@ def test_pinned_legacy_rc7_can_package_current_installer(tmp_path):
     )
     script = (output / "linux.sh").read_text()
     assert "--prepare-full-control" in script
+    assert "server=https://example.org" in script
+    assert "server=https://commandcore.example.com" not in script
     assert "COMMANDCORE_RELEASE_PUBLIC_KEY_B64" in script
 
 
