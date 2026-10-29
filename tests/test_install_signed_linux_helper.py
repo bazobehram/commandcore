@@ -304,23 +304,33 @@ def test_requires_signed_pip_wheel(tmp_path):
 def test_helper_admin_approval_notifies_on_tty_without_reading(monkeypatch):
     written = []
     monkeypatch.setattr(setup.os, "open", lambda *a: 70)
-    monkeypatch.setattr(setup.os, "write", lambda fd, msg: written.append(msg) or len(msg))
-    monkeypatch.setattr(setup.os, "read", lambda *a: pytest.fail("unexpected second typed approval"))
+    monkeypatch.setattr(
+        setup.os, "write", lambda fd, msg: written.append(msg) or len(msg)
+    )
+    monkeypatch.setattr(
+        setup.os, "read", lambda *a: pytest.fail("unexpected second typed approval")
+    )
     monkeypatch.setattr(setup.os, "close", lambda fd: None)
     setup._approval("0.9.0-rc7", "netti")
     assert b"after local sudo authorization" in b"".join(written)
 
 
 def test_helper_admin_approval_fails_without_terminal(monkeypatch):
-    monkeypatch.setattr(setup.os, "open", lambda *a: (_ for _ in ()).throw(PermissionError("no tty")))
+    monkeypatch.setattr(
+        setup.os, "open", lambda *a: (_ for _ in ()).throw(PermissionError("no tty"))
+    )
     with pytest.raises(PermissionError, match="no tty"):
         setup._approval("0.9.0-rc7", "netti")
 
 
 def test_local_approval_requires_real_terminal_without_duplicate_phrase(monkeypatch):
     events = []
-    monkeypatch.setattr(setup.os, "open", lambda *a, **k: events.append(("open", a[0])) or 77)
-    monkeypatch.setattr(setup.os, "write", lambda fd, data: events.append(("write", fd)) or len(data))
+    monkeypatch.setattr(
+        setup.os, "open", lambda *a, **k: events.append(("open", a[0])) or 77
+    )
+    monkeypatch.setattr(
+        setup.os, "write", lambda fd, data: events.append(("write", fd)) or len(data)
+    )
     monkeypatch.setattr(setup.os, "close", lambda fd: events.append(("close", fd)))
     setup._approval("0.9.0-rc8", "netti")
     assert events == [("open", "/dev/tty"), ("write", 77), ("close", 77)]

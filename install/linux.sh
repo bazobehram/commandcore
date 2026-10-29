@@ -272,6 +272,30 @@ else
   chmod 755 "$release/commandcore-agent"
   cp "$tmp/manifest.json" "$release/manifest.json"
 fi
+# A signed same-version reinstall with a connected, healthy user Agent is a
+# true no-op: do not restart the Agent or accumulate rollback snapshots. Only
+# skip after the immutable release binary was checked above with cmp.
+agent_unchanged=no
+if [ "$previous" = "releases/$version" ] && [ "$service" = yes ] &&
+  [ -f "$state_root/agent.json" ] &&
+  service_ctl is-active --quiet "$service_name" 2>/dev/null &&
+  python3 - "$state_root/health.json" "$version" <<'PY_AGENT_CURRENT'
+import json,pathlib,sys
+try:
+    current=json.loads(pathlib.Path(sys.argv[1]).read_text())
+    good=(current.get('connected') is True and
+          current.get('version')==sys.argv[2])
+except (OSError,ValueError,TypeError):
+    good=False
+raise SystemExit(0 if good else 1)
+PY_AGENT_CURRENT
+then
+  agent_unchanged=yes
+fi
+if [ "$agent_unchanged" = yes ]; then
+  mode=unchanged
+  echo 'Verified signed Agent release is already installed and connected; no restart or rollback required.'
+else
 mode=fresh
 if [ -n "$previous" ]; then
   mode=update
@@ -336,6 +360,7 @@ PY
     fi
   fi
 fi
+fi
 complete=yes
 printf 'Installed signed Agent %s. Identity preserved at %s\n' "$version" "$state_root/agent.json"
 printf 'Implementation: %s\nArchitecture: %s\nSigned manifest version: %s\nInstallation mode: %s\n' "$implementation" "$arch" "$version" "$mode"
@@ -377,27 +402,54 @@ if [ "$prepare_full_control" = yes ]; then
   : "${COMMANDCORE_HELPER_RELEASE_VERSION:?Select the independently signed helper release version}"
   : "${COMMANDCORE_HELPER_BOOTSTRAP_SHA256:?Pin the reviewed helper bootstrap script SHA256}"
   : "${COMMANDCORE_HELPER_BOOTSTRAP_URL:?Pin a trusted helper bootstrap source HTTPS URL}"
-  fetch "$COMMANDCORE_HELPER_BOOTSTRAP_URL" "$tmp/helper-bootstrap.py"
-  python3 - "$tmp/helper-bootstrap.py" "$COMMANDCORE_HELPER_BOOTSTRAP_SHA256" <<'PY_HELPER_HASH'
+  # Repeat installs must not attempt to reinstall an already authenticated,
+  # matching helper. Query capabilities through the freshly release-verified
+  # Agent (not a user-controlled PATH command), and verify the root service is
+  # running. A missing, unhealthy or older helper is NEVER called successful.
+  if [ "$service" = yes ] && systemctl is-active --quiet commandcore-helper.service 2>/dev/null &&
+    "$install_root/current/commandcore-agent" capabilities | python3 -c '
+import json,sys
+try:
+    data=json.load(sys.stdin)
+    good=(data.get("privileged_helper") is True and
+          data.get("privileged_helper_version")==sys.argv[1] and
+          data.get("local_max_permission_profile")=="FULL_CONTROL" and
+          data.get("configured_max_permission_profile")=="FULL_CONTROL" and
+          data.get("policy_error") is None)
+except (ValueError,TypeError):
+    good=False
+raise SystemExit(0 if good else 1)
+' "$COMMANDCORE_HELPER_RELEASE_VERSION"; then
+    echo 'Full Control helper already installed and healthy at the requested signed version; no administrator prompt or helper changes needed.'
+  else
+    # An existing but unhealthy/different helper must be handled by a
+    # separately reviewed repair/upgrade path, not by overwriting root files.
+    if systemctl list-unit-files commandcore-helper.service --no-legend --no-pager 2>/dev/null | grep -q '^commandcore-helper.service'; then
+      echo 'FULL_CONTROL_REPAIR_REQUIRED: existing helper is unhealthy or version differs. Agent remains connected; use a reviewed helper repair/upgrade procedure.' >&2
+      exit 6
+    fi
+    fetch "$COMMANDCORE_HELPER_BOOTSTRAP_URL" "$tmp/helper-bootstrap.py"
+    python3 - "$tmp/helper-bootstrap.py" "$COMMANDCORE_HELPER_BOOTSTRAP_SHA256" <<'PY_HELPER_HASH'
 import hashlib,pathlib,re,sys
 expected=sys.argv[2]
 if not re.fullmatch(r'[0-9a-f]{64}',expected): raise SystemExit('Invalid pinned helper bootstrap SHA256')
 actual=hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()
 if actual!=expected: raise SystemExit('Helper bootstrap code failed pinned integrity check')
 PY_HELPER_HASH
-  python_minor=$(python3 -c 'import sys;print(str(sys.version_info.major)+"."+str(sys.version_info.minor))')
-  echo 'Requesting one-time LOCAL administrator approval to prepare Full Control capability.'
-  if python3 "$tmp/helper-bootstrap.py" \
-    --release-url "$COMMANDCORE_HELPER_RELEASE_URL" \
-    --trusted-public-key-b64 "$COMMANDCORE_HELPER_RELEASE_PUBLIC_KEY_B64" \
-    --version "$COMMANDCORE_HELPER_RELEASE_VERSION" \
-    --architecture "$arch" \
-    --python-minor "$python_minor" \
-    --agent-user "$(id -un)"; then
-    echo 'Local Full Control helper preparation completed. Active server/account permission remains unchanged.'
-  else
-    echo 'FULL_CONTROL_SETUP_INCOMPLETE: existing Agent is installed and remains at its previous safe access.' >&2
-    exit 6
+    python_minor=$(python3 -c 'import sys;print(str(sys.version_info.major)+"."+str(sys.version_info.minor))')
+    echo 'Requesting one-time LOCAL administrator approval to prepare Full Control capability.'
+    if python3 "$tmp/helper-bootstrap.py" \
+      --release-url "$COMMANDCORE_HELPER_RELEASE_URL" \
+      --trusted-public-key-b64 "$COMMANDCORE_HELPER_RELEASE_PUBLIC_KEY_B64" \
+      --version "$COMMANDCORE_HELPER_RELEASE_VERSION" \
+      --architecture "$arch" \
+      --python-minor "$python_minor" \
+      --agent-user "$(id -un)"; then
+      echo 'Local Full Control helper preparation completed. Active server/account permission remains unchanged.'
+    else
+      echo 'FULL_CONTROL_SETUP_INCOMPLETE: existing Agent is installed and remains at its previous safe access.' >&2
+      exit 6
+    fi
   fi
 else
   echo 'Local Full Control helper not prepared by this invocation; Standard operation remains available.'
