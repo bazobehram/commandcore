@@ -88,6 +88,7 @@ class DecisionFields(BaseModel):
     code: str = Field(min_length=9, max_length=9)
     approve: bool
     grant_to_me: bool = False
+    initial_permission: Literal["STANDARD", "FULL_CONTROL"] = "STANDARD"
 
 
 class Decision(Review, DecisionFields):
@@ -185,6 +186,12 @@ def install_routes(
     async def decision(body: Decision, request: Request, principal=authenticated):
         mutation(request, principal)
         limited(request, "decision")
+        if (
+            body.approve
+            and body.initial_permission == "FULL_CONTROL"
+            and not scope_allows(principal.scopes, FULL_SCOPE)
+        ):
+            raise HTTPException(403, "full scope required for initial Full Control")
         try:
             return service.decide(
                 body.view_token,
@@ -192,6 +199,7 @@ def install_routes(
                 body.code,
                 body.approve,
                 body.grant_to_me,
+                initial_permission=body.initial_permission,
             )
         except ValueError as exc:
             failed(exc)
@@ -209,6 +217,12 @@ def install_routes(
     ):
         mutation(request, principal)
         limited(request, "decision")
+        if (
+            body.approve
+            and body.initial_permission == "FULL_CONTROL"
+            and not scope_allows(principal.scopes, FULL_SCOPE)
+        ):
+            raise HTTPException(403, "full scope required for initial Full Control")
         try:
             return service.decide(
                 enrollment_id,
@@ -217,6 +231,7 @@ def install_routes(
                 body.approve,
                 body.grant_to_me,
                 reviewed_id=True,
+                initial_permission=body.initial_permission,
             )
         except ValueError as exc:
             failed(exc)
@@ -546,6 +561,11 @@ def install_routes(
                     principal.subject,
                 ),
             )
+            db.conn.execute(
+                "UPDATE pending_enrollments SET desired_initial_profile='STANDARD' "
+                "WHERE device_id=? AND status='consumed'",
+                (device_id,),
+            )
             service._audit(
                 principal.subject,
                 "enrollment.device.self_permission",
@@ -593,6 +613,11 @@ def install_routes(
             ).fetchone():
                 raise HTTPException(409, "device revoked")
             db.conn.execute(
+                "UPDATE pending_enrollments SET desired_initial_profile='STANDARD' "
+                "WHERE device_id=? AND status='consumed'",
+                (device_id,),
+            )
+            db.conn.execute(
                 "INSERT INTO device_grants(device_id,subject,max_permission_profile,created_at,created_by) VALUES(?,?,?,?,?) ON CONFLICT(device_id,subject) DO UPDATE SET max_permission_profile=excluded.max_permission_profile,created_at=excluded.created_at,created_by=excluded.created_by",
                 (
                     device_id,
@@ -618,6 +643,11 @@ def install_routes(
         mutation(request, principal)
         manager(principal, device_id)
         with db.lock, db.conn:
+            db.conn.execute(
+                "UPDATE pending_enrollments SET desired_initial_profile='STANDARD' "
+                "WHERE device_id=? AND status='consumed'",
+                (device_id,),
+            )
             db.conn.execute(
                 "DELETE FROM device_grants WHERE device_id=? AND subject=?",
                 (device_id, subject),

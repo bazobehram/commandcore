@@ -210,12 +210,26 @@ def migration_005_activity(conn: sqlite3.Connection) -> None:
     """)
 
 
+def migration_006_initial_permission_preference(conn: sqlite3.Connection) -> None:
+    # Approval intent belongs to one enrollment and may only be consumed once.
+    # Existing deployments remain STANDARD unless the user explicitly selected
+    # FULL_CONTROL on a new enrollment review.
+    _add_column(
+        conn,
+        "pending_enrollments",
+        "desired_initial_profile TEXT NOT NULL DEFAULT 'STANDARD'",
+    )
+
+
 MIGRATIONS = (
     Migration(1, "baseline_v0_4_schema", migration_001_baseline),
     Migration(2, "device_key_lifecycle", migration_002_device_key_lifecycle),
     Migration(3, "fleet_rollouts", migration_003_fleet_rollouts),
     Migration(4, "agent_initiated_enrollment", migration_004_enrollment),
     Migration(5, "bounded_safe_activity", migration_005_activity),
+    Migration(
+        6, "initial_permission_preference", migration_006_initial_permission_preference
+    ),
 )
 
 

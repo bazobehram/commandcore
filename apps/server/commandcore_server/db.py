@@ -595,6 +595,11 @@ class Database:
                 raise RuntimeError("full_control_requires_privileged_helper")
             raise RuntimeError(f"permission_exceeds_device_local_max:{max_profile}")
         with self.lock:
+            self.conn.execute(
+                "UPDATE pending_enrollments SET desired_initial_profile='STANDARD' "
+                "WHERE device_id=? AND status='consumed'",
+                (device_id,),
+            )
             cur = self.conn.execute(
                 "UPDATE devices SET permission_profile=? WHERE id=? AND owner_id=?",
                 (profile, device_id, owner_id),
@@ -647,6 +652,35 @@ class Database:
             new_profile = current
             if PROFILE_RANK.get(current, 1) > PROFILE_RANK[max_profile]:
                 new_profile = max_profile
+            # First-install FULL_CONTROL is a one-shot decision explicitly
+            # approved by the account reviewer with commandcore:full. The
+            # Agent's initial enrollment remains STANDARD; promotion only
+            # occurs after authenticated runtime capabilities report a healthy
+            # local privileged helper and the server/grant are still STANDARD.
+            if max_profile == "FULL_CONTROL" and current == "STANDARD":
+                consent = self.conn.execute(
+                    "SELECT pe.id,pe.grant_subject FROM pending_enrollments pe "
+                    "JOIN device_grants g ON g.device_id=pe.device_id "
+                    "AND g.subject=pe.grant_subject "
+                    "WHERE pe.device_id=? AND pe.status='consumed' "
+                    "AND pe.desired_initial_profile='FULL_CONTROL' "
+                    "AND pe.grant_subject IS NOT NULL "
+                    "AND g.max_permission_profile='STANDARD' "
+                    "AND pe.created_at>? ORDER BY pe.created_at DESC LIMIT 1",
+                    (device_id, time.time() - 86400),
+                ).fetchone()
+                if consent:
+                    new_profile = "FULL_CONTROL"
+                    self.conn.execute(
+                        "UPDATE device_grants SET max_permission_profile='FULL_CONTROL' "
+                        "WHERE device_id=? AND subject=? AND max_permission_profile='STANDARD'",
+                        (device_id, consent["grant_subject"]),
+                    )
+                    self.conn.execute(
+                        "UPDATE pending_enrollments SET desired_initial_profile='STANDARD' "
+                        "WHERE id=?",
+                        (consent["id"],),
+                    )
             self.conn.execute(
                 "UPDATE devices SET last_seen=?,capabilities_json=?,permission_profile=? WHERE id=? AND status='online' AND revoked_at IS NULL",
                 (time.time(), json.dumps(capabilities), new_profile, device_id),

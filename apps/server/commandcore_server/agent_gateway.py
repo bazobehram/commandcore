@@ -95,7 +95,11 @@ class AgentManager:
                 user_id="system",
                 client_id="agent-gateway",
                 device_id=device_id,
-                tool="policy.local_ceiling",
+                tool=(
+                    "policy.initial_enrollment_full_control"
+                    if old_profile == "STANDARD" and new_profile == "FULL_CONTROL"
+                    else "policy.local_ceiling"
+                ),
                 args_summary=json.dumps(
                     {"from": old_profile, "to": new_profile}, separators=(",", ":")
                 ),

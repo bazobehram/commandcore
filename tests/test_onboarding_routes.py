@@ -573,3 +573,89 @@ def test_one_step_self_permission_refuses_offline_local_ceiling_and_registry(pan
         ).status_code
         == 409
     )
+
+
+def test_default_full_initial_preference_requires_full_scope_and_local_helper(panel):
+    client, db, _, agents = panel
+    item = begin(client)
+    request = {"view_token": item["view_token"]}
+    assert (
+        client.post(
+            "/api/enrollment/review", headers=operator(), json=request
+        ).status_code
+        == 200
+    )
+    consent = {
+        **request,
+        "code": item["verification_code"],
+        "approve": True,
+        "grant_to_me": True,
+        "initial_permission": "FULL_CONTROL",
+    }
+    path = "/api/enrollment/decision"
+    assert client.post(path, headers=operator(), json=consent).status_code == 403
+    assert (
+        client.post(
+            path, headers={**operator(), "test-full-scope": "yes"}, json=consent
+        ).status_code
+        == 200
+    )
+    claimed = client.post(
+        "/api/enrollment/poll",
+        json={"poll_token": item["poll_token"], "proof": item["proof"]},
+    ).json()
+    device = claimed["device_id"]
+    assert db.get_device(device)["permission_profile"] == "STANDARD"
+    agents.online_ids.append(device)
+    helper = {"local_max_permission_profile": "FULL_CONTROL", "privileged_helper": True}
+    db.mark_online(
+        device,
+        ip="127.0.0.1",
+        agent_version="test",
+        capabilities=helper,
+        agent_protocol_version="1",
+    )
+    db.update_runtime_capabilities(device, helper)
+    assert db.get_device(device)["permission_profile"] == "FULL_CONTROL"
+    assert (
+        db.list_device_grants("registry", device)[0]["max_permission_profile"]
+        == "FULL_CONTROL"
+    )
+    response = client.put(
+        "/api/managed-devices/" + device + "/my-permission",
+        headers={**operator(), "test-full-scope": "yes"},
+        json={
+            "profile": "STANDARD",
+            "expected_profile": "FULL_CONTROL",
+            "expected_grant": "FULL_CONTROL",
+        },
+    )
+    assert response.status_code == 200, response.text
+    db.update_runtime_capabilities(device, helper)
+    assert db.get_device(device)["permission_profile"] == "STANDARD"
+
+
+def test_enrollment_does_not_allow_unauthorized_full_opt_in(panel):
+    client, _, _, _ = panel
+    item = begin(client)
+    assert (
+        client.post(
+            "/api/enrollment/review",
+            headers=operator(),
+            json={"view_token": item["view_token"]},
+        ).status_code
+        == 200
+    )
+    payload = {
+        "view_token": item["view_token"],
+        "code": item["verification_code"],
+        "approve": True,
+        "grant_to_me": False,
+        "initial_permission": "FULL_CONTROL",
+    }
+    response = client.post(
+        "/api/enrollment/decision",
+        headers={**operator(), "test-full-scope": "yes"},
+        json=payload,
+    )
+    assert response.status_code == 400

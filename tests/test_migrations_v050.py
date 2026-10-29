@@ -61,7 +61,7 @@ def test_v04_database_is_adopted_by_numbered_migrations(tmp_path):
             "SELECT version FROM schema_migrations ORDER BY version"
         )
     ]
-    assert versions == [1, 2, 3, 4, 5]
+    assert versions == [1, 2, 3, 4, 5, 6]
     device = db.get_device("d1")
     assert device is not None
     assert device["key_generation"] == 1
@@ -71,4 +71,22 @@ def test_v04_database_is_adopted_by_numbered_migrations(tmp_path):
 def test_fresh_database_reports_current_migration_version(tmp_path):
     db = Database(str(tmp_path / "fresh.sqlite3"))
     row = db.conn.execute("SELECT MAX(version) AS v FROM schema_migrations").fetchone()
-    assert row["v"] == 5
+    assert row["v"] == 6
+
+
+def test_legacy_enrollment_records_are_standard_on_migration(tmp_path):
+    from commandcore_server.migrations import (
+        migration_006_initial_permission_preference,
+    )
+
+    db = Database(str(tmp_path / "existing.sqlite3"))
+    db.conn.execute(
+        "INSERT INTO pending_enrollments (id,view_hash,poll_hash,code,public_key_b64,metadata_json,created_at,expires_at,status) "
+        "VALUES ('old','view','poll','AAAA-AAAA','test-key','{}',0,9999999999,'consumed')"
+    )
+    db.conn.commit()
+    migration_006_initial_permission_preference(db.conn)
+    row = db.conn.execute(
+        "SELECT desired_initial_profile FROM pending_enrollments WHERE id='old'"
+    ).fetchone()
+    assert row[0] == "STANDARD"
