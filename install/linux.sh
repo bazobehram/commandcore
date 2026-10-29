@@ -8,6 +8,7 @@ enroll=yes
 service=yes
 test_loopback=no
 upgrade=no
+prepare_full_control=${COMMANDCORE_PREPARE_FULL_CONTROL:-auto}
 device_name=
 service_name=${COMMANDCORE_AGENT_SERVICE_NAME:-commandcore-agent.service}
 case "$service_name" in commandcore-agent*.service) ;; *) echo 'Invalid Agent service name.' >&2; exit 2;; esac
@@ -22,6 +23,8 @@ while [ "$#" -gt 0 ]; do
     --no-service) service=no; shift;;
     --test-loopback) test_loopback=yes; shift;;
     --upgrade) upgrade=yes; shift;;
+    --prepare-full-control) prepare_full_control=yes; shift;;
+    --no-full-control-preparation) prepare_full_control=no; shift;;
     --name) device_name=$2; shift 2;;
     *) printf 'Unknown option: %s\n' "$1" >&2; exit 2;;
   esac
@@ -63,7 +66,7 @@ cleanup() {
     service_ctl stop "$service_name" || true
     echo 'Fresh installation failed; Agent stopped. Existing identity is preserved.' >&2
   fi
-  rm -f "$tmp/manifest.json" "$tmp/canonical.json" "$tmp/signature.bin" "$tmp/public.der" "$tmp/public.pem" "$tmp/metadata.json" "$tmp/agent.bin"
+  rm -f "$tmp/manifest.json" "$tmp/canonical.json" "$tmp/signature.bin" "$tmp/public.der" "$tmp/public.pem" "$tmp/metadata.json" "$tmp/agent.bin" "$tmp/helper-bootstrap.py"
   rmdir "$tmp"
   exit "$result"
 }
@@ -356,4 +359,46 @@ printf 'Add %s to PATH if needed.\n' "$bin_root"
 printf '\nCheck status:\ncommandcore-agent status\n\nWatch live CommandCore activity:\ncommandcore-agent activity\n'
 if [ "$service_name" != commandcore-agent.service ]; then
   printf 'Custom service: use --service %s with status and activity.\n' "$service_name"
+fi
+
+# Optional one-time, locally approved helper preparation in the SAME terminal
+# invocation. The main Agent installation is already healthy and committed;
+# helper failure never reenrolls or removes an existing identity.
+if [ "$prepare_full_control" = auto ]; then
+  if [ -n "${COMMANDCORE_HELPER_RELEASE_URL:-}" ] && [ -n "${COMMANDCORE_HELPER_RELEASE_PUBLIC_KEY_B64:-}" ]; then
+    prepare_full_control=yes
+  else
+    prepare_full_control=no
+  fi
+fi
+if [ "$prepare_full_control" = yes ]; then
+  : "${COMMANDCORE_HELPER_RELEASE_URL:?Set the signed helper release HTTPS URL}"
+  : "${COMMANDCORE_HELPER_RELEASE_PUBLIC_KEY_B64:?Pin the independently trusted helper public key}"
+  : "${COMMANDCORE_HELPER_RELEASE_VERSION:?Select the independently signed helper release version}"
+  : "${COMMANDCORE_HELPER_BOOTSTRAP_SHA256:?Pin the reviewed helper bootstrap script SHA256}"
+  : "${COMMANDCORE_HELPER_BOOTSTRAP_URL:?Pin a trusted helper bootstrap source HTTPS URL}"
+  fetch "$COMMANDCORE_HELPER_BOOTSTRAP_URL" "$tmp/helper-bootstrap.py"
+  python3 - "$tmp/helper-bootstrap.py" "$COMMANDCORE_HELPER_BOOTSTRAP_SHA256" <<'PY_HELPER_HASH'
+import hashlib,pathlib,re,sys
+expected=sys.argv[2]
+if not re.fullmatch(r'[0-9a-f]{64}',expected): raise SystemExit('Invalid pinned helper bootstrap SHA256')
+actual=hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()
+if actual!=expected: raise SystemExit('Helper bootstrap code failed pinned integrity check')
+PY_HELPER_HASH
+  python_minor=$(python3 -c 'import sys;print(str(sys.version_info.major)+"."+str(sys.version_info.minor))')
+  echo 'Requesting one-time LOCAL administrator approval to prepare Full Control capability.'
+  if python3 "$tmp/helper-bootstrap.py" \
+    --release-url "$COMMANDCORE_HELPER_RELEASE_URL" \
+    --trusted-public-key-b64 "$COMMANDCORE_HELPER_RELEASE_PUBLIC_KEY_B64" \
+    --version "$COMMANDCORE_HELPER_RELEASE_VERSION" \
+    --architecture "$arch" \
+    --python-minor "$python_minor" \
+    --agent-user "$(id -un)"; then
+    echo 'Local Full Control helper preparation completed. Active server/account permission remains unchanged.'
+  else
+    echo 'FULL_CONTROL_SETUP_INCOMPLETE: existing Agent is installed and remains at its previous safe access.' >&2
+    exit 6
+  fi
+else
+  echo 'Local Full Control helper not prepared by this invocation; Standard operation remains available.'
 fi
