@@ -549,7 +549,7 @@ $('browserTakeover').onclick=async()=>{
 setInterval(()=>{if(activePanel==='browser'&&!browserLivePaused&&!document.hidden)refreshBrowserFrame()},2500);
 
 const linuxCommands=[
-    ['install','Install CommandCore','curl -fsSL '+location.origin+'/install/linux | sh'],
+    ['install','Install CommandCore (Agent + Full Control helper)',"bash -o pipefail -c 'curl -fsSL "+location.origin+"/install/linux-ready | bash'"],
     ['status','Check connection status','commandcore-agent status'],
     ['activity','Watch CommandCore activity','commandcore-agent activity'],
     ['follow','Watch live service logs','journalctl --user -u commandcore-agent.service -f'],
@@ -575,7 +575,7 @@ function openAddDevice(){
        '<div class="onboard-intro"><strong>Linux setup</strong><p>Install as your regular Linux user. Do not use sudo for this command. Follow progress in the machine’s terminal, then approve its enrollment here.</p></div>'+
        '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">01</span><div><h3>Install CommandCore</h3><p>Run the installer on the new Linux device.</p></div></div>'+
        commandBlock('install')+
-       '<p class="onboard-notice"><strong>Deployment notice:</strong> The public installer is not yet verified against all merged Linux fixes. Review terminal output before relying on it. This panel does not assert installation success.</p></section>'+
+       '<p id="ccLinuxReadyStatus" class="onboard-notice" role="status">Checking signed Agent + helper release availability…</p></section>'+
        '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">02</span><div><h3>Connect your device</h3><p>Enrollment requires explicit verification and account approval.</p></div></div>'+
        '<ol class="onboard-instructions"><li>Wait for the installer to finish and check its terminal result.</li><li>Open the enrollment link printed on the new device and sign in.</li><li>Compare the device details and verification code, then approve the enrollment.</li><li>Verify the device is online in Devices. Approval alone does not prove the agent connected.</li></ol>'+
        '<div id="enrollmentLive" class="onboard-live" aria-live="polite">Checking enrollment requests…</div>'+
@@ -591,6 +591,21 @@ function openAddDevice(){
        '<p>If enrollment must be restarted, follow your existing agent’s documented procedure; do not reset keys or identity without a recovery plan.</p></div></details>'+
        '<section class="onboard-windows"><h3>Windows</h3><p>Not yet production-ready. This guide covers Linux only.</p></section>'+
        '</div>';
+    // Do not offer a partly configured Agent-only command as Full Control ready.
+    const installCopy=$('detailBody').querySelector('[data-copy-command="install"]');
+    const readyStatus=$('detailBody').querySelector('#ccLinuxReadyStatus');
+    if(installCopy)installCopy.disabled=true;
+    fetch('/install/linux-ready',{method:'HEAD',cache:'no-store',credentials:'same-origin'})
+        .then(response=>{
+            if(!readyStatus?.isConnected)return;
+            if(response.ok){
+                readyStatus.textContent='Signed Agent + privileged helper installer is published. Run this one command as your normal Linux user, approve the OS administrator prompt once, then finish device enrollment in this panel. Later permission changes require no terminal command.';
+                if(installCopy)installCopy.disabled=false;
+            }else{
+                readyStatus.textContent='One-command Full Control installer is NOT published yet. This command is disabled until signed Agent and helper pins are available; no extra helper installation command is required from users.';
+            }
+        })
+        .catch(()=>{if(readyStatus?.isConnected)readyStatus.textContent='Cannot verify signed installer availability. The install command is disabled for safety.'});
     $('detailBody').querySelectorAll('[data-copy-command]').forEach(button=>{
         button.addEventListener('click',async()=>{
             const cmd=linuxCommands.find(entry=>entry[0]===button.dataset.copyCommand);

@@ -157,3 +157,47 @@ Every public release should retain:
 - platform acceptance matrix;
 - installer/update/rollback acceptance result;
 - provenance/signing record.
+
+### One-command Linux Agent + Full Control helper onboarding
+
+To offer **one copy/paste terminal command** on Devices → Add device, publish
+`linux-onboarding.json` next to the reviewed `linux.sh` and signed Agent
+`manifest.json` in `COMMANDCORE_DISTRIBUTION_DIR`. This configuration is
+**public**, and must contain only independently approved public trust pins:
+
+```json
+{
+  "schema_version": 1,
+  "server_url": "https://private-commandcore.example.org",
+  "agent_public_key_b64": "<32-byte trusted Agent Ed25519 public key, Base64>",
+  "helper_release_url": "https://trusted-release-origin.example/helper-v0.9.0-rc7",
+  "helper_public_key_b64": "<32-byte independently trusted helper Ed25519 public key, Base64>",
+  "helper_release_version": "0.9.0-rc7",
+  "helper_bootstrap_url": "https://reviewed-immutable-source.example/bootstrap.py",
+  "helper_bootstrap_sha256": "<64 lowercase hex chars of reviewed bootstrap>"
+}
+```
+
+The operator must **first** verify actual release signatures, bundle/wheelhouse
+integrity, exact bootstrap SHA256, Python/architecture compatibility, and
+trusted provenance. The server does **not** create a signing key or certify
+that an unverified helper is safe merely because the JSON exists. Never put
+private signing keys, passwords or bearer tokens in this public config.
+
+`GET /install/linux-ready` generates a shell script containing the pinned
+**public** values and requests Agent enrollment plus helper setup in the same
+invocation, with one locally authorized `sudo` step for the helper. If any
+required pin is absent/invalid, it returns HTTP 503. The legacy `/install/linux`
+route is unchanged for deployments that deliberately offer Agent-only setup.
+The Devices panel checks `HEAD /install/linux-ready` before enabling Copy;
+there is no successful *"everything ready"* fallback to STANDARD-only install.
+The recommended one-line command uses Bash `pipefail` so HTTP failure cannot
+masquerade as successful installation. Device enrollment still requires
+explicit account approval in the panel.
+
+**Not ready until real acceptance:** Publish the independently signed helper,
+provide its reviewed pins, authorize its first install on the user's Linux
+machine, and verify STANDARD → FULL_CONTROL → STANDARD → FULL_CONTROL using
+real operations. After that, permission changes must not require another OS
+password or terminal command. Do not mark this deliverable complete based only
+on these distribution/UI changes.
