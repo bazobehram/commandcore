@@ -12,7 +12,21 @@
   const address = document.getElementById("browser-address");
   const pendingCard = document.getElementById("pending-approval");
   const pendingLocation = document.getElementById("pending-location");
+  const pendingMarker = document.getElementById("pending-click-marker");
+  const viewportStage = document.getElementById("viewport-stage");
   let pendingRequested = false;
+  function markPending(point) {
+    if (!pendingMarker) return;
+    if (!point || !image.naturalWidth || !viewportStage) {
+      pendingMarker.hidden = true;
+      return;
+    }
+    const rect = image.getBoundingClientRect();
+    const stage = viewportStage.getBoundingClientRect();
+    pendingMarker.style.left = (rect.left-stage.left+rect.width*point.x/image.naturalWidth)+"px";
+    pendingMarker.style.top = (rect.top-stage.top+rect.height*point.y/image.naturalHeight)+"px";
+    pendingMarker.hidden = false;
+  }
   let busy = false, polling = false, hoverInFlight = false;
   let hoverTimer = null, lastHoverAt = 0;
   let touchStart = null, suppressClickUntil = 0;
@@ -217,10 +231,11 @@
       const point = result?.pending;
       if (Number.isInteger(point?.x) && Number.isInteger(point?.y)) {
         pendingCard.hidden = false;
+        markPending(point);
         if (pendingLocation) pendingLocation.textContent =
           "Requested position: " + point.x + ", " + point.y + ". Check the page above.";
-      } else pendingCard.hidden = true;
-    } catch (_) { pendingCard.hidden = true; }
+      } else {pendingCard.hidden = true; markPending(null);}
+    } catch (_) { pendingCard.hidden = true; markPending(null); }
     finally { pendingRequested = false; }
   }
   async function action(name, args = {}) {
@@ -381,7 +396,7 @@
   document.getElementById("approve-pending")?.addEventListener("click", async () => {
     if (!confirm("Approve the requested click at the shown position? Review the page first.")) return;
     const done = await action("browser.approve_click");
-    if (done && pendingCard) pendingCard.hidden = true;
+    if (done && pendingCard) { pendingCard.hidden = true; markPending(null); }
   });
   // The private console receives only a short-lived proposed coordinate.
   // The gateway revalidates the owned page and consumes approval once.

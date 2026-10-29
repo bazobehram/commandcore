@@ -85,6 +85,7 @@ HTML = """<!doctype html>
           <span>Loading an authenticated, private Chromium frame…</span>
         </div>
         <img id="viewport" alt="Live remote Chromium viewport. Click the image to interact with the page." draggable="false" hidden>
+        <div id="pending-click-marker" aria-hidden="true" hidden></div>
       </div>
       <div class="viewer-footer">
         <div class="viewer-live"><span class="live-indicator" aria-hidden="true"></span><span id="connection-status">Connecting</span></div>

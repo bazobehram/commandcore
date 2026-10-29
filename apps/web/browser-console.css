@@ -51,3 +51,8 @@ h1{font-size:clamp(26px,3vw,40px);font-weight:760;letter-spacing:-.05em;line-hei
 
 /* A pending single-click approval is owner-only and must remain hidden by default. */
 #pending-approval[hidden] { display: none !important; }
+
+/* Visualize the exact proposed coordinate only inside owner-authenticated private view. */
+.viewport-stage{position:relative}
+#pending-click-marker{position:absolute;z-index:5;width:34px;height:34px;pointer-events:none;transform:translate(-50%,-50%);border:3px solid #ffd15e;border-radius:50%;background:rgba(255,209,94,.16);box-shadow:0 0 0 3px #18202f}
+#pending-click-marker[hidden]{display:none!important}
