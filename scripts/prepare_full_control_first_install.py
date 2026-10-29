@@ -252,6 +252,9 @@ def prepare(
                 "PATH": "/usr/bin:/bin",
                 "HOME": os.environ.get("HOME", ""),
                 "LANG": "C",
+                # Root must not leave root-owned __pycache__ files inside the
+                # normal user's temporary signed-release staging directory.
+                "PYTHONDONTWRITEBYTECODE": "1",
             },
         )
         return {"result": "LOCAL_HELPER_SETUP_REQUESTED", "version": version}
