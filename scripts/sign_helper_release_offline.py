@@ -85,6 +85,14 @@ def prepare_manifest(
     wheel_paths = sorted(wheels.iterdir())
     if not 1 <= len(wheel_paths) <= 128:
         raise ValueError("invalid offline wheel count")
+    if (
+        sum(
+            bool(re.fullmatch(r"pip-[0-9][A-Za-z0-9_.+-]*-py3-none-any\.whl", p.name))
+            for p in wheel_paths
+        )
+        != 1
+    ):
+        raise ValueError("exactly one signed pip bootstrap wheel required")
     inventory = []
     for wheel in wheel_paths:
         if not re.fullmatch(r"[A-Za-z0-9_.+-]+\.whl", wheel.name):

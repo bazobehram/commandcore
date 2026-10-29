@@ -166,12 +166,13 @@ def test_offline_venv_uses_final_path_and_never_reenrolls(monkeypatch, tmp_path)
     wheels = tmp_path / "wheelhouse"
     wheels.mkdir()
     (wheels / "commandcore_agent-0.9.0rc7-py3-none-any.whl").write_bytes(b"wheel")
+    (wheels / "pip-25.3-py3-none-any.whl").write_bytes(b"signed pip fixture")
     commands = []
 
     def run(argv, **kwargs):
         commands.append(list(map(str, argv)))
         if argv[1:3] == ["-m", "venv"]:
-            target = Path(argv[3])
+            target = Path(argv[-1])
             (target / "bin").mkdir(parents=True)
             (target / "bin/python").write_text("python")
         if argv[1:4] == ["-m", "pip", "install"]:
@@ -219,6 +220,7 @@ def test_offline_install_failure_removes_partial_helper_only(monkeypatch, tmp_pa
     wheels = tmp_path / "wheels"
     wheels.mkdir()
     (wheels / "commandcore_agent-0.9.0rc7-py3-none-any.whl").write_bytes(b"wheel")
+    (wheels / "pip-25.3-py3-none-any.whl").write_bytes(b"signed pip fixture")
 
     def failed(argv, **kwargs):
         if argv[1:3] == ["-m", "venv"]:
@@ -280,3 +282,20 @@ def test_missing_user_agent_blocks_root_helper_setup(monkeypatch, tmp_path):
             "x86_64",
             "netti",
         )
+
+
+def test_requires_signed_pip_wheel(tmp_path):
+    wheelhouse = tmp_path / "wheels"
+    wheelhouse.mkdir()
+    (wheelhouse / "commandcore_agent-0.9.0rc7-py3-none-any.whl").write_bytes(
+        b"candidate"
+    )
+    with pytest.raises(
+        ValueError, match="signed wheelhouse must contain exactly one pip"
+    ):
+        setup._signed_pip_wheel(wheelhouse)
+    (wheelhouse / "pip-25.3-py3-none-any.whl").write_bytes(b"pip")
+    assert setup._signed_pip_wheel(wheelhouse).name.startswith("pip-")
+    (wheelhouse / "pip-24.0-py3-none-any.whl").write_bytes(b"pip")
+    with pytest.raises(ValueError, match="exactly one pip"):
+        setup._signed_pip_wheel(wheelhouse)

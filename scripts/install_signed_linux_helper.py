@@ -46,6 +46,22 @@ VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?\Z")
 ARCH = ("x86_64", "arm64")
 
 
+def _signed_pip_wheel(wheels: Path) -> Path:
+    """Only a signed, pure-Python pip wheel may bootstrap the offline venv."""
+    candidates = [
+        p
+        for p in wheels.iterdir()
+        if re.fullmatch(r"pip-[0-9][A-Za-z0-9_.+-]*-py3-none-any\.whl", p.name)
+        and p.is_file()
+        and not p.is_symlink()
+    ]
+    if len(candidates) != 1:
+        raise ValueError(
+            "signed wheelhouse must contain exactly one pip bootstrap wheel"
+        )
+    return candidates[0]
+
+
 def validate_assets(
     manifest: Path, bundle: Path, wheelhouse: Path, key: str, version: str, arch: str
 ) -> dict:
@@ -63,6 +79,11 @@ def validate_assets(
         raise ValueError("helper wheel missing from signed wheelhouse")
     if hashlib.sha256(wheel_path.read_bytes()).hexdigest() != inspected["wheel_sha256"]:
         raise ValueError("helper bundle differs from signed wheelhouse")
+    _signed_pip_wheel(wheelhouse)
+    signed_manifest = json.loads(manifest.read_text())
+    runtime_minor = f"{sys.version_info.major}.{sys.version_info.minor}"
+    if signed_manifest.get("python_minor") != runtime_minor:
+        raise ValueError("signed helper Python runtime mismatch")
     return {
         "version": version,
         "architecture": arch,
@@ -197,13 +218,21 @@ def install(
         # venv breaks absolute shebangs in pip-generated helper entry points.
         # On any build failure remove this new, inactive helper-only runtime.
         try:
-            subprocess.run([sys.executable, "-m", "venv", str(release)], check=True)
+            # Minimal Ubuntu systems omit ensurepip and python3-venv, but
+            # venv --without-pip still works. Bootstrap pip solely from the
+            # verified, externally signed offline wheelhouse.
+            subprocess.run(
+                [sys.executable, "-m", "venv", "--without-pip", str(release)],
+                check=True,
+            )
             clean_env = {
                 "PATH": "/usr/bin:/bin",
                 "HOME": "/root",
                 "PIP_CONFIG_FILE": os.devnull,
                 "PIP_NO_INDEX": "1",
+                "PIP_DISABLE_PIP_VERSION_CHECK": "1",
                 "PYTHONNOUSERSITE": "1",
+                "PYTHONPATH": str(_signed_pip_wheel(wheels)),
             }
             subprocess.run(
                 [

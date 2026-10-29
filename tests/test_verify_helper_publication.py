@@ -40,6 +40,7 @@ def layout(tmp_path):
     (wheels / "commandcore_agent-0.9.0rc8-py3-none-any.whl").write_bytes(
         b"wheel fixture"
     )
+    (wheels / "pip-25.3-py3-none-any.whl").write_bytes(b"signed pip fixture")
     return root
 
 
@@ -50,12 +51,12 @@ def dummy_verifiers(monkeypatch):
                 verify=lambda *args: {
                     "version": "0.9.0-rc8",
                     "helper_sha256": "a" * 64,
-                    "wheel_count": 1,
+                    "wheel_count": 2,
                 }
             )
         if script == "check_helper_offline_dependencies":
             return SimpleNamespace(
-                check=lambda *args, **kwargs: {"wheel_count": 1, "complete": True}
+                check=lambda *args, **kwargs: {"wheel_count": 2, "complete": True}
             )
         pytest.fail(f"Unexpected verifier: {script}")
 
@@ -69,7 +70,7 @@ def test_signed_release_includes_every_wheel(monkeypatch, tmp_path):
     assert result["verified"]
     assert result["signed_by_external_authority"]
     assert result["root_operation"] is False
-    assert len(result["assets"]) == 3
+    assert len(result["assets"]) == 4
     assert result["assets"][-1].endswith(".whl")
 
 
@@ -80,8 +81,8 @@ def test_publish_refuses_missing_or_extra_assets(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="unexpected signed helper assets"):
         publication.verify(root, "trusted", "0.9.0-rc8", "x86_64")
     (root / "unexpected-private-key").unlink()
-    (root / "wheels" / "commandcore_agent-0.9.0rc8-py3-none-any.whl").unlink()
-    with pytest.raises(ValueError, match="wheelhouse"):
+    (root / "wheels" / "pip-25.3-py3-none-any.whl").unlink()
+    with pytest.raises(ValueError, match="signed pip bootstrap"):
         publication.verify(root, "trusted", "0.9.0-rc8", "x86_64")
 
 
