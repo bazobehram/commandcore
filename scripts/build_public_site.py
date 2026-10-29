@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build static CommandCore product website, Angular workspace and hosted docs."""
+
 from pathlib import Path
 import html
 import re
@@ -14,7 +15,9 @@ DOCS = ROOT / "docs"
 OUT = ROOT / "dist/public-site"
 
 if not (ANGULAR / "index.html").is_file():
-    raise SystemExit("Angular bundle missing; run npm ci && npm run build in apps/workspace-angular")
+    raise SystemExit(
+        "Angular bundle missing; run npm ci && npm run build in apps/workspace-angular"
+    )
 if OUT.exists():
     shutil.rmtree(OUT)
 shutil.copytree(SITE, OUT)
