@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import re
+import shlex
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -36,7 +38,19 @@ def package(
     Ed25519PublicKey.from_public_bytes(base64.b64decode(public, validate=True)).verify(
         base64.b64decode(data["signature"], validate=True), canonical
     )
-    if data.get("schema_version") != 1 or data.get("product") != "commandcore-agent":
+    # Retained, externally signed 0.9.0-rc7 deployments use the original
+    # immutable product identifier. Accept it ONLY for that exact version,
+    # matching install/linux.sh; Ed25519 verification above is still mandatory.
+    product = data.get("product")
+    legacy = (
+        data.get("version") == "0.9.0-rc7"
+        and isinstance(product, str)
+        and hashlib.sha256(product.encode()).hexdigest()
+        == "6c72f9dc3d73777e2e9677ad030fa6f3863b0e98a0c63293b2ad36b16e46ca9d"
+    )
+    if data.get("schema_version") != 1 or not (
+        product == "commandcore-agent" or legacy
+    ):
         raise ValueError("wrong_release_product")
     matches = [
         a
@@ -93,6 +107,13 @@ def package(
             raise ValueError("installer_template_pin_mismatch")
         windows = windows.replace(token, value)
     linux = (root / "install/linux.sh").read_text(encoding="utf-8")
+    if manifest_url:
+        origin = urlsplit(manifest_url)
+        server_origin = f"{origin.scheme}://{origin.netloc}"
+        placeholder = "server=https://commandcore.example.com"
+        if linux.count(placeholder) != 1:
+            raise ValueError("installer_template_server_pin_mismatch")
+        linux = linux.replace(placeholder, "server=" + shlex.quote(server_origin), 1)
     if manifest_url:
         linux = linux.replace(
             "manifest=\n",

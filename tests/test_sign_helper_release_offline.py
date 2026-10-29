@@ -111,3 +111,26 @@ def test_offline_signer_rejects_unverified_inputs(tmp_path):
     link.symlink_to(next(wheels.iterdir()))
     with pytest.raises(ValueError):
         signer.prepare_manifest(bundle, wheels, "0.9.0-rc7", "x86_64", "3.13", "b" * 40)
+
+
+def test_offline_signer_tty_prompt_uses_nonseekable_descriptor_io(monkeypatch):
+    response = iter(b"SIGN HELPER RELEASE\n")
+    written = []
+    monkeypatch.setattr(signer.os, "open", lambda *args: 42)
+    monkeypatch.setattr(
+        signer.os, "write", lambda fd, data: written.append(data) or len(data)
+    )
+    monkeypatch.setattr(signer.os, "read", lambda fd, size: bytes([next(response)]))
+    monkeypatch.setattr(signer.os, "close", lambda fd: None)
+    signer.local_approval("0.9.0-rc7", "x86_64", "3.12")
+    assert b"SIGN HELPER RELEASE" in b"".join(written)
+
+
+def test_offline_signer_tty_rejection_fails_closed(monkeypatch):
+    response = iter(b"NO\n")
+    monkeypatch.setattr(signer.os, "open", lambda *args: 42)
+    monkeypatch.setattr(signer.os, "write", lambda fd, data: len(data))
+    monkeypatch.setattr(signer.os, "read", lambda fd, size: bytes([next(response)]))
+    monkeypatch.setattr(signer.os, "close", lambda fd: None)
+    with pytest.raises(PermissionError, match="authorization declined"):
+        signer.local_approval("0.9.0-rc7", "x86_64", "3.12")
