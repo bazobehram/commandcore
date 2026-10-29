@@ -244,8 +244,26 @@ def main():
                         break
                 time.sleep(0.2)
             else:
+                diagnostics = subprocess.run(
+                    [
+                        "setpriv",
+                        f"--reuid={nobody.pw_uid}",
+                        f"--regid={nogroup.gr_gid}",
+                        "--clear-groups",
+                        sys.executable,
+                        "scripts/helper_unprivileged_probe_diagnostic.py",
+                    ],
+                    cwd=ROOT,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                )
                 raise RuntimeError(
-                    "unprivileged native helper capability not ready: " + last_result
+                    "unprivileged native helper capability not ready: "
+                    + last_result[:400]
+                    + " redacted_ipc_diagnostic="
+                    + (diagnostics.stdout or diagnostics.stderr)[:1300]
                 )
             server = subprocess.Popen(
                 [sys.executable, "-m", "commandcore_server.main"],

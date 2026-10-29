@@ -10,6 +10,21 @@ on:
         description: Version of the signed helper (e.g. 0.9.0-rc8)
         required: true
         type: string
+      architecture:
+        description: Signed Linux helper architecture
+        required: true
+        type: choice
+        options:
+          - x86_64
+          - arm64
+      python_minor:
+        description: Target Python runtime for the offline helper wheelhouse
+        required: true
+        type: choice
+        options:
+          - '3.11'
+          - '3.12'
+          - '3.13'
 permissions:
   contents: write
   actions: read
@@ -25,7 +40,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m pip install cryptography
+      - run: python -m pip install cryptography packaging
       - name: Retrieve externally signed bundle
         uses: actions/download-artifact@v4
         with:
@@ -33,54 +48,46 @@ jobs:
           name: linux-helper-signed-release
           path: signed-helper
           github-token: ${{ github.token }}
-      - name: Verify signature and digest before publishing
+      - name: Verify signed helper AND complete offline dependencies
         env:
           RELEASE_PUBLIC_KEY: ${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}
           RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_ARCH: ${{ inputs.architecture }}
+          RELEASE_PYTHON: ${{ inputs.python_minor }}
         run: |
           set -euo pipefail
           test -n "$RELEASE_PUBLIC_KEY"
-          python - <<'PY'
-          import json, os, pathlib, re
-          root=pathlib.Path('signed-helper')
-          version=os.environ['RELEASE_VERSION']
-          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?',version):
-              raise SystemExit('Invalid version')
-          files={p.name for p in root.iterdir()}
-          expected={'manifest.signed.json','commandcore-helper-linux-x86_64.tar.gz'}
-          if files!=expected or any(p.is_symlink() or not p.is_file() for p in root.iterdir()):
-              raise SystemExit('Expected exactly one signed manifest and helper bundle')
-          m=json.loads((root/'manifest.signed.json').read_text())
-          if m.get('version')!=version or m.get('product')!='commandcore-agent':
-              raise SystemExit('Signed release identity mismatch')
-          entries=m.get('artifacts')
-          if not isinstance(entries,list) or len(entries)!=1:
-              raise SystemExit('Expected one helper artifact entry')
-          a=entries[0]
-          if a.get('filename')!='commandcore-helper-linux-x86_64.tar.gz' or a.get('kind')!='privileged-helper' or a.get('architecture')!='x86_64':
-              raise SystemExit('Signed artifact target mismatch')
-          PY
-          python scripts/verify_signed_helper.py \
-            --manifest signed-helper/manifest.signed.json \
-            --artifact signed-helper/commandcore-helper-linux-x86_64.tar.gz \
-            --architecture x86_64 \
+          python scripts/verify_helper_publication.py \
+            --root signed-helper \
+            --version "$RELEASE_VERSION" \
+            --architecture "$RELEASE_ARCH" \
+            --python-minor "$RELEASE_PYTHON" \
             --trusted-public-key-b64 "$RELEASE_PUBLIC_KEY"
-          python scripts/inspect_helper_bundle.py \
-            --bundle signed-helper/commandcore-helper-linux-x86_64.tar.gz
       - name: Publish immutable prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_ARCH: ${{ inputs.architecture }}
+          RELEASE_PYTHON: ${{ inputs.python_minor }}
         run: |
           set -euo pipefail
-          tag="helper-v${RELEASE_VERSION}"
+          tag="helper-v${RELEASE_VERSION}-${RELEASE_ARCH}-py${RELEASE_PYTHON//./}"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Existing helper release; refusing overwrite" >&2
             exit 1
           fi
-          gh release create "$tag" \
-            signed-helper/commandcore-helper-linux-x86_64.tar.gz \
-            signed-helper/manifest.signed.json \
+          shopt -s nullglob
+          assets=(signed-helper/manifest.signed.json
+                  signed-helper/commandcore-helper-linux-${RELEASE_ARCH}.tar.gz
+                  signed-helper/wheels/*.whl)
+          if (( ${#assets[@]} < 3 )); then
+            echo "Missing signed offline wheelhouse assets" >&2
+            exit 1
+          fi
+          # Keep any partial upload private; never expose incomplete root-capable
+          # payloads. A failed upload leaves a draft for explicit operator review.
+          gh release create "$tag" "${assets[@]}" \
             --title "CommandCore Linux helper ${RELEASE_VERSION}" \
-            --notes "Externally signed privileged-helper candidate. Local root authorization remains required." \
-            --prerelease
+            --notes "Externally signed helper and complete signed offline dependencies. Local Linux administrator approval remains mandatory." \
+            --prerelease --draft
+          gh release edit "$tag" --draft=false
