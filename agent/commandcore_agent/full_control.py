@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import stat
 import secrets
 import subprocess
 import sys
@@ -33,6 +34,25 @@ def _write_policy(policy: dict) -> None:
         os.replace(temporary, POLICY)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+async def _wait_for_authenticated_helper_ready(
+    socket_path: str, secret_path: str, *, attempts: int = 24, delay: float = 0.25
+) -> dict:
+    """Wait for actual authenticated IPC readiness, not systemd Type=simple startup.
+
+    Never treat socket existence or service-active alone as authorization.
+    A finite retry window handles the socket creation race after systemctl restart.
+    """
+    client = HelperClient(socket_path, secret_path)
+    last = {"available": False, "max_permission_profile": "STANDARD"}
+    for number in range(attempts):
+        last = await client.probe()
+        if last.get("available") and last.get("max_permission_profile") == "FULL_CONTROL":
+            return last
+        if number + 1 < attempts:
+            await asyncio.sleep(delay)
+    return last
 
 
 def configure(enable: bool, agent_user: str, acknowledge: bool = False) -> int:
@@ -66,7 +86,15 @@ def configure(enable: bool, agent_user: str, acknowledge: bool = False) -> int:
                     if resolved.is_dir():
                         check_root_directory(resolved)
                     else:
-                        read_root_file(resolved)
+                        # The interpreter symlink target can exceed the small
+                        # configuration-file read limit. Validate its ownership
+                        # and mode without reading the executable into memory.
+                        check_root_directory(resolved.parent)
+                        target_info = resolved.lstat()
+                        if (not stat.S_ISREG(target_info.st_mode)
+                                or target_info.st_uid != 0
+                                or target_info.st_mode & 0o022):
+                            raise PermissionError("Untrusted helper symlink target")
             if not os.access(HELPER, os.X_OK):
                 raise ValueError("Installed helper is not executable")
             if UNIT.exists():
@@ -142,7 +170,9 @@ def configure(enable: bool, agent_user: str, acknowledge: bool = False) -> int:
             policy["configured_max_permission_profile"] = "FULL_CONTROL"
             _write_policy(policy)
             probe = asyncio.run(
-                HelperClient("/run/commandcore/helper.sock", str(SECRET)).probe()
+                _wait_for_authenticated_helper_ready(
+                    "/run/commandcore/helper.sock", str(SECRET)
+                )
             )
             if (
                 not probe.get("available")
