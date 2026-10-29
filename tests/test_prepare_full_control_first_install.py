@@ -180,6 +180,7 @@ def test_local_sudo_is_reached_only_after_all_signed_release_assets(monkeypatch)
             assert all(("download", name) in events for name in setup.SCRIPTS)
             assert kwargs.get("check") is True
             assert kwargs["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+            assert argv[3] == "-B"  # sudo -- python -B
             return SimpleNamespace(returncode=0)
         return real_run(argv, **kwargs)
 
