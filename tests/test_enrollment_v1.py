@@ -232,3 +232,118 @@ def test_dashboard_decision_requires_prior_same_principal_review(enrollment):
     service.claim(item["poll_token"], proof)
     with pytest.raises(ValueError):
         decide("operator")
+
+
+def test_first_install_full_control_is_one_shot_and_requires_local_helper(enrollment):
+    db, service, _key, _metadata, item, proof = enrollment
+    service.review(item["view_token"], "operator")
+    service.decide(
+        item["view_token"],
+        "operator",
+        item["verification_code"],
+        True,
+        True,
+        initial_permission="FULL_CONTROL",
+    )
+    claimed = service.claim(item["poll_token"], proof)
+    identity = claimed["device_id"]
+    assert db.get_device(identity)["permission_profile"] == "STANDARD"
+    assert (
+        db.list_device_grants("registry", identity)[0]["max_permission_profile"]
+        == "STANDARD"
+    )
+    db.mark_online(
+        identity,
+        ip="127.0.0.1",
+        agent_version="test",
+        capabilities={"local_max_permission_profile": "STANDARD"},
+        agent_protocol_version="1",
+    )
+    db.update_runtime_capabilities(
+        identity,
+        {"local_max_permission_profile": "FULL_CONTROL", "privileged_helper": False},
+    )
+    assert db.get_device(identity)["permission_profile"] == "STANDARD"
+    healthy = {
+        "local_max_permission_profile": "FULL_CONTROL",
+        "privileged_helper": True,
+    }
+    old, new = db.update_runtime_capabilities(identity, healthy)
+    assert (old, new) == ("STANDARD", "FULL_CONTROL")
+    assert db.get_device(identity)["permission_profile"] == "FULL_CONTROL"
+    assert (
+        db.list_device_grants("registry", identity)[0]["max_permission_profile"]
+        == "FULL_CONTROL"
+    )
+    consumed = db.conn.execute(
+        "SELECT desired_initial_profile FROM pending_enrollments WHERE device_id=?",
+        (identity,),
+    ).fetchone()[0]
+    assert consumed == "STANDARD"
+    assert db.set_permission("registry", identity, "STANDARD")
+    db.update_runtime_capabilities(identity, healthy)
+    assert db.get_device(identity)["permission_profile"] == "STANDARD"
+
+
+def test_initial_full_requires_explicit_account_grant(enrollment):
+    _, service, _, _, item, _ = enrollment
+    service.review(item["view_token"], "operator")
+    with pytest.raises(ValueError, match="self_grant"):
+        service.decide(
+            item["view_token"],
+            "operator",
+            item["verification_code"],
+            True,
+            False,
+            initial_permission="FULL_CONTROL",
+        )
+
+
+def test_standard_initial_preference_never_promotes(enrollment):
+    db, service, _, _, item, proof = enrollment
+    approve(service, item)
+    identity = service.claim(item["poll_token"], proof)["device_id"]
+    healthy = {
+        "local_max_permission_profile": "FULL_CONTROL",
+        "privileged_helper": True,
+    }
+    db.mark_online(
+        identity,
+        ip="127.0.0.1",
+        agent_version="test",
+        capabilities=healthy,
+        agent_protocol_version="1",
+    )
+    db.update_runtime_capabilities(identity, healthy)
+    assert db.get_device(identity)["permission_profile"] == "STANDARD"
+
+
+def test_expired_full_intent_fails_closed(enrollment):
+    db, service, _, _, item, proof = enrollment
+    service.review(item["view_token"], "operator")
+    service.decide(
+        item["view_token"],
+        "operator",
+        item["verification_code"],
+        True,
+        True,
+        initial_permission="FULL_CONTROL",
+    )
+    identity = service.claim(item["poll_token"], proof)["device_id"]
+    db.conn.execute(
+        "UPDATE pending_enrollments SET created_at=? WHERE device_id=?", (0, identity)
+    )
+    db.conn.commit()
+    healthy = {
+        "local_max_permission_profile": "FULL_CONTROL",
+        "privileged_helper": True,
+    }
+    db.mark_online(
+        identity,
+        ip="127.0.0.1",
+        agent_version="test",
+        capabilities=healthy,
+        agent_protocol_version="1",
+    )
+    db.update_runtime_capabilities(identity, healthy)
+    assert db.get_device(identity)["permission_profile"] == "STANDARD"

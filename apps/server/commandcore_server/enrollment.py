@@ -208,7 +208,12 @@ class EnrollmentService:
         grant_to_me: bool,
         *,
         reviewed_id: bool = False,
+        initial_permission: str = "STANDARD",
     ) -> dict[str, Any]:
+        if initial_permission not in {"STANDARD", "FULL_CONTROL"}:
+            raise ValueError("invalid_initial_permission")
+        if initial_permission == "FULL_CONTROL" and (not approve or not grant_to_me):
+            raise ValueError("full_control_requires_approved_self_grant")
         with self.db.lock:
             self.db.conn.execute("BEGIN IMMEDIATE")
             try:
@@ -231,14 +236,24 @@ class EnrollmentService:
                     raise ValueError("invalid_enrollment_decision")
                 status = "approved" if approve else "rejected"
                 self.db.conn.execute(
-                    "UPDATE pending_enrollments SET status=?,grant_subject=? WHERE id=?",
-                    (status, subject if approve and grant_to_me else None, row["id"]),
+                    "UPDATE pending_enrollments SET status=?,grant_subject=?,desired_initial_profile=? WHERE id=?",
+                    (
+                        status,
+                        subject if approve and grant_to_me else None,
+                        initial_permission if approve else "STANDARD",
+                        row["id"],
+                    ),
                 )
                 self._audit(
                     subject,
                     "enrollment." + status,
                     row["id"],
-                    details={"grant_to_me": bool(approve and grant_to_me)},
+                    details={
+                        "grant_to_me": bool(approve and grant_to_me),
+                        "requested_initial_permission": initial_permission
+                        if approve
+                        else "STANDARD",
+                    },
                 )
                 self.db.conn.commit()
                 return {"status": status}
