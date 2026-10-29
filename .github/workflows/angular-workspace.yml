@@ -29,6 +29,7 @@ jobs:
           cache: npm
           cache-dependency-path: apps/workspace-angular/package-lock.json
       - run: npm ci
+      - run: python3 -m pip install Pillow
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
