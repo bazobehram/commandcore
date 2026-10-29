@@ -202,7 +202,12 @@ activeForm.onsubmit=e=>{
     activeSave.disabled=true;
     action('/api/managed-devices/'+encodeURIComponent(d.id)+'/permissions','PUT',{profile,expected_profile:d.permission_profile}).finally(()=>{activeSave.disabled=false});
 };
-permissionForm.append(activeForm);
+const serverAdvanced=document.createElement('details');
+serverAdvanced.className='detail-disclosure';
+const serverSummary=document.createElement('summary');
+serverSummary.textContent='Advanced: server-wide device permission';
+serverAdvanced.append(serverSummary,activeForm);
+permissionForm.append(serverAdvanced);
 const setup=document.createElement('details');
 setup.className='detail-disclosure';
 setup.id='cc-full-control-setup';
@@ -266,27 +271,34 @@ if(currentSubject){
     const myForm=document.createElement('form');
     myForm.className='my-account-access-form';
     const myLabel=document.createElement('label');
-    myLabel.textContent='My account permission';
+    myLabel.textContent='My permission on this device';
     const mySelect=document.createElement('select');
     mySelect.setAttribute('aria-label','My account permission');
     for(const level of ['READ_ONLY','STANDARD','FULL_CONTROL']){
         const opt=document.createElement('option');opt.value=level;
         opt.textContent=displayPermissionName(level);
-        opt.disabled=level==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull||d.permission_profile!=='FULL_CONTROL')||level==='STANDARD'&&ceiling==='READ_ONLY';
+        opt.disabled=level==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull)||level==='STANDARD'&&ceiling==='READ_ONLY';
         if(level===(prior?.max_permission_profile||'READ_ONLY'))opt.selected=true;
         mySelect.append(opt);
     }
     myLabel.append(mySelect);
-    const mySave=document.createElement('button');mySave.type='submit';mySave.textContent='Save my access';
-    myForm.append(myLabel,mySave);
+    const mySave=document.createElement('button');mySave.type='submit';mySave.textContent='Apply permission';
+    const selfHelp=document.createElement('p');
+    selfHelp.className='muted';
+    selfHelp.textContent='One action updates your account grant and this device\'s server policy. Device-local permission and OAuth limits still apply.';
+    myForm.append(myLabel,mySave,selfHelp);
     myForm.onsubmit=e=>{
         e.preventDefault();
-        if(mySelect.value==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull||d.permission_profile!=='FULL_CONTROL')){
-            error(Error('Full Control cannot be granted until the device and account are fully authorized.'));return;
+        const profile=mySelect.value;
+        if(profile==='FULL_CONTROL'&&(!eligible||!d.connected||!oauthCanFull)){
+            error(Error('Full Control requires a healthy, locally approved helper and a Full Control OAuth scope.'));return;
         }
-        if(!confirm('Change permission for your account on '+d.display_name+' to '+displayPermissionName(mySelect.value)+'?'))return;
+        if(!confirm('Change your access and this device\'s server permission on '+d.display_name+' to '+displayPermissionName(profile)+'? Other accounts are also bounded by the new device policy.'))return;
         mySave.disabled=true;
-        action('/api/managed-devices/'+encodeURIComponent(d.id)+'/grants','PUT',{subject:currentSubject,profile:mySelect.value}).finally(()=>{mySave.disabled=false});
+        action('/api/managed-devices/'+encodeURIComponent(d.id)+'/my-permission','PUT',{
+            profile,expected_profile:d.permission_profile,
+            expected_grant:prior?.max_permission_profile||null
+        }).finally(()=>{mySave.disabled=false});
     };
     section.prepend(myForm);
     const originalSubmit=form.onsubmit;
