@@ -61,11 +61,16 @@ function compareVersions(a,b){
     return 0;
 }
 function updateStatus(device){
+    const info=device.agent_update||{};
+    if(info.state==='up_to_date')return 'Up to date ('+String(device.agent_version||'unknown')+')';
+    if(info.state==='ahead')return 'Ahead of recommended version';
+    if(info.state==='available')return 'Update available: '+String(info.recommended_version||'unknown');
     const candidate=device.capabilities?.update_candidate_version;
     const current=releaseVersion(device.agent_version),next=releaseVersion(candidate);
-    if(current&&next)return compareVersions(next,current)>0?'Update available: '+candidate+' (reported candidate)':'No newer reported candidate ('+candidate+')';
-    return candidate||device.agent_update_available||device.capabilities?.agent_update_status?'Unknown':'Not reported';
+    if(current&&next&&compareVersions(next,current)>0)return 'Update candidate: '+candidate;
+    return 'Version status unavailable';
 }
+
 async function api(path,method='GET',body){const response=await fetch(path,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const data=await response.json().catch(()=>({}));if(response.status===401){$('login').hidden=false;$('dashboard').hidden=true;throw Error('Sign in to continue.')}if(!response.ok)throw Error(data.detail||'Request failed');return data}
 function error(e){$('message').textContent=e.message}
 function makeCard(device){
@@ -126,8 +131,81 @@ function reconcileDeviceCards(devices){
     }
 }
 let refreshPromise=null,pendingSignature=null;
-async function refresh(){if(refreshPromise)return refreshPromise;refreshPromise=(async()=>{try{const [devices,managed,pending]=await Promise.all([api('/api/devices'),api('/api/managed-devices'),api('/api/enrollment/pending')]);const merged=new Map(devices.devices.map(d=>[d.id,d]));for(const device of managed.devices){const access=merged.get(device.id)||{};merged.set(device.id,{...device,...access,managed_by_me:true,grants:device.grants})}state.devices=[...merged.values()];state.pending=pending.enrollments;reconcileDeviceCards(state.devices);$('summary').textContent=`${state.devices.filter(d=>!d.revoked_at).length} devices · ${state.devices.filter(d=>d.connected&&!d.revoked_at).length} online`;$('pendingCount').textContent=state.pending.length;const nextPendingSignature=JSON.stringify(state.pending);if(nextPendingSignature!==pendingSignature){const previousInputs=new Map([...$('pending').querySelectorAll('article[data-enrollment-id]')].map(n=>[n.dataset.enrollmentId,{code:n.querySelector('input[name=code]')?.value||'',grant:!!n.querySelector('input[name=grant]')?.checked,initial:n.querySelector('select[name=initial_permission]')?.value||'FULL_CONTROL'}]));$('pending').replaceChildren();for(const p of state.pending){const node=document.createElement('article');node.className='card';node.dataset.enrollmentId=String(p.id);node.innerHTML=`<h2>${esc(p.metadata.display_name)}</h2><p>${esc(p.metadata.hostname)} · ${esc(p.metadata.platform)} · ${esc(p.metadata.architecture)}</p><span class="badge">${esc(p.metadata.local_ceiling)}</span><p class="mono">Code: ${esc(p.verification_code)}</p><p class="muted">Created: ${esc(time(p.created_at))}<br>Expires: ${esc(time(p.expires_at))}</p>`;const form=document.createElement('form');form.innerHTML='<label>Enter the code shown on the Agent<input name="code" required minlength="9" maxlength="9" autocomplete="off"></label><label><input name="grant" type="checkbox" checked> Grant this device to my account</label><label>Initial permission<select name="initial_permission"><option value="FULL_CONTROL" selected>FULL_CONTROL (recommended)</option><option value="STANDARD">STANDARD</option></select></label><p class="muted">Full Control requires your approval, OAuth Full scope, and the verified local helper. Otherwise it stays STANDARD.</p><button name="approve" value="true">Approve</button><button name="approve" value="false" class="danger">Reject</button>';const old=previousInputs.get(String(p.id));if(old){form.elements.code.value=old.code;form.elements.grant.checked=old.grant;form.elements.initial_permission.value=old.initial;}form.onsubmit=e=>{e.preventDefault();action('/api/enrollment/pending/'+encodeURIComponent(p.id)+'/decision','POST',{code:form.elements.code.value.toUpperCase(),approve:e.submitter?.value==='true',grant_to_me:form.elements.grant.checked,initial_permission:e.submitter?.value==='true'?form.elements.initial_permission.value:'STANDARD'})};node.append(form);$('pending').append(node)}pendingSignature=nextPendingSignature;}const live=$('enrollmentLive');if(live)live.textContent=state.pending.length?state.pending.length+' enrollment request(s) waiting for review.':'Waiting for enrollment — requests appear here automatically.';const connected=$('onboardOnline');if(connected)connected.textContent=connectionSummary();if($('detail').open&&detailDeviceId){const current=state.devices.find(item=>String(item.id)===detailDeviceId);if(current){const badge=$('detailLiveStatus');if(badge){badge.className='inline-status '+(current.connected?'online':'offline');badge.textContent=current.connected?'● Online':'● Offline';}const seen=$('detailLastSeen');if(seen)seen.textContent=time(current.last_seen);}}if(!state.pending.length&&!$('pending').querySelector('.empty'))$('pending').innerHTML='<div class="empty">No pending enrollments reviewed by your account. Open the new machine’s enrollment link to review it.</div>';$('message').textContent=''}catch(e){error(e)}})();try{return await refreshPromise}finally{refreshPromise=null}}
+async function refresh(){if(refreshPromise)return refreshPromise;refreshPromise=(async()=>{try{const [devices,managed,pending]=await Promise.all([api('/api/devices'),api('/api/managed-devices'),api('/api/enrollment/pending')]);const merged=new Map(devices.devices.map(d=>[d.id,d]));for(const device of managed.devices){const access=merged.get(device.id)||{};merged.set(device.id,{...device,...access,managed_by_me:true,grants:device.grants})}state.devices=[...merged.values()];state.pending=pending.enrollments;reconcileDeviceCards(state.devices);$('summary').textContent=`${state.devices.filter(d=>!d.revoked_at).length} devices · ${state.devices.filter(d=>d.connected&&!d.revoked_at).length} online`;$('pendingCount').textContent=state.pending.length;const nextPendingSignature=JSON.stringify(state.pending);if(nextPendingSignature!==pendingSignature){const previousInputs=new Map([...$('pending').querySelectorAll('article[data-enrollment-id]')].map(n=>[n.dataset.enrollmentId,{code:n.querySelector('input[name=code]')?.value||'',grant:!!n.querySelector('input[name=grant]')?.checked,initial:n.querySelector('select[name=initial_permission]')?.value||'FULL_CONTROL'}]));$('pending').replaceChildren();for(const p of state.pending){const node=document.createElement('article');node.className='card';node.dataset.enrollmentId=String(p.id);node.innerHTML=`<h2>${esc(p.metadata.display_name)}</h2><p>${esc(p.metadata.hostname)} · ${esc(p.metadata.platform)} · ${esc(p.metadata.architecture)}</p><span class="badge">${esc(p.metadata.local_ceiling)}</span><p class="mono">Code: ${esc(p.verification_code)}</p><p class="muted">Created: ${esc(time(p.created_at))}<br>Expires: ${esc(time(p.expires_at))}</p>`;const form=document.createElement('form');form.innerHTML='<label>Enter the code shown on the Agent<input name="code" required minlength="9" maxlength="9" autocomplete="off"></label><label><input name="grant" type="checkbox" checked> Grant this device to my account</label><label>Initial permission<select name="initial_permission"><option value="FULL_CONTROL" selected>FULL_CONTROL (recommended)</option><option value="STANDARD">STANDARD</option></select></label><p class="muted">Full Control requires your approval, OAuth Full scope, and the verified local helper. Otherwise it stays STANDARD.</p><button name="approve" value="true">Approve</button><button name="approve" value="false" class="danger">Reject</button>';if(/windows/i.test(String(p.metadata.platform||''))&&p.metadata.local_ceiling!=='FULL_CONTROL'){form.elements.initial_permission.value='STANDARD';form.querySelector('p.muted').textContent='Windows Agent access starts at STANDARD unless a verified local Full Control capability is available.';}const old=previousInputs.get(String(p.id));if(old){form.elements.code.value=old.code;form.elements.grant.checked=old.grant;form.elements.initial_permission.value=old.initial;}form.onsubmit=e=>{e.preventDefault();action('/api/enrollment/pending/'+encodeURIComponent(p.id)+'/decision','POST',{code:form.elements.code.value.toUpperCase(),approve:e.submitter?.value==='true',grant_to_me:form.elements.grant.checked,initial_permission:e.submitter?.value==='true'?form.elements.initial_permission.value:'STANDARD'})};node.append(form);$('pending').append(node)}pendingSignature=nextPendingSignature;}const live=$('enrollmentLive');if(live)live.textContent=state.pending.length?state.pending.length+' enrollment request(s) waiting for review.':'Waiting for enrollment — requests appear here automatically.';const connected=$('onboardOnline');if(connected)connected.textContent=connectionSummary();if($('detail').open&&detailDeviceId){const current=state.devices.find(item=>String(item.id)===detailDeviceId);if(current){const badge=$('detailLiveStatus');if(badge){badge.className='inline-status '+(current.connected?'online':'offline');badge.textContent=current.connected?'● Online':'● Offline';}const seen=$('detailLastSeen');if(seen)seen.textContent=time(current.last_seen);}}if(!state.pending.length&&!$('pending').querySelector('.empty'))$('pending').innerHTML='<div class="empty">No pending enrollments reviewed by your account. Open the new machine’s enrollment link to review it.</div>';$('message').textContent=''}catch(e){error(e)}})();try{return await refreshPromise}finally{refreshPromise=null}}
 function row(label,value){return `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`}
+// Manual, explicit Agent-only update; never silently upgrade any device.
+function appendManualAgentUpdate(device){
+    const info=device.agent_update||{};
+    const section=document.createElement('section');
+    section.className='section cc-update-section';
+    const heading=document.createElement('h3');heading.textContent='Agent updates';
+    const versions=document.createElement('p');
+    versions.className='muted';
+    versions.textContent='Installed: '+(info.installed_version||device.agent_version||'Unknown')+' · Recommended: '+(info.recommended_version||'Not published');
+    const status=document.createElement('p');status.className='onboard-notice';
+    status.setAttribute('role','status');
+    status.textContent=updateStatus(device);
+    section.append(heading,versions,status);
+    const note=document.createElement('p');note.className='muted';
+    const notices={
+        signed_release_feed_not_configured:'The signed update feed has not been configured by this server.',
+        signed_update_trust_not_configured:'This Agent has not been configured to trust signed update releases.',
+        agent_update_not_supported:'This Agent version does not support managed updates.',
+        local_full_control_required:'The device has not approved local Full Control.',
+        server_full_control_required:'Server Full Control is required for updates.',
+        operator_full_scope_required:'Sign in with Full Control authorization to update this device.',
+        account_full_grant_required:'Your account must have Full Control on this device.',
+        device_offline:'Connect the device before updating.',
+    };
+    if(info.state==='available'){
+        if(info.can_start&&device.managed_by_me){
+            note.textContent='The Agent will verify the signed release and perform a health-checked activation with rollback. Privileged helper updates are separate. No automatic updates.';
+            const button=document.createElement('button');button.type='button';
+            button.textContent='Update Agent';button.className='primary';
+            button.onclick=()=>{
+                button.disabled=true;
+                const confirmation=document.createElement('div');confirmation.className='cc-update-confirm';
+                const question=document.createElement('p');question.textContent='Update '+device.display_name+' to '+info.recommended_version+'? This can briefly disconnect its Agent. The privileged helper will not be changed.';
+                const approve=document.createElement('button');approve.textContent='Confirm update';approve.className='primary';
+                const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';
+                cancel.onclick=()=>{confirmation.remove();button.disabled=false;};
+                approve.onclick=async()=>{
+                    approve.disabled=true;cancel.disabled=true;status.textContent='Starting signed Agent update…';
+                    try{
+                        const response=await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update','POST');
+                        const rolloutId=response.rollout.id;
+                        // Only two bounded mutation calls: stage, then activate.
+                        const staged=await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId)+'/advance','POST');
+                        if(staged.action==='staged')await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId)+'/advance','POST');
+                        for(let attempt=0;attempt<20;attempt++){
+                            const snapshot=await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId));
+                            const result=snapshot.rollout;
+                            status.textContent='Update: '+String(result.status||'running')+' · '+String(result.devices?.[0]?.state||'pending');
+                            if(['completed','failed','paused','canceled'].includes(result.status))break;
+                            await new Promise(resolve=>setTimeout(resolve,3000));
+                        }
+                        status.textContent+=' · Refresh device status to verify installed version.';
+                        await refresh();
+                    }catch(err){
+                        status.textContent='Update not completed: '+String(err.message||err);
+                    }finally{
+                        confirmation.remove();button.disabled=false;
+                    }
+                };
+                confirmation.append(question,approve,cancel);section.append(confirmation);
+                approve.focus();
+            };
+            section.append(button);
+        }else{
+            const reason=(info.blockers||[]).map(item=>notices[item]||item).join(' ');
+            note.textContent=reason||'Manual update unavailable; verify device permissions and signed release trust.';
+        }
+    }else{
+        note.textContent='Updates are manual. No automatic updates are enabled.';
+    }
+    section.append(note);
+    $('detailBody').append(section);
+}
 let detailDeviceId=null;
 function detail(d){
     detailDeviceId=String(d.id);
@@ -142,6 +220,7 @@ function detail(d){
       '<details class="detail-disclosure" id="cc-permissions"><summary>Permission breakdown <span>OAuth, server, account, device</span></summary><div class="permission-lines">'+summary.layers.map(layer=>'<div class="permission-line"><span>'+esc(layer.label)+'</span><strong>'+esc(displayPermissionName(layer.display??layer.profile??'Unknown'))+'</strong></div>').join('')+'</div><p class="muted">The lowest access layer determines effective permission. Local policy cannot be raised remotely.</p></details>'+
       '<details class="detail-disclosure" id="cc-device-info"><summary>Agent and device information <span>Version, identity, connection</span></summary><dl class="detail-data">'+row('Device ID',d.id)+row('Hostname',d.hostname)+row('OS / architecture',d.platform+' / '+d.architecture)+row('Agent / protocol',d.agent_version+' / '+d.agent_protocol_version)+row('Key generation',d.key_generation)+row('Approved',time(d.approved_at))+row('Last seen',time(d.last_seen))+row('Update status',updateStatus(d))+'</dl></details>'+
       '<details class="detail-disclosure" id="cc-capabilities"><summary>Capabilities <span>'+available.filter(c=>caps[c]===true).length+' available</span></summary><div class="capabilities">'+available.map(c=>'<span class="cap '+(caps[c]===true?'available':'')+'">'+esc(c.replaceAll('_',' '))+': '+(caps[c]===true?'available':'unavailable')+'</span>').join('')+'</div></details>';
+    appendManualAgentUpdate(d);
     if(d.managed_by_me){const section=document.createElement('section');section.className='section';section.innerHTML='<h3>Device access</h3><p class="muted">Only listed accounts can operate this device. Grants remain bounded by OAuth scopes, server permission and the local ceiling.</p>';for(const grant of d.grants||[]){const line=document.createElement('div');line.className='grant';const text=document.createElement('span');text.className='mono';text.textContent=grant.subject+' · '+grant.max_permission_profile;const remove=document.createElement('button');remove.textContent='Remove grant';remove.onclick=()=>action('/api/managed-devices/'+d.id+'/grants?subject='+encodeURIComponent(grant.subject),'DELETE');line.append(text,remove);section.append(line)}const form=document.createElement('form');form.innerHTML='<label>Account subject<input name="subject" required maxlength="255"></label><label>Grant<select name="profile"><option>READ_ONLY</option><option>STANDARD</option></select></label><button>Save explicit grant</button>';form.onsubmit=e=>{e.preventDefault();action('/api/managed-devices/'+d.id+'/grants','PUT',Object.fromEntries(new FormData(form)))};section.append(form);const rename=document.createElement('form');rename.innerHTML=`<label>Display name<input name="display_name" required maxlength="120" value="${esc(d.display_name)}"></label><button>Rename device</button>`;rename.onsubmit=e=>{e.preventDefault();action('/api/managed-devices/'+d.id,'PATCH',Object.fromEntries(new FormData(rename)))};section.append(rename);const revoke=document.createElement('button');revoke.textContent='Revoke device';revoke.className='danger';revoke.onclick=()=>{
     revoke.disabled=true;
     const confirmation=document.createElement('section');
@@ -549,16 +628,24 @@ $('browserTakeover').onclick=async()=>{
 setInterval(()=>{if(activePanel==='browser'&&!browserLivePaused&&!document.hidden)refreshBrowserFrame()},2500);
 
 const linuxCommands=[
-    ['install','Install CommandCore (Agent + Full Control helper)',"bash -o pipefail -c 'curl -fsSL "+location.origin+"/install/linux-ready | bash'"],
+    ['install','Install CommandCore (Agent + locally approved helper)',"bash -o pipefail -c 'curl -fsSL "+location.origin+"/install/linux-ready | bash'"],
     ['status','Check connection status','commandcore-agent status'],
     ['activity','Watch CommandCore activity','commandcore-agent activity'],
     ['follow','Watch live service logs','journalctl --user -u commandcore-agent.service -f'],
     ['service','Check service status','systemctl --user status commandcore-agent.service'],
     ['recent','View recent logs','journalctl --user -u commandcore-agent.service -n 100 --no-pager'],
-    ['fallback','If the agent command is not found','~/.local/bin/commandcore-agent activity']
+    ['fallback','If the agent command is not found','~/.local/bin/commandcore-agent status']
 ];
-function commandBlock(key){
-    const command=linuxCommands.find(entry=>entry[0]===key);
+const windowsCommands=[
+    ['install','Install CommandCore on Windows PowerShell',
+        "$setup = Join-Path $env:TEMP 'commandcore-install.ps1'; Invoke-WebRequest -UseBasicParsing -Uri '"+location.origin+"/install/windows' -OutFile $setup; & $setup"],
+    ['status','Check Agent connection',
+        "& ((Get-Content (Join-Path $env:LOCALAPPDATA 'CommandCore\\Agent\\active.json') -Raw | ConvertFrom-Json).binary) status"],
+    ['service','Check scheduled Agent task',"Get-ScheduledTask -TaskName 'CommandCore Agent'"]
+];
+function commandBlock(key,os='linux'){
+    const list=os==='windows'?windowsCommands:linuxCommands;
+    const command=list.find(entry=>entry[0]===key);
     if(!command)return '';
     return '<div class="onboard-command" data-command-key="'+esc(key)+'"><div class="onboard-command-head"><span>'+esc(command[1])+'</span><button type="button" class="copy-command" data-copy-command="'+esc(key)+'" aria-label="Copy '+esc(command[1])+' command">Copy</button></div><pre><code>'+esc(command[2])+'</code></pre></div>';
 }
@@ -567,65 +654,105 @@ function connectionSummary(){
     const online=visible.filter(item=>item.connected);
     return online.length+' of '+visible.length+' authorized device(s) online'+(online.length?': '+online.map(item=>item.display_name).join(', '):'.')+'. Confirm the new hostname appears online before treating connection as verified.';
 }
-function openAddDevice(){
-    detailDeviceId=null;
-    $('detailTitle').textContent='Add a device';
+// The browser OS is only a hint. A person can install onto a different machine.
+function detectInstallOS(){
+    const ua=String(navigator.userAgent||'');
+    const platform=String(navigator.userAgentData?.platform||navigator.platform||'');
+    if(/Android|iPhone|iPad|iPod|Macintosh|MacIntel|Mac OS/i.test(platform+' '+ua))return null;
+    if(/Windows|Win32|Win64/i.test(platform+' '+ua))return 'windows';
+    if(/Linux|Ubuntu|X11/i.test(platform+' '+ua))return 'linux';
+    return null;
+}
+let selectedInstallOS=null,installSelectionSerial=0;
+async function verifyInstallAvailability(os,status,installCopy,serial){
+    const url=os==='linux'?'/install/linux-ready':'/install/windows';
+    try{
+        const response=await fetch(url,{method:os==='linux'?'HEAD':'GET',cache:'no-store',credentials:'same-origin'});
+        if(serial!==installSelectionSerial||!status.isConnected)return;
+        if(!response.ok)throw Error('Installer not published');
+        if(os==='windows'){
+            const body=await response.text();
+            // The Windows installer is a template until public release tooling
+            // substitutes all trust pins. Never enable a copyable unsafe template.
+            if(body.length>65536||body.includes('__COMMANDCORE_')||
+               body.includes('commandcore.example.com')||
+               !body.includes('ReleasePublicKey')||!body.includes('VerifierSha256'))
+                throw Error('Signed Windows release is not yet packaged');
+            if(serial!==installSelectionSerial||!status.isConnected)return;
+        }
+        status.textContent=os==='linux'?
+            'Signed Linux installer is ready. Run as your normal user, approve enrollment and (for Full Control) the local OS administrator request.':
+            'Packaged Windows Agent installer is available. Run in Windows PowerShell, approve enrollment, then confirm the connected capabilities.';
+        if(installCopy)installCopy.disabled=false;
+    }catch(e){
+        if(serial!==installSelectionSerial||!status.isConnected)return;
+        status.textContent=os==='linux'?
+            'Signed Linux installation is not currently available. Copy is disabled.':
+            'Windows setup is not yet verified for public installation. Copy is disabled; do not run an unpinned script.';
+    }
+}
+function renderAddDevice(){
+    const os=selectedInstallOS,serial=++installSelectionSerial;
+    const detected=detectInstallOS();
     $('detailBody').innerHTML=
-       '<div class="onboard-panel">'+
-       '<div class="onboard-intro"><strong>Linux setup</strong><p>Install as your regular Linux user. Do not use sudo for this command. Follow progress in the machine’s terminal, then approve its enrollment here.</p></div>'+
-       '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">01</span><div><h3>Install CommandCore</h3><p>Run the installer on the new Linux device.</p></div></div>'+
-       commandBlock('install')+
-       '<p id="ccLinuxReadyStatus" class="onboard-notice" role="status">Checking signed Agent + helper release availability…</p></section>'+
-       '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">02</span><div><h3>Connect your device</h3><p>Enrollment requires explicit verification and account approval.</p></div></div>'+
-       '<ol class="onboard-instructions"><li>Wait for the installer to finish and check its terminal result.</li><li>Open the enrollment link printed on the new device and sign in.</li><li>Compare the device details and verification code, then approve the enrollment.</li><li>Verify the device is online in Devices. Approval alone does not prove the agent connected.</li></ol>'+
-       '<div id="enrollmentLive" class="onboard-live" aria-live="polite">Checking enrollment requests…</div>'+
-       '<div id="onboardOnline" class="onboard-connected" aria-live="polite">Checking connected devices…</div>'+
-       '<button type="button" id="reviewEnrollments" class="onboard-secondary">Review pending enrollments</button></section>'+
-       '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">03</span><div><h3>Verify installation</h3><p>Check the agent connection and service state after enrollment.</p></div></div>'+commandBlock('status')+commandBlock('service')+'</section>'+
-       '<section class="onboard-section onboard-recommended"><div class="onboard-section-head"><span class="onboard-step">04</span><div><h3>Monitor activity</h3><p>Recommended: keep this command running to see CommandCore operations.</p></div></div>'+commandBlock('activity')+'</section>'+
-       '<details class="onboard-troubleshooting"><summary>Troubleshooting and existing installations</summary>'+
-       '<p>For diagnostics, inspect live or recent service logs. If the CLI is not on PATH, use the absolute command below.</p>'+
-       commandBlock('follow')+commandBlock('recent')+commandBlock('fallback')+
-       '<div class="onboard-existing"><h3>Already installed?</h3><p>Use the existing agent configuration to reconnect or upgrade. A supported installer should preserve the device identity, but check the installer’s behavior before rerunning it. Never delete <code>~/.config/commandcore/agent.json</code> as routine troubleshooting. Never replace unrelated services.</p>'+
-       '<p>Existing verified legacy installations may use a different service or binary path. Inspect those before making changes.</p>'+
-       '<p>If enrollment must be restarted, follow your existing agent’s documented procedure; do not reset keys or identity without a recovery plan.</p></div></details>'+
-       '<section class="onboard-windows"><h3>Windows</h3><p>Not yet production-ready. This guide covers Linux only.</p></section>'+
-       '</div>';
-    // Do not offer a partly configured Agent-only command as Full Control ready.
+        '<div class="onboard-panel">'+
+        '<div class="onboard-intro"><strong>Connect a computer</strong><p>Select the operating system of the machine you want to add. Browser detection is only a suggestion; it might not be the target device.</p></div>'+
+        '<div class="onboard-os-choices" role="group" aria-label="Target device operating system">'+
+        '<button type="button" data-install-os="linux" class="'+(os==='linux'?'selected':'')+'" aria-pressed="'+(os==='linux')+'">Linux</button>'+
+        '<button type="button" data-install-os="windows" class="'+(os==='windows'?'selected':'')+'" aria-pressed="'+(os==='windows')+'">Windows</button></div>'+
+        '<p class="muted">'+(os?(detected===os?'Detected from this browser; choose the other OS if installing elsewhere.':'Selected for the target device.'):'Could not determine the target operating system. Select Linux or Windows to continue.')+'</p>'+
+        (os?
+        '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">01</span><div><h3>Install CommandCore</h3><p>'+(os==='linux'?'Run in the Linux terminal without sudo.':'Run in PowerShell as the intended Windows user.')+'</p></div></div>'+
+        commandBlock('install',os)+
+        '<p id="ccInstallerReadyStatus" class="onboard-notice" role="status">Checking signed installer availability…</p></section>'+
+        '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">02</span><div><h3>Approve enrollment</h3><p>Verify the code and device identity in CommandCore before granting access.</p></div></div>'+
+        '<ol class="onboard-instructions"><li>Run the command on the device you are adding.</li><li>Open the enrollment link printed on that device.</li><li>Verify its code and approve the requested permission.</li><li>Check that the device is online after enrollment.</li></ol>'+
+        '<div id="enrollmentLive" class="onboard-live" aria-live="polite">Checking enrollment requests…</div>'+
+        '<div id="onboardOnline" class="onboard-connected" aria-live="polite">Checking connected devices…</div>'+
+        '<button type="button" id="reviewEnrollments" class="onboard-secondary">Review pending enrollments</button></section>'+
+        '<section class="onboard-section"><div class="onboard-section-head"><span class="onboard-step">03</span><div><h3>Verify installation</h3><p>Confirm the Agent is running and connected.</p></div></div>'+commandBlock('status',os)+commandBlock('service',os)+'</section>'+
+        (os==='linux'?
+            '<details class="onboard-troubleshooting"><summary>Linux diagnostics</summary>'+commandBlock('activity')+commandBlock('follow')+commandBlock('recent')+commandBlock('fallback')+'<p>Re-running the signed installer at the same version should preserve a healthy Agent and helper.</p></details>':
+            '<p class="onboard-notice">Windows Agent capabilities differ from Linux. Privileged helper support must be verified separately; do not assume Linux Full Control behavior.</p>'):
+        '<p class="onboard-notice" role="status">Choose Linux or Windows to see the appropriate verified installer.</p>')+
+        '</div>';
+    $('detailBody').querySelectorAll('[data-install-os]').forEach(button=>{
+        button.onclick=()=>{selectedInstallOS=button.dataset.installOs;renderAddDevice();};
+    });
+    if(!os)return;
     const installCopy=$('detailBody').querySelector('[data-copy-command="install"]');
-    const readyStatus=$('detailBody').querySelector('#ccLinuxReadyStatus');
     if(installCopy)installCopy.disabled=true;
-    fetch('/install/linux-ready',{method:'HEAD',cache:'no-store',credentials:'same-origin'})
-        .then(response=>{
-            if(!readyStatus?.isConnected)return;
-            if(response.ok){
-                readyStatus.textContent='Signed Agent + privileged helper installer is published. Run this one command as your normal Linux user, approve the OS administrator prompt once, then finish device enrollment in this panel. Later permission changes require no terminal command.';
-                if(installCopy)installCopy.disabled=false;
-            }else{
-                readyStatus.textContent='One-command Full Control installer is NOT published yet. This command is disabled until signed Agent and helper pins are available; no extra helper installation command is required from users.';
-            }
-        })
-        .catch(()=>{if(readyStatus?.isConnected)readyStatus.textContent='Cannot verify signed installer availability. The install command is disabled for safety.'});
+    const status=$('detailBody').querySelector('#ccInstallerReadyStatus');
+    if(status)verifyInstallAvailability(os,status,installCopy,serial);
     $('detailBody').querySelectorAll('[data-copy-command]').forEach(button=>{
         button.addEventListener('click',async()=>{
-            const cmd=linuxCommands.find(entry=>entry[0]===button.dataset.copyCommand);
-            if(!cmd)return;
+            if(button.disabled)return;
+            const command=(os==='windows'?windowsCommands:linuxCommands).find(entry=>entry[0]===button.dataset.copyCommand);
+            if(!command)return;
             try{
-                await navigator.clipboard.writeText(cmd[2]);
+                await navigator.clipboard.writeText(command[2]);
                 button.textContent='Copied';button.dataset.copyState='success';
-                setTimeout(()=>{if(button.isConnected){button.textContent='Copy';button.dataset.copyState=''}},1700);
+                setTimeout(()=>{if(button.isConnected){button.textContent='Copy';button.dataset.copyState='';}},1700);
             }catch(e){
                 button.textContent='Select to copy';button.dataset.copyState='error';
-                const selection=getSelection();const range=document.createRange();
+                const selection=getSelection(),range=document.createRange();
                 range.selectNodeContents(button.closest('.onboard-command').querySelector('code'));
                 selection?.removeAllRanges();selection?.addRange(range);
             }
         });
     });
-    $('reviewEnrollments').onclick=()=>{$('detail').close();showPanel('pending')};
+    const review=$('reviewEnrollments');
+    if(review)review.onclick=()=>{$('detail').close();showPanel('pending');};
     const live=$('enrollmentLive');
-    live.textContent=state.pending.length?state.pending.length+' enrollment request(s) waiting for review.':'Waiting for enrollment — requests appear here automatically.';
-    const connected=$('onboardOnline');if(connected)connected.textContent=connectionSummary();
+    if(live)live.textContent=state.pending.length?state.pending.length+' enrollment request(s) awaiting review.':'Waiting for enrollment — requests will appear here.';
+    const connected=$('onboardOnline');
+    if(connected)connected.textContent=connectionSummary();
+}
+function openAddDevice(){
+    detailDeviceId=null;
+    $('detailTitle').textContent='Add a device';
+    selectedInstallOS=detectInstallOS();
+    renderAddDevice();
     $('detail').showModal();$('detail').scrollTop=0;
 }
 $('add').onclick=openAddDevice;
