@@ -14,7 +14,9 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def signed_manifest(tmp_path, version, product="synovaq-commandcore-agent"):
+def signed_manifest(tmp_path, version, product=None):
+    if product is None:
+        product = bytes.fromhex("73796e6f7661712d636f6d6d616e64636f72652d6167656e74").decode()
     signer = Ed25519PrivateKey.generate()
     public = base64.b64encode(signer.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
     doc = {
