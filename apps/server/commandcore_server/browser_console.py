@@ -85,6 +85,7 @@ HTML = """<!doctype html>
           <span>Loading an authenticated, private Chromium frame…</span>
         </div>
         <img id="viewport" alt="Live remote Chromium viewport. Click the image to interact with the page." draggable="false" hidden>
+        <div id="pending-click-marker" aria-hidden="true" hidden></div>
       </div>
       <div class="viewer-footer">
         <div class="viewer-live"><span class="live-indicator" aria-hidden="true"></span><span id="connection-status">Connecting</span></div>
@@ -98,6 +99,12 @@ HTML = """<!doctype html>
         <h2>Your browser. Your actions.</h2>
         <p id="status" class="status" role="status" aria-live="polite">Connecting to your browser…</p>
         <p class="security-note">AI actions and private screenshots stay blocked until you return control.</p>
+      </section>
+      <section class="sidebar-card" id="pending-approval" hidden>
+        <div class="card-heading"><h2>AI requested a click</h2><span>YOUR APPROVAL</span></div>
+        <p class="card-copy">Review the live page before approving. This permits exactly one click at the highlighted position, not future website actions.</p>
+        <p id="pending-location" class="action-feedback">Waiting for request</p>
+        <button id="approve-pending" class="accent-button" type="button">Approve this one click</button>
       </section>
       <section class="sidebar-card">
         <div class="card-heading"><h2>Navigate the page</h2><span>REMOTE INPUT</span></div>

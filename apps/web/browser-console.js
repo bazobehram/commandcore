@@ -10,6 +10,23 @@
   const updated = document.getElementById("frame-updated");
   const actionFeedback = document.getElementById("action-status");
   const address = document.getElementById("browser-address");
+  const pendingCard = document.getElementById("pending-approval");
+  const pendingLocation = document.getElementById("pending-location");
+  const pendingMarker = document.getElementById("pending-click-marker");
+  const viewportStage = document.getElementById("viewport-stage");
+  let pendingRequested = false;
+  function markPending(point) {
+    if (!pendingMarker) return;
+    if (!point || !image.naturalWidth || !viewportStage) {
+      pendingMarker.hidden = true;
+      return;
+    }
+    const rect = image.getBoundingClientRect();
+    const stage = viewportStage.getBoundingClientRect();
+    pendingMarker.style.left = (rect.left-stage.left+rect.width*point.x/image.naturalWidth)+"px";
+    pendingMarker.style.top = (rect.top-stage.top+rect.height*point.y/image.naturalHeight)+"px";
+    pendingMarker.hidden = false;
+  }
   let busy = false, polling = false, hoverInFlight = false;
   let hoverTimer = null, lastHoverAt = 0;
   let touchStart = null, suppressClickUntil = 0;
@@ -201,6 +218,26 @@
     await drawScreenshot(response);
     } finally {polling = false;}
   }
+  async function loadPending() {
+    if (!pendingCard || humanFinished || pendingRequested || busy) return;
+    pendingRequested = true;
+    try {
+      const response = await boundedFetch(base + "/action", {
+        method: "POST", headers: {"Content-Type":"application/json", "Accept":"application/json"},
+        credentials:"same-origin", body: JSON.stringify({name:"browser.pending",args:{}})
+      }, 6000);
+      if (!response.ok) { pendingCard.hidden = true; return; }
+      const result = await response.json();
+      const point = result?.pending;
+      if (Number.isInteger(point?.x) && Number.isInteger(point?.y)) {
+        pendingCard.hidden = false;
+        markPending(point);
+        if (pendingLocation) pendingLocation.textContent =
+          "Requested position: " + point.x + ", " + point.y + ". Check the page above.";
+      } else {pendingCard.hidden = true; markPending(null);}
+    } catch (_) { pendingCard.hidden = true; markPending(null); }
+    finally { pendingRequested = false; }
+  }
   async function action(name, args = {}) {
     if (busy || humanFinished) return false;
     setBusy(true);
@@ -356,6 +393,15 @@
       action("browser.keypress", {key: key[0].toUpperCase() + key.slice(1)});
     });
   }
+  document.getElementById("approve-pending")?.addEventListener("click", async () => {
+    if (!confirm("Approve the requested click at the shown position? Review the page first.")) return;
+    const done = await action("browser.approve_click");
+    if (done && pendingCard) { pendingCard.hidden = true; markPending(null); }
+  });
+  // The private console receives only a short-lived proposed coordinate.
+  // The gateway revalidates the owned page and consumes approval once.
+  setInterval(() => { if (!document.hidden) void loadPending(); }, 2500);
+  void loadPending();
   document.getElementById("resume").addEventListener("click", async () => {
     if (busy) return;
     setBusy(true);

@@ -212,6 +212,8 @@ class OwnedSession:
     cursor_x: int | None = None
     cursor_y: int | None = None
     action_running: bool = False
+    # Transient, owner-only proposed click. No credentials, screenshots or durable grants.
+    pending_click: dict[str, Any] | None = None
     # Short-lived, owner-scoped navigation state. Never written to recovery journals.
     link_targets: dict[str, dict[str, Any]] = field(default_factory=dict)
     navigation_pages: list[dict[str, str]] = field(default_factory=list)
@@ -579,6 +581,8 @@ class BrowserGateway:
             "browser.type",
             "browser.keypress",
             "browser.scroll",
+            "browser.pending",
+            "browser.approve_click",
         }:
             raise BrowserError("human action not permitted")
         return await self.call(
@@ -682,6 +686,7 @@ class BrowserGateway:
             ):
                 raise BrowserError("handoff not found or expired")
             old_until = entry.handoff_until
+            entry.pending_click = None
             entry.handoff_token = None
             entry.handoff_until = 0.0
             entry.paused_for_human = False
@@ -1170,7 +1175,10 @@ class BrowserGateway:
         human: bool = False,
         human_token: str | None = None,
     ) -> dict[str, Any]:
-        if name not in BROWSER_TOOL_NAMES and not (human and name == "browser.reload"):
+        if name not in BROWSER_TOOL_NAMES and not (
+            human
+            and name in {"browser.reload", "browser.pending", "browser.approve_click"}
+        ):
             raise BrowserError("unknown browser tool")
         owner = (issuer, subject, client_id)
         # Revalidate durable ownership on every existing-session access, not
@@ -1241,6 +1249,36 @@ class BrowserGateway:
             elif entry.paused_for_human:
                 raise BrowserError("browser paused for human; wait for explicit resume")
 
+            if name == "browser.pending":
+                pending = entry.pending_click
+                if not human or not pending:
+                    return {"pending": None}
+                if pending["expires_at"] < time.monotonic():
+                    entry.pending_click = None
+                    return {"pending": None}
+                return {"pending": {"x": pending["x"], "y": pending["y"]}}
+            if name == "browser.approve_click":
+                if not human:
+                    raise BrowserError("private human approval required")
+                pending = entry.pending_click
+                # Consume before checking the live page. One approval cannot replay.
+                entry.pending_click = None
+                if not pending or pending["expires_at"] < time.monotonic():
+                    raise BrowserError(
+                        "proposed click expired; inspect the page manually"
+                    )
+                # No clicks at a stale coordinate after navigation or a fresh page.
+                current = await self._snapshot_private_frame(entry)
+                if current.get("url") != pending["url"]:
+                    raise BrowserError(
+                        "page changed; inspect the page and click manually"
+                    )
+                name = "browser.click"
+                args = {"x": pending["x"], "y": pending["y"]}
+            elif human and name not in {"browser.observe", "browser.move"}:
+                # Manual typing, navigation and scrolling invalidate a queued click.
+                entry.pending_click = None
+
             if name == "browser.elements":
                 if human:
                     raise BrowserError("human controls use the private console")
@@ -1266,7 +1304,12 @@ class BrowserGateway:
             try:
                 if name != "browser.follow":
                     entry.link_targets.clear()
+                if not human and name != "browser.click":
+                    entry.pending_click = None
                 await self._perform_action(owner, entry, name, args, human=human)
+                if not human and name == "browser.click":
+                    # A completed safe click supersedes a previously blocked proposal.
+                    entry.pending_click = None
                 if human and name == "browser.move":
                     # Pointer hover needs no screenshot: the next scheduled
                     # private frame poll captures any visual hover effect.
@@ -1460,6 +1503,16 @@ class BrowserGateway:
                             result.get("type") != "boolean"
                             or result.get("value") is not True
                         ):
+                            # Keep the request only for an explicit authenticated
+                            # private-console approval. Never dispatch the click
+                            # to the page and never grant general site access.
+                            if entry.frame_url:
+                                entry.pending_click = {
+                                    "x": x,
+                                    "y": y,
+                                    "url": entry.frame_url,
+                                    "expires_at": time.monotonic() + 120,
+                                }
                             raise BrowserManualStepRequired(
                                 "Manual step required. This click was not performed. "
                                 "The current Browser policy requires private control for website "
