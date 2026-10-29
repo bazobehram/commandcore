@@ -4,7 +4,6 @@ from pathlib import Path
 import html
 import re
 import shutil
-import sys
 
 import markdown
 
