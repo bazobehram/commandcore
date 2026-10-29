@@ -230,6 +230,7 @@ def prepare(
                 "sudo",
                 "--",
                 sys.executable,
+                "-B",
                 str(scripts_dir / "install_signed_linux_helper.py"),
                 "--manifest",
                 str(manifest),

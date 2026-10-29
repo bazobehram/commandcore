@@ -101,25 +101,21 @@ def _root_dir(path: Path) -> None:
 
 
 def _approval(version: str, username: str) -> None:
-    # Root-capable installation requires explicit local approval. Reading after
-    # writing through the same buffered TTY file object may attempt to seek.
-    message = (
-        f"Install a root-capable CommandCore helper {version} for {username}?\n"
-        "This grants the locally approved ceiling FULL_CONTROL, while "
-        "server and account permissions remain separate.\n"
-        "Type ENABLE FULL_CONTROL to approve: "
-    )
+    """Require local terminal presence; sudo has already authorized root.
+
+    The user explicitly chose FULL_CONTROL when approving enrollment in the
+    panel, and Linux authorization happens through a real local sudo command.
+    Do not demand another typed phrase for the same one-time installation.
+    """
     terminal = os.open("/dev/tty", os.O_RDWR | os.O_CLOEXEC)
     try:
-        os.write(terminal, message.encode("utf-8"))
-        answer = bytearray()
-        while len(answer) < 128:
-            char = os.read(terminal, 1)
-            if not char or char in (b"\r", b"\n"):
-                break
-            answer.extend(char)
-        if answer.decode("utf-8", errors="replace").strip() != "ENABLE FULL_CONTROL":
-            raise PermissionError("local administrator approval declined")
+        os.write(
+            terminal,
+            (
+                f"Installing signed CommandCore root helper {version} for {username} "
+                "after local sudo authorization.\n"
+            ).encode("utf-8"),
+        )
     finally:
         os.close(terminal)
 
