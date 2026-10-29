@@ -48,3 +48,6 @@ h1{font-size:clamp(26px,3vw,40px);font-weight:760;letter-spacing:-.05em;line-hei
  .control-sidebar{grid-template-columns:1fr}.finish-card{grid-column:auto;grid-row:auto}.browser-chrome{gap:9px;padding:9px}.tab-tag{display:none}
  .browser-addressbar{padding:7px 9px;gap:7px}.address-readonly{display:none}.viewport-stage,.viewport-empty{min-height:200px}#viewport{max-height:60vh}.viewer-hint{display:none}.viewer-footer{flex-wrap:wrap}.frame-updated{margin-left:auto}.workspace-footer{display:block}.workspace-footer span{display:block}}
 @media(prefers-reduced-motion:reduce){.loading-ring{animation:none}}
+
+/* A pending single-click approval is owner-only and must remain hidden by default. */
+#pending-approval[hidden] { display: none !important; }

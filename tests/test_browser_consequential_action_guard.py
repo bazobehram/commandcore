@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import time
+import secrets
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from commandcore_server.browser_gateway import (
@@ -172,6 +174,125 @@ class ConsequentialActionGuardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [call.args[0] for call in self.cdp.send.await_args_list],
             ["Input.dispatchMouseEvent"] * 3,
+        )
+
+    async def test_blocked_click_can_be_approved_once_only_by_private_owner(self):
+        self.entry.frame_url = "https://example.com/settings"
+        self.cdp.send = AsyncMock(
+            return_value={"result": {"type": "boolean", "value": False}}
+        )
+        with (
+            self._patches()[0],
+            self._patches()[1],
+            self._patches()[2],
+            self._patches()[3],
+            self.assertRaisesRegex(BrowserError, "browser.handoff"),
+        ):
+            await self.gateway._perform_action(
+                self.owner, self.entry, "browser.click", {"x": 110, "y": 180}
+            )
+        self.assertEqual(self.entry.pending_click["x"], 110)
+        self.assertEqual(self.entry.pending_click["y"], 180)
+        self.assertEqual(
+            self.entry.pending_click["url"], "https://example.com/settings"
+        )
+        self.gateway.sessions[self.owner] = self.entry
+        token = secrets.token_urlsafe(32)
+        self.entry.handoff_token = token
+        self.entry.paused_for_human = True
+        self.entry.handoff_until = time.monotonic() + 600
+        with self.assertRaisesRegex(BrowserError, "unknown browser tool"):
+            await self.gateway.call(
+                subject=self.owner[1],
+                issuer=self.owner[0],
+                client_id=self.owner[2],
+                name="browser.approve_click",
+                args={},
+            )
+        pending = await self.gateway.human_call(
+            token, self.owner[1], "browser.pending", {}, issuer=self.owner[0]
+        )
+        self.assertEqual(pending, {"pending": {"x": 110, "y": 180}})
+        with (
+            patch.object(
+                self.gateway,
+                "_snapshot_private_frame",
+                new=AsyncMock(return_value={"url": "https://example.com/settings"}),
+            ),
+            patch.object(self.gateway, "_perform_action", new=AsyncMock()) as act,
+            patch.object(
+                self.gateway,
+                "_snapshot",
+                new=AsyncMock(
+                    return_value={
+                        "url": "https://example.com/settings",
+                        "screenshot_base64": "dummy",
+                    }
+                ),
+            ),
+            patch.object(self.gateway, "_publish_frame"),
+        ):
+            await self.gateway.human_call(
+                token, self.owner[1], "browser.approve_click", {}, issuer=self.owner[0]
+            )
+            act.assert_awaited_once()
+            self.assertEqual(act.await_args.args[2], "browser.click")
+            self.assertEqual(act.await_args.args[3], {"x": 110, "y": 180})
+            self.assertTrue(act.await_args.kwargs["human"])
+            with self.assertRaisesRegex(BrowserError, "expired"):
+                await self.gateway.human_call(
+                    token,
+                    self.owner[1],
+                    "browser.approve_click",
+                    {},
+                    issuer=self.owner[0],
+                )
+        self.assertIsNone(self.entry.pending_click)
+
+    async def test_approval_rejects_changed_page_and_clears_pending(self):
+        self.gateway.sessions[self.owner] = self.entry
+        token = secrets.token_urlsafe(32)
+        self.entry.handoff_token = token
+        self.entry.paused_for_human = True
+        self.entry.handoff_until = time.monotonic() + 600
+        self.entry.pending_click = {
+            "x": 10,
+            "y": 20,
+            "url": "https://example.com/settings",
+            "expires_at": time.monotonic() + 20,
+        }
+        with (
+            patch.object(
+                self.gateway,
+                "_snapshot_private_frame",
+                new=AsyncMock(return_value={"url": "https://example.com/different"}),
+            ),
+            patch.object(self.gateway, "_perform_action", new=AsyncMock()) as act,
+            self.assertRaisesRegex(BrowserError, "page changed"),
+        ):
+            await self.gateway.human_call(
+                token, self.owner[1], "browser.approve_click", {}, issuer=self.owner[0]
+            )
+        act.assert_not_awaited()
+        self.assertIsNone(self.entry.pending_click)
+
+    async def test_expired_click_is_not_offered(self):
+        self.gateway.sessions[self.owner] = self.entry
+        token = secrets.token_urlsafe(32)
+        self.entry.handoff_token = token
+        self.entry.paused_for_human = True
+        self.entry.handoff_until = time.monotonic() + 600
+        self.entry.pending_click = {
+            "x": 10,
+            "y": 20,
+            "url": "https://example.com",
+            "expires_at": time.monotonic() - 1,
+        }
+        self.assertEqual(
+            await self.gateway.human_call(
+                token, self.owner[1], "browser.pending", {}, issuer=self.owner[0]
+            ),
+            {"pending": None},
         )
 
 
