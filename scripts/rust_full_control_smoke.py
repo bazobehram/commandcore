@@ -213,31 +213,39 @@ def main():
             wait_helper_authenticated(sock, secret)
             # Verify the Agent's actual unprivileged account can authenticate,
             # rather than merely confirming that root can probe the socket.
-            user_probe = subprocess.run(
-                [
-                    "setpriv",
-                    f"--reuid={nobody.pw_uid}",
-                    f"--regid={nogroup.gr_gid}",
-                    "--clear-groups",
-                    str(BIN),
-                    "capabilities",
-                ],
-                cwd=ROOT,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=8,
-            )
-            if user_probe.returncode:
-                raise RuntimeError(
-                    "unprivileged native capability probe failed: "
-                    + user_probe.stderr[:2000]
+            # Root can probe before Unix socket/group permissions are visible
+            # to the nonroot network Agent. Require the actual Agent UID to
+            # observe FULL_CONTROL, with a bounded readiness window.
+            deadline = time.monotonic() + 20
+            last_result = ""
+            while time.monotonic() < deadline:
+                user_probe = subprocess.run(
+                    [
+                        "setpriv",
+                        f"--reuid={nobody.pw_uid}",
+                        f"--regid={nogroup.gr_gid}",
+                        "--clear-groups",
+                        str(BIN),
+                        "capabilities",
+                    ],
+                    cwd=ROOT,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
                 )
-            probe = json.loads(user_probe.stdout)
-            if probe.get("privileged_helper") is not True:
+                last_result = (user_probe.stderr or user_probe.stdout)[-1500:]
+                if user_probe.returncode == 0:
+                    probe = json.loads(user_probe.stdout)
+                    if (
+                        probe.get("privileged_helper") is True
+                        and probe.get("local_max_permission_profile") == "FULL_CONTROL"
+                    ):
+                        break
+                time.sleep(0.2)
+            else:
                 raise RuntimeError(
-                    "unprivileged native helper capability unavailable: "
-                    + user_probe.stdout[:1000]
+                    "unprivileged native helper capability not ready: " + last_result
                 )
             server = subprocess.Popen(
                 [sys.executable, "-m", "commandcore_server.main"],

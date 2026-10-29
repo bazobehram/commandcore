@@ -420,3 +420,156 @@ def test_managed_rename_preserves_identity_permission_and_grants(panel):
         ).status_code
         == 409
     )
+
+
+def test_one_step_self_permission_is_atomic_and_reversible(panel):
+    client, db, _, agents = panel
+    did = approve(client, begin(client))
+    path = "/api/managed-devices/" + did + "/my-permission"
+    full = {**operator(), "test-full-scope": "yes"}
+    grants = lambda: {
+        g["subject"]: g["max_permission_profile"]
+        for g in db.list_device_grants("registry", did)
+    }
+    previous = grants().get("operator")
+    assert previous is not None
+    body = {
+        "profile": "FULL_CONTROL",
+        "expected_profile": "STANDARD",
+        "expected_grant": previous,
+    }
+    assert client.put(path, json=body).status_code == 401
+    assert client.put(path, headers=operator("stranger"), json=body).status_code == 404
+    assert client.put(path, headers=operator(), json=body).status_code == 403
+    assert client.put(path, headers=full, json=body).status_code == 409
+    assert db.get_device(did)["permission_profile"] == "STANDARD"
+    assert grants()["operator"] == previous
+
+    agents.online_ids = [did]
+    db.mark_online(
+        did,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={
+            "privileged_helper": True,
+            "local_max_permission_profile": "STANDARD",
+        },
+        agent_protocol_version="1",
+    )
+    assert client.put(path, headers=full, json=body).status_code == 409
+    db.mark_online(
+        did,
+        ip="127.0.0.1",
+        agent_version="candidate",
+        capabilities={
+            "privileged_helper": True,
+            "local_max_permission_profile": "FULL_CONTROL",
+        },
+        agent_protocol_version="1",
+    )
+    assert (
+        client.put(
+            path,
+            headers={**full, "origin": "https://evil.example"},
+            json=body,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.put(
+            path,
+            headers=full,
+            json={
+                **body,
+                "expected_grant": "READ_ONLY"
+                if previous != "READ_ONLY"
+                else "STANDARD",
+            },
+        ).status_code
+        == 409
+    )
+
+    elevated = client.put(path, headers=full, json=body)
+    assert elevated.status_code == 200, elevated.text
+    assert elevated.headers["cache-control"] == "no-store"
+    assert db.get_device(did)["permission_profile"] == "FULL_CONTROL"
+    assert grants()["operator"] == "FULL_CONTROL"
+    assert client.put(path, headers=full, json=body).status_code == 409
+
+    lowered = client.put(
+        path,
+        headers=operator(),
+        json={
+            "profile": "STANDARD",
+            "expected_profile": "FULL_CONTROL",
+            "expected_grant": "FULL_CONTROL",
+        },
+    )
+    assert lowered.status_code == 200, lowered.text
+    assert db.get_device(did)["permission_profile"] == "STANDARD"
+    assert grants()["operator"] == "STANDARD"
+    assert (
+        client.put(
+            path,
+            headers=full,
+            json={
+                "profile": "FULL_CONTROL",
+                "expected_profile": "STANDARD",
+                "expected_grant": "FULL_CONTROL",
+            },
+        ).status_code
+        == 409
+    )
+    assert (
+        client.put(
+            path,
+            headers=full,
+            json={
+                "profile": "FULL_CONTROL",
+                "expected_profile": "STANDARD",
+                "expected_grant": "STANDARD",
+            },
+        ).status_code
+        == 200
+    )
+    assert db.get_device(did)["permission_profile"] == "FULL_CONTROL"
+    assert grants()["operator"] == "FULL_CONTROL"
+    assert any(
+        e["tool"] == "enrollment.device.self_permission"
+        for e in client.get(
+            "/api/managed-devices/" + did + "/audit", headers=full
+        ).json()["events"]
+    )
+
+
+def test_one_step_self_permission_refuses_offline_local_ceiling_and_registry(panel):
+    client, db, _, agents = panel
+    did = approve(client, begin(client))
+    path = "/api/managed-devices/" + did + "/my-permission"
+    prior = next(
+        g["max_permission_profile"]
+        for g in db.list_device_grants("registry", did)
+        if g["subject"] == "operator"
+    )
+    request = {
+        "profile": "FULL_CONTROL",
+        "expected_profile": "STANDARD",
+        "expected_grant": prior,
+    }
+    full = {**operator(), "test-full-scope": "yes"}
+    assert client.put(path, headers=full, json=request).status_code == 409
+    agents.online_ids = [did]
+    assert client.put(path, headers=full, json=request).status_code == 409
+    assert db.get_device(did)["permission_profile"] == "STANDARD"
+    assert (
+        client.put(
+            path,
+            headers=full,
+            json={
+                "profile": "STANDARD",
+                "expected_profile": "READ_ONLY",
+                "expected_grant": prior,
+            },
+        ).status_code
+        == 409
+    )

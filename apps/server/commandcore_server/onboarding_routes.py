@@ -108,6 +108,10 @@ class ManagedPermission(BaseModel):
     expected_profile: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"]
 
 
+class ManagedOwnPermission(ManagedPermission):
+    expected_grant: Literal["READ_ONLY", "STANDARD", "FULL_CONTROL"] | None = None
+
+
 def install_routes(
     app, db, settings, require_principal, same_origin, verifier, web_path, agents
 ):
@@ -476,6 +480,87 @@ def install_routes(
                 {"previous": body.expected_profile, "profile": body.profile},
             )
         return {"ok": True, "profile": body.profile}
+
+    @app.put("/api/managed-devices/{device_id}/my-permission")
+    async def set_own_permission(
+        device_id: str,
+        body: ManagedOwnPermission,
+        request: Request,
+        principal=authenticated,
+    ):
+        """Atomically set device policy and this manager's grant from one panel action.
+
+        Neither the server nor a panel can raise a local device ceiling. A
+        successful switch never installs a helper or modifies local policy.
+        """
+        mutation(request, principal)
+        manager(principal, device_id)
+        if principal.subject == settings.bootstrap_subject:
+            raise HTTPException(400, "registry owner cannot receive a delegated grant")
+        if body.profile == "FULL_CONTROL":
+            if not scope_allows(principal.scopes, FULL_SCOPE):
+                raise HTTPException(403, "full scope required")
+            if device_id not in await agents.online_device_ids():
+                raise HTTPException(
+                    409, "device must be online before enabling Full Control"
+                )
+
+        rank = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
+        with db.lock, db.conn:
+            current = db.get_device(device_id)
+            if not current or current["revoked_at"]:
+                raise HTTPException(409, "device revoked")
+            if current["permission_profile"] != body.expected_profile:
+                raise HTTPException(409, "device permission changed; refresh and retry")
+            row = db.conn.execute(
+                "SELECT max_permission_profile FROM device_grants WHERE device_id=? AND subject=?",
+                (device_id, principal.subject),
+            ).fetchone()
+            previous_grant = str(row[0]) if row else None
+            if previous_grant != body.expected_grant:
+                raise HTTPException(409, "account grant changed; refresh and retry")
+            caps = current["capabilities"]
+            ceiling = caps.get("local_max_permission_profile", "READ_ONLY")
+            if rank[body.profile] > rank.get(ceiling, 0):
+                raise HTTPException(409, "permission exceeds locally approved ceiling")
+            if body.profile == "FULL_CONTROL" and not caps.get(
+                "privileged_helper", False
+            ):
+                raise HTTPException(409, "local privileged helper not ready")
+            updated = db.conn.execute(
+                "UPDATE devices SET permission_profile=? WHERE id=? AND owner_id=? AND revoked_at IS NULL",
+                (body.profile, device_id, current["owner_id"]),
+            )
+            if updated.rowcount != 1:
+                raise HTTPException(409, "device permission change rejected")
+            db.conn.execute(
+                "INSERT INTO device_grants(device_id,subject,max_permission_profile,created_at,created_by) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(device_id,subject) DO UPDATE SET "
+                "max_permission_profile=excluded.max_permission_profile,"
+                "created_at=excluded.created_at,created_by=excluded.created_by",
+                (
+                    device_id,
+                    principal.subject,
+                    body.profile,
+                    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    principal.subject,
+                ),
+            )
+            service._audit(
+                principal.subject,
+                "enrollment.device.self_permission",
+                device_id,
+                device_id,
+                {
+                    "previous_server": body.expected_profile,
+                    "previous_grant": previous_grant,
+                    "profile": body.profile,
+                },
+            )
+        return JSONResponse(
+            {"ok": True, "profile": body.profile, "my_grant": body.profile},
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.put("/api/managed-devices/{device_id}/grants")
     async def grant_managed(
