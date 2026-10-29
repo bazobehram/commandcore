@@ -1,10 +1,14 @@
 """Public, read-only routes for explicitly published release files."""
 
+import base64
+import json
 import re
+import shlex
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 
 def install_distribution_routes(app: FastAPI, directory: str) -> None:
@@ -32,6 +36,105 @@ def install_distribution_routes(app: FastAPI, directory: str) -> None:
     @app.head("/install/linux", include_in_schema=False)
     def linux_installer():
         return published("linux.sh", "text/x-shellscript")
+
+    def one_command_linux_script() -> str:
+        # The published feed operator supplies *public*, out-of-band-reviewed
+        # release pins. Never retrieve trust anchors from the helper artifact.
+        if root is None:
+            raise HTTPException(503, "Signed one-command installer is not published")
+        settings = root / "linux-onboarding.json"
+        script = root / "linux.sh"
+        if any(f.resolve() != f or not f.is_file() for f in (settings, script)):
+            raise HTTPException(503, "Signed one-command installer is not published")
+        if settings.stat().st_size > 8192 or script.stat().st_size > 65536:
+            raise HTTPException(503, "Invalid published onboarding assets")
+        try:
+
+            def unique_keys(pairs):
+                values = {}
+                for key, value in pairs:
+                    if key in values:
+                        raise ValueError("Duplicate onboarding field")
+                    values[key] = value
+                return values
+
+            data = json.loads(settings.read_text(), object_pairs_hook=unique_keys)
+            keys = {
+                "schema_version",
+                "server_url",
+                "agent_public_key_b64",
+                "helper_release_url",
+                "helper_public_key_b64",
+                "helper_release_version",
+                "helper_bootstrap_url",
+                "helper_bootstrap_sha256",
+            }
+            if set(data) != keys or data["schema_version"] != 1:
+                raise ValueError("Wrong onboarding schema")
+            for field in ("agent_public_key_b64", "helper_public_key_b64"):
+                if len(base64.b64decode(data[field], validate=True)) != 32:
+                    raise ValueError("Invalid Ed25519 public key")
+            if not re.fullmatch(
+                r"[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?", data["helper_release_version"]
+            ):
+                raise ValueError("Invalid helper release version")
+            if not re.fullmatch(r"[a-f0-9]{64}", data["helper_bootstrap_sha256"]):
+                raise ValueError("Invalid helper bootstrap digest")
+            for field in ("server_url", "helper_release_url", "helper_bootstrap_url"):
+                url = urlsplit(data[field])
+                if (
+                    url.scheme != "https"
+                    or not url.hostname
+                    or url.username
+                    or url.password
+                    or url.query
+                    or url.fragment
+                    or any(ord(c) < 33 or ord(c) == 127 for c in data[field])
+                ):
+                    raise ValueError("Invalid onboarding HTTPS URL")
+            if urlsplit(data["server_url"]).path not in ("", "/"):
+                raise ValueError("Server URL must be an HTTPS origin")
+            body = script.read_text()
+            if (
+                not body.startswith("#!/bin/sh\n")
+                or "--prepare-full-control" not in body
+            ):
+                raise ValueError("Published installer cannot prepare the helper")
+        except (
+            OSError,
+            UnicodeError,
+            TypeError,
+            KeyError,
+            ValueError,
+            base64.binascii.Error,
+        ):
+            raise HTTPException(
+                503, "Signed one-command installer is not ready"
+            ) from None
+        exports = {
+            "COMMANDCORE_RELEASE_PUBLIC_KEY_B64": data["agent_public_key_b64"],
+            "COMMANDCORE_HELPER_RELEASE_URL": data["helper_release_url"],
+            "COMMANDCORE_HELPER_RELEASE_PUBLIC_KEY_B64": data["helper_public_key_b64"],
+            "COMMANDCORE_HELPER_RELEASE_VERSION": data["helper_release_version"],
+            "COMMANDCORE_HELPER_BOOTSTRAP_URL": data["helper_bootstrap_url"],
+            "COMMANDCORE_HELPER_BOOTSTRAP_SHA256": data["helper_bootstrap_sha256"],
+        }
+        prefix = "#!/bin/sh\n# Public, reviewed installation pins; never contains private keys.\n"
+        for name, value in exports.items():
+            prefix += f"export {name}={shlex.quote(value)}\n"
+        prefix += f"set -- --server {shlex.quote(data['server_url'])} --prepare-full-control\n"
+        return prefix + body
+
+    @app.api_route(
+        "/install/linux-ready", methods=["GET", "HEAD"], include_in_schema=False
+    )
+    def linux_ready():
+        content = one_command_linux_script()
+        return Response(
+            content=content,
+            media_type="text/x-shellscript",
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+        )
 
     @app.get("/install/uninstall-linux", include_in_schema=False)
     @app.head("/install/uninstall-linux", include_in_schema=False)
