@@ -314,3 +314,19 @@ body:has(.modal-backdrop){overflow:hidden;overscroll-behavior:none}
 .fleet-hub.hub-connected>i{animation:cc-status-pulse 4s ease-in-out infinite}
 .fleet-hub.hub-working>i{background:#dd9d70;box-shadow:0 0 0 6px #dd9d7025;animation:cc-status-pulse 1.25s ease-in-out infinite}
 @media(prefers-reduced-motion:reduce){.fleet-hub>i{animation:none!important}}
+
+/* Octopus connector alignment correction. */
+
+.device-rail{--bridge-y:49.5px;--bridge-start:85px}
+.hub-head::after{display:none}
+.device-rail::before{top:49.5px;left:85px}
+.device-rail>.device-tile::after{top:44.5px;left:-5px}
+@media(max-width:720px){.device-rail::before{top:38px;left:59px}.device-rail>.device-tile::after{top:33px}}
+/* Public beta: OS-aware first install and explicit Agent updates. */
+.install-os-choice{display:flex;gap:10px;margin:18px 0 12px}
+.install-os-choice button{min-height:45px;flex:1;border:1px solid #d1deed;border-radius:10px;background:#fff;color:#486488;font:inherit;font-weight:650;cursor:pointer}
+.install-os-choice button.active{border-color:#6b96db;background:#eaf2ff;color:#274f8e;box-shadow:0 0 0 1px #6b96db inset}
+.install-os-choice button:focus-visible{outline:3px solid #77a7ea;outline-offset:2px}
+.command-copy button:disabled{opacity:.48;cursor:not-allowed}
+.update-note strong{color:#395b85}.update-note p{line-height:1.6}
+.update-note button{margin:8px 9px 0 0}

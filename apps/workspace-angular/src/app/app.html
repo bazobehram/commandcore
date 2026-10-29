@@ -148,7 +148,19 @@
                 <div><span>KEY GENERATION</span><strong>{{d.key_generation??'Not reported'}}</strong></div>
                 <div><span>LAST SEEN</span><strong>{{fmtTime(d.last_seen)}}</strong></div>
               </div>
-              @if(updateAvailable()){<div class="update-note">A different recommended agent version is reported. Current: {{d.agent_version}}. Recommended: {{d.recommended_agent_version||'Unknown'}}. Verify the release before updating.</div>}
+              @if(updateAvailable()){
+                <div class="update-note"><strong>Agent update available</strong><p>Installed: {{d.agent_version}} · Recommended: {{d.recommended_agent_version||'Unknown'}}.</p>
+                  @if(canManualAgentUpdate()){
+                    <p>Signed Agent update only. Your privileged helper will not be changed. Updates are never automatic.</p>
+                    @if(!updateConfirm()){<button class="subtle-action" [disabled]="updateBusy()" (click)="updateConfirm.set(true)">Update Agent</button>}
+                    @else{<p>This will briefly disconnect the Agent while the signed release is activated and health checked.</p>
+                      <button class="primary-small" [disabled]="updateBusy()" (click)="confirmManualAgentUpdate()">Confirm update</button>
+                      <button class="subtle-action" (click)="updateConfirm.set(false)">Cancel</button>
+                    }
+                  } @else {<p>Manual updating is unavailable until this device has signed-update trust, Full Control authorization, and an available release. No update will run automatically.</p>}
+                </div>
+              }
+              @if(manualUpdateStatus()){<p class="update-note" role="status">{{manualUpdateStatus()}}</p>}
               <div class="details-divider"></div>
               <div class="section-eyebrow">ADVERTISED DEVICE CAPABILITIES</div>
               <div class="capability-grid">
@@ -271,14 +283,28 @@
       @for(item of ['Workspace','Hardware','Browser','Activity','Access','Files','Add device'];track item){@if(!commandQuery()||item.toLowerCase().includes(commandQuery().toLowerCase())){<button (click)="runPalette(item)"><span class="palette-glyph">↗</span>{{item}} <span>↵</span></button>}}
       <div class="palette-footer">COMMANDCORE / NAVIGATE</div></div>
    } @else if(overlay()==='add'){
-    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
-      <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>Run this in the new Linux machine's terminal as your regular user.</p><div class="command-copy"><code>{{cmd('full')}}</code><button [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
-        <p class="installer-note">{{!installChecked()?'Checking signed installer…':helperAvailable()?'Signed Full Control installer is available.':'Signed helper is not published. Full Control installation is unavailable; use the Standard-only option below.'}}</p>
-        <details><summary>Standard agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button (click)="copy(cmd('standard'))">Copy</button></div></details>
-      </div></div>
-      <div class="setup-step"><span class="step-index">02</span><div><strong>Approve enrollment</strong><p>Open the enrollment link printed on the device, compare the verification code and approve the device.</p><button class="subtle-action" (click)="overlay.set('none');openPending()">Review pending requests ({{pending().length}}) ↗</button></div></div>
-      <div class="setup-step"><span class="step-index">03</span><div><strong>Confirm connection</strong><p>When the device shows Online here, its Agent is connected. Approval alone is not proof of connectivity.</p></div></div>
-      <p class="sheet-disclaimer">Current installation flow supports Linux. Windows installation is not production-ready.</p>
+    <div class="sheet" role="dialog" aria-label="Add device">
+      <div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" (click)="overlay.set('none')">×</button></div>
+      <h2>Add a device<span class="headline-period">.</span></h2>
+      <p>Choose the operating system of the target computer. Detection refers only to this browser; you can switch if installing on another machine.</p>
+      <div class="install-os-choice" role="group" aria-label="Target operating system">
+        <button [class.active]="installOS()==='linux'" [attr.aria-pressed]="installOS()==='linux'" (click)="chooseInstallOS('linux')">Linux</button>
+        <button [class.active]="installOS()==='windows'" [attr.aria-pressed]="installOS()==='windows'" (click)="chooseInstallOS('windows')">Windows</button>
+      </div>
+      @if(installOS()){
+        <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>{{installOS()==='linux'?'Run the command as a regular Linux user.':'Run the command in Windows PowerShell on the target computer.'}}</p>
+          <div class="command-copy"><code>{{cmd('full')}}</code><button [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
+          <p class="installer-note" role="status">{{installNote()}}</p>
+          @if(installOS()==='linux'){
+            <details><summary>Standard Agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button (click)="copy(cmd('standard'))">Copy</button></div></details>
+          }
+        </div></div>
+        <div class="setup-step"><span class="step-index">02</span><div><strong>Approve enrollment</strong><p>Open the enrollment link printed on the device, compare the verification code and approve. Windows defaults to Standard until a verified local Full Control capability is available.</p><button class="subtle-action" (click)="overlay.set('none');openPending()">Review pending requests ({{pending().length}}) ↗</button></div></div>
+        <div class="setup-step"><span class="step-index">03</span><div><strong>Confirm connection</strong><p>When the device shows Online, its Agent is connected. Approval alone does not prove successful installation.</p></div></div>
+      } @else {
+        <p class="installer-note" role="status">Could not determine the target operating system. Select Linux or Windows above.</p>
+      }
+      <p class="sheet-disclaimer">Only verified, published installers can be copied. Agent updates are manual; automatic updates are disabled.</p>
     </div>
    } @else if(overlay()==='pending'){
      <div class="sheet" role="dialog" aria-label="Pending enrollments"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE ENROLLMENT</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Pending approvals<span class="headline-period">.</span></h2>
