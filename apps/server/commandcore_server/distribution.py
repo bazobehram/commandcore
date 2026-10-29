@@ -172,3 +172,31 @@ def install_distribution_routes(app: FastAPI, directory: str) -> None:
         }:
             raise HTTPException(404, "Unknown artifact")
         return published(f"{version}/{filename}", "application/octet-stream", True)
+
+    @app.api_route(
+        "/releases/helper/{release_id}/{filename}",
+        methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
+    def helper_release_file(release_id: str, filename: str):
+        # Immutable, architecture- and Python-specific releases. A caller
+        # cannot request secret files or arbitrary paths from the feed.
+        scope = re.fullmatch(
+            r"v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?-linux-(x86_64|arm64)-py3(11|12|13)",
+            release_id,
+        )
+        if scope is None:
+            raise HTTPException(404, "Unknown signed helper release")
+        arch = scope.group(1)
+        if filename == "manifest.signed.json":
+            media = "application/json"
+        elif filename == f"commandcore-helper-linux-{arch}.tar.gz":
+            media = "application/octet-stream"
+        elif (
+            re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]{0,180}\.whl", filename)
+            and ".." not in filename
+        ):
+            media = "application/octet-stream"
+        else:
+            raise HTTPException(404, "Unknown signed helper artifact")
+        return published(f"helpers/{release_id}/{filename}", media, True)

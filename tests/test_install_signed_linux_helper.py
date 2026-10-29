@@ -299,3 +299,26 @@ def test_requires_signed_pip_wheel(tmp_path):
     (wheelhouse / "pip-24.0-py3-none-any.whl").write_bytes(b"pip")
     with pytest.raises(ValueError, match="exactly one pip"):
         setup._signed_pip_wheel(wheelhouse)
+
+
+def test_helper_admin_approval_works_with_unseekable_tty(monkeypatch):
+    response = iter(b"ENABLE FULL_CONTROL\n")
+    written = []
+    monkeypatch.setattr(setup.os, "open", lambda *a: 70)
+    monkeypatch.setattr(
+        setup.os, "write", lambda fd, msg: written.append(msg) or len(msg)
+    )
+    monkeypatch.setattr(setup.os, "read", lambda fd, count: bytes([next(response)]))
+    monkeypatch.setattr(setup.os, "close", lambda fd: None)
+    setup._approval("0.9.0-rc7", "netti")
+    assert b"ENABLE FULL_CONTROL" in b"".join(written)
+
+
+def test_helper_admin_approval_does_not_accept_other_text(monkeypatch):
+    response = iter(b"NO\n")
+    monkeypatch.setattr(setup.os, "open", lambda *a: 70)
+    monkeypatch.setattr(setup.os, "write", lambda fd, msg: len(msg))
+    monkeypatch.setattr(setup.os, "read", lambda fd, count: bytes([next(response)]))
+    monkeypatch.setattr(setup.os, "close", lambda fd: None)
+    with pytest.raises(PermissionError, match="approval declined"):
+        setup._approval("0.9.0-rc7", "netti")

@@ -101,17 +101,27 @@ def _root_dir(path: Path) -> None:
 
 
 def _approval(version: str, username: str) -> None:
-    # --yes is intentionally not supported. A web/API caller cannot approve.
-    with open("/dev/tty", "r+", encoding="utf-8") as terminal:
-        terminal.write(
-            f"Install a root-capable CommandCore helper {version} for {username}?\n"
-            "This grants the locally approved ceiling FULL_CONTROL, while "
-            "server and account permissions remain separate.\n"
-            "Type ENABLE FULL_CONTROL to approve: "
-        )
-        terminal.flush()
-        if terminal.readline().strip() != "ENABLE FULL_CONTROL":
+    # Root-capable installation requires explicit local approval. Reading after
+    # writing through the same buffered TTY file object may attempt to seek.
+    message = (
+        f"Install a root-capable CommandCore helper {version} for {username}?\n"
+        "This grants the locally approved ceiling FULL_CONTROL, while "
+        "server and account permissions remain separate.\n"
+        "Type ENABLE FULL_CONTROL to approve: "
+    )
+    terminal = os.open("/dev/tty", os.O_RDWR | os.O_CLOEXEC)
+    try:
+        os.write(terminal, message.encode("utf-8"))
+        answer = bytearray()
+        while len(answer) < 128:
+            char = os.read(terminal, 1)
+            if not char or char in (b"\r", b"\n"):
+                break
+            answer.extend(char)
+        if answer.decode("utf-8", errors="replace").strip() != "ENABLE FULL_CONTROL":
             raise PermissionError("local administrator approval declined")
+    finally:
+        os.close(terminal)
 
 
 def _copy_verified(source: Path, target: Path, limit: int = 64 * 1024 * 1024) -> None:
