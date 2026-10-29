@@ -1,0 +1,45 @@
+const {chromium}=require('playwright-core');
+const assert=require('node:assert/strict');
+(async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']});
+ const page=await browser.newPage({viewport:{width:1280,height:900}});
+ let oauthFull=false;const mutations=[];const errors=[];
+ let serverPolicy='STANDARD',grant='STANDARD';
+ page.on('pageerror',e=>errors.push(e.message));
+ page.route('**/auth/login?access=full',async route=>{oauthFull=true;await route.fulfill({status:302,headers:{location:'/'}});});
+ page.route('**/api/**',async route=>{
+  const req=route.request(),u=new URL(req.url()),p=u.pathname;let body={};
+  const d={id:'netti-qa',display_name:'netti',hostname:'netti',connected:true,platform:'Linux',architecture:'x86_64',permission_profile:serverPolicy,access_max_permission_profile:grant,capabilities:{local_max_permission_profile:'FULL_CONTROL',privileged_helper:true},grants:[{subject:'qa-operator',max_permission_profile:grant}]};
+  if(req.method()==='PUT'){body=req.postDataJSON();mutations.push({p,body});assert.equal(p,'/api/managed-devices/netti-qa/my-permission');assert.equal(body.expected_profile,'STANDARD');assert.equal(body.expected_grant,'STANDARD');serverPolicy=body.profile;grant=body.profile;}
+  let result={ok:true};
+  if(p==='/api/session')result={subject:'qa-operator',scopes:oauthFull?['commandcore:full','commandcore:standard','commandcore:read']:['commandcore:standard','commandcore:read'],auth_kind:'oauth2-panel'};
+  else if(p==='/api/devices')result={devices:[d]};
+  else if(p==='/api/managed-devices')result={devices:[{...d,managed_by_me:true}]};
+  else if(p==='/api/enrollment/pending')result={enrollments:[]};
+  else if(p.includes('/inspect'))result={system_info:{cpu_logical:4},system_metrics:{cpu_percent:2,memory:{percent:22},disk:{percent:38}}};
+  else if(p.includes('/activity'))result={events:[]};
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});
+ });
+ await page.goto('https://commandcore.synovaq.org/',{waitUntil:'networkidle'});
+ await page.locator('.workspace-tabs').getByRole('button',{name:/Access/}).click();
+ assert.equal(await page.locator('.permission-editor-row option[value=FULL_CONTROL]').isDisabled(),false,'Full Control should be selectable when local helper ready');
+ assert.equal(await page.getByText('Full Control is ready on this device').count(),1);
+ await page.locator('.permission-editor-row select').selectOption('FULL_CONTROL');
+ await page.getByRole('button',{name:/Review permission change/}).click();
+ await page.getByText('One more authorization').waitFor();
+ assert.equal(mutations.length,0,'No mutation before OAuth');
+ await page.getByRole('button',{name:/Continue to authorization/}).click();
+ await page.waitForFunction(()=>document.querySelector('.permission-editor-row select')?.value==='FULL_CONTROL'&&document.querySelector('.workspace-tabs button.current')?.textContent.includes('Access'),null,{timeout:12000});
+ assert(oauthFull,'OAuth login flow entered');
+ assert.equal(mutations.length,0,'No automatic mutation after OAuth');
+ await page.getByRole('button',{name:/Review permission change/}).click();
+ await page.getByRole('button',{name:'Confirm and apply'}).click();
+ await page.waitForFunction(()=>document.querySelector('.effective-banner')?.textContent.includes('Full Control'),null,{timeout:8000});
+ assert.equal(mutations.length,1);
+ await page.screenshot({path:'/qa/permission-oauth-desktop.png',fullPage:true});
+ console.log('PASS: Standard OAuth → selectable Full Control → new OAuth session → return to same device → explicit approve → PUT');
+ console.log('PASS: no permission changes before explicit confirmation');
+ console.log('PAGE_ERRORS:',JSON.stringify(errors));
+ await browser.close();
+ if(errors.length)process.exitCode=2;
+})().catch(e=>{console.error(e.stack);process.exit(1)});

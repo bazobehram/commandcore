@@ -1,1 +1,48 @@
 :root{font:16px/1.5 system-ui,sans-serif;color:#edf2f7;background:#0a0d10;color-scheme:dark}*{box-sizing:border-box}body{margin:0;padding:32px 20px}main{max-width:680px;margin:4vh auto;background:#11171c;border:1px solid #2b3741;border-radius:18px;padding:32px}h1{font-size:28px;margin:10px 0}p{color:#aab5bf}.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;white-space:nowrap}.brand img{display:block;width:52px;height:52px;object-fit:contain;flex:none}.brand-name{font-size:25px;font-weight:750;letter-spacing:-.04em;color:#edf2f7}.brand-name span{color:#3294ff}dl{display:grid;grid-template-columns:1fr 2fr;gap:12px;border-block:1px solid #2b3741;padding:24px 0}dt{color:#aab5bf}dd{margin:0;overflow-wrap:anywhere}input{font:inherit;padding:12px;background:#090d10;border:1px solid #435362;border-radius:8px;width:100%}label{display:block;margin:18px 0}label.check{display:flex;gap:12px;align-items:start}input[type=checkbox]{width:auto;margin-top:6px}button,a.button{font:inherit;display:inline-block;border:1px solid #42505c;border-radius:8px;padding:11px 18px;background:#172128;color:#edf2f7;cursor:pointer;text-decoration:none;margin:8px 8px 0 0}button.primary{background:#dffcf0;color:#092118;border-color:#dffcf0;font-weight:700}button:disabled{opacity:.45;cursor:wait}#message{padding:12px 0;white-space:pre-wrap}.hidden{display:none!important}.note{font-size:14px}a{color:#99c0ff}@media(max-width:520px){main{padding:22px}dl{grid-template-columns:1fr;gap:4px}dd{margin-bottom:12px}}
+
+
+/* CommandCore premium design system */
+:root{color-scheme:dark;--bg:#0b111a;--panel:#111c2b;--panel2:#162338;--line:#2b3c53;--line2:#39506a;--text:#f1f6ff;--muted:#a3b3cc;--faint:#7287a4;--accent:#348dff;--accent2:#65b0ff;--purple:#6ba6ff;--cyan:#5ebaff;--ok:#59d9aa;--warn:#ffc65e;--radius:14px}
+html,body{background:radial-gradient(ellipse 58% 25% at 55% 0%,#14263d,transparent),#0b111a;color:#eff5ff}
+button,.btn,.button{border-color:#3a5170;border-radius:10px;background:#152238;color:#eaf4ff}
+button.primary,.btn.primary,.button.primary{background:linear-gradient(120deg,#389cff,#236bf5);color:#fff;border-color:#4a9aff;font-weight:700}
+button:hover,.btn:hover,.button:hover{background:#223853}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #6badff;outline-offset:3px}
+input,select,textarea{background:#0d1827;border-color:#425772;color:#f1f6ff;border-radius:10px}
+a{color:#80baff}
+.card,.panel,.sidebar-card,main{border-color:#30425c}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+main{background:linear-gradient(145deg,#162439,#101a29);border:1px solid #334761;box-shadow:0 24px 70px #0004;border-radius:20px}
+.brand-name span{color:#348dff}h1{letter-spacing:-.04em}dl{border-color:#334761}dt,p,.note{color:#a3b3cc}
+@media(max-width:520px){body{padding:16px 10px}main{padding:23px 19px;margin:5vh auto}}
+
+
+/* CommandCore Workspace brand parity: enrollment and device approval */
+:root{color-scheme:light;color:#2b3b53;background:#f5f8fd;font:14px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+body{background:radial-gradient(ellipse 62% 48% at 45% 7%,#e8effb 0%,transparent 76%),radial-gradient(ellipse at 100% 110%,#f0eefb 0%,transparent 65%),#f7f9fc;color:#2b3b53;padding:clamp(16px,4vw,46px);min-height:100dvh}
+main{max-width:660px;margin:4vh auto;padding:clamp(24px,4vw,43px);background:#ffffffed;border:1px solid #dfe7f3;border-radius:20px;box-shadow:0 23px 65px #7992b71e;backdrop-filter:blur(18px)}
+h1{font-size:29px;font-weight:680;letter-spacing:-.045em;color:#293d59;margin:19px 0 7px;line-height:1.2}
+p{color:#8396ae;font-size:13px;line-height:1.7}
+.brand{gap:13px}.brand img{height:46px;width:46px;object-fit:contain}.brand-name{font-size:23px;color:#253345;letter-spacing:-.05em}.brand-name span{color:#b9855f}
+#message{color:#6984a9;font-size:13px}
+dl{grid-template-columns:minmax(128px,.8fr) minmax(0,1.6fr);gap:12px;padding:22px 0;border-color:#e6edf6}
+dt{color:#92a4bb;font-size:12px}dd{color:#344b6a;font-size:12px;font-weight:550;overflow-wrap:anywhere}
+label{color:#4b6382;font-size:12px;font-weight:620;margin:17px 0}
+label.check{align-items:flex-start;gap:12px}
+label small{font-weight:450;color:#93a3b6}
+input:not([type=checkbox]),select{background:#fcfdff;color:#304864;border:1px solid #d5e1ef;border-radius:10px;padding:12px;font-size:12px}
+input:focus-visible,select:focus-visible{outline:2px solid #7ca2ce;outline-offset:2px}
+input[type=checkbox]{accent-color:#749ac5}
+button,a.button{background:#f7faff;color:#577ba6;border:1px solid #dce6f4;border-radius:10px;padding:11px 17px;font-weight:650;font-size:12px}
+button.primary{background:#617fae;color:#fff;border-color:#617fae}
+button:hover:not(:disabled),a.button:hover{filter:brightness(.97)}
+a{color:#567eae}
+.note{font-size:11px;line-height:1.75;color:#8fa2b8}
+@media(max-width:520px){main{margin:2vh auto;padding:25px 21px}h1{font-size:25px}dl{grid-template-columns:1fr;gap:3px}dd{margin-bottom:10px}}
+
+
+/* Brand SVG overrides stale CDN-cached original blue raster URLs. */
+.brand img,.brand-logo img{display:none!important}
+.brand:before,.brand-logo:before{content:'';display:block;flex:none;width:45px;height:45px;background:url('/brand/octopus-idle.svg?v=20261029-v6') center/contain no-repeat}
+.brand-name span{color:#b9855f!important}
