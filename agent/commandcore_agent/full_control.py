@@ -48,7 +48,10 @@ async def _wait_for_authenticated_helper_ready(
     last = {"available": False, "max_permission_profile": "STANDARD"}
     for number in range(attempts):
         last = await client.probe()
-        if last.get("available") and last.get("max_permission_profile") == "FULL_CONTROL":
+        if (
+            last.get("available")
+            and last.get("max_permission_profile") == "FULL_CONTROL"
+        ):
             return last
         if number + 1 < attempts:
             await asyncio.sleep(delay)
@@ -91,9 +94,11 @@ def configure(enable: bool, agent_user: str, acknowledge: bool = False) -> int:
                         # and mode without reading the executable into memory.
                         check_root_directory(resolved.parent)
                         target_info = resolved.lstat()
-                        if (not stat.S_ISREG(target_info.st_mode)
-                                or target_info.st_uid != 0
-                                or target_info.st_mode & 0o022):
+                        if (
+                            not stat.S_ISREG(target_info.st_mode)
+                            or target_info.st_uid != 0
+                            or target_info.st_mode & 0o022
+                        ):
                             raise PermissionError("Untrusted helper symlink target")
             if not os.access(HELPER, os.X_OK):
                 raise ValueError("Installed helper is not executable")

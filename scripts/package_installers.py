@@ -47,7 +47,9 @@ def package(
         and hashlib.sha256(product.encode()).hexdigest()
         == "6c72f9dc3d73777e2e9677ad030fa6f3863b0e98a0c63293b2ad36b16e46ca9d"
     )
-    if data.get("schema_version") != 1 or not (product == "commandcore-agent" or legacy):
+    if data.get("schema_version") != 1 or not (
+        product == "commandcore-agent" or legacy
+    ):
         raise ValueError("wrong_release_product")
     matches = [
         a
