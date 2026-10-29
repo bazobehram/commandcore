@@ -174,14 +174,16 @@ function appendManualAgentUpdate(device){
                     try{
                         const response=await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update','POST');
                         const rolloutId=response.rollout.id;
-                        // Only two bounded mutation calls: stage, then activate.
-                        const staged=await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId)+'/advance','POST');
-                        if(staged.action==='staged')await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId)+'/advance','POST');
-                        for(let attempt=0;attempt<20;attempt++){
-                            const snapshot=await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId));
+                        await api('/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId)+'/advance','POST');
+                        for(let attempt=0;attempt<24;attempt++){
+                            const path='/api/devices/'+encodeURIComponent(device.id)+'/agent-update/'+encodeURIComponent(rolloutId);
+                            const snapshot=await api(path);
                             const result=snapshot.rollout;
-                            status.textContent='Update: '+String(result.status||'running')+' · '+String(result.devices?.[0]?.state||'pending');
+                            const deviceState=String(result.devices?.[0]?.state||'pending');
+                            status.textContent='Update: '+String(result.status||'running')+' · '+deviceState;
                             if(['completed','failed','paused','canceled'].includes(result.status))break;
+                            // User-confirmed rollout only; retry a pending/staged transition.
+                            if(['pending','staged'].includes(deviceState))await api(path+'/advance','POST');
                             await new Promise(resolve=>setTimeout(resolve,3000));
                         }
                         status.textContent+=' · Refresh device status to verify installed version.';
