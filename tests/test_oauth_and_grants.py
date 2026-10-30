@@ -54,6 +54,8 @@ def test_scope_hierarchy():
     assert scope_allows((FULL_SCOPE,), READ_SCOPE)
     assert scope_allows((FULL_SCOPE,), STANDARD_SCOPE)
     assert not scope_allows((ADMIN_SCOPE,), FULL_SCOPE)
+    assert not scope_allows((FULL_SCOPE,), ADMIN_SCOPE)
+    assert not scope_allows((READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE), ADMIN_SCOPE)
     assert scope_allows((ADMIN_SCOPE,), ADMIN_SCOPE)
     assert not scope_allows((READ_SCOPE,), STANDARD_SCOPE)
 
@@ -187,3 +189,38 @@ def test_grant_revocation_removes_visibility(tmp_path):
     assert db.get_accessible_device("guest", d["id"]) is not None
     assert db.revoke_device_grant("owner", d["id"], "guest")
     assert db.get_accessible_device("guest", d["id"]) is None
+
+
+@pytest.mark.asyncio
+async def test_distinct_public_accounts_cannot_list_or_dispatch_to_other_devices(
+    tmp_path,
+):
+    """Two-user negative matrix with no real agent or production credentials."""
+    db = Database(str(tmp_path / "two-accounts.sqlite3"))
+    alice_device = _device(db, owner="alice")
+    bob_device = _device(db, owner="bob")
+    agents = FakeAgents()
+    service = ToolService(db, agents, 60)
+    scopes = (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
+    alice = Principal("alice", "oauth-client-a", "oauth2", scopes)
+    bob = Principal("bob", "oauth-client-b", "oauth2", scopes)
+
+    for actor, own_device, foreign_device in (
+        (alice, alice_device, bob_device),
+        (bob, bob_device, alice_device),
+    ):
+        listed = await service.call(actor, "devices.list", {})
+        visible_ids = {d["id"] for d in listed["devices"]}
+        assert own_device["id"] in visible_ids
+        assert foreign_device["id"] not in visible_ids
+
+        with pytest.raises(ToolError) as exc:
+            await service.call(
+                actor,
+                "shell.exec",
+                {"device_id": foreign_device["id"], "command": "id"},
+            )
+        assert exc.value.code in {"permission_denied", "device_not_found"}
+
+    # The fake Agent must never receive a command addressed to another owner.
+    assert agents.calls == []
