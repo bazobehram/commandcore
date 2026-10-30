@@ -35,6 +35,32 @@ gate and `ruff format` as the canonical Python formatter. Use `make format` befo
 submitting Python changes and keep formatting-only changes separate from behavior
 changes when practical.
 
+## Angular workspace: API and session boundary
+
+The Angular SPA is at `apps/workspace-angular`. The root component in
+`src/app/app.ts` owns view state and calls `request()` from
+`src/app/api-client.ts` for same-origin JSON requests. This transport helper
+intentionally does **not** own OAuth redirection, token refresh, permission
+checks or automatic retries of mutations. It forwards cookies on the same
+origin, sets `cache: no-store`, and preserves the HTTP `status` on errors.
+Callers handle the expired-session view and the explicit sign-out flow;
+backend authorization remains authoritative.
+
+From a clean checkout with Node.js 24+ and npm:
+
+```bash
+cd apps/workspace-angular
+npm ci
+npm run test:api  # Node built-in tests: login/session, logout, mutation, HTTP errors
+npm run build     # Angular AOT production compilation
+```
+
+`test/api-client.test.mjs` uses mocked `fetch`: it makes no external requests
+and uses no real user credentials. The public-site CI build runs this suite
+before packaging the Angular app. Add a negative test for any change that
+could affect the session cookie, error handling, retry behavior or privilege
+boundaries. The UI must never be treated as the authorization authority.
+
 ## Code boundaries
 
 Do not put provider/client-specific behavior into device registry, job dispatcher, policy or Agent protocol. Client integration belongs under `docs/clients/` and future northbound adapter packages.

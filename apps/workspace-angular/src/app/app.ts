@@ -1,6 +1,7 @@
 import { Component, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { request } from './api-client';
 
 type View = 'workspace'|'hardware'|'browser'|'activity'|'access'|'files';
 type Device = {
@@ -12,12 +13,6 @@ type Device = {
 type Inspect = {system_info?:Record<string,any>;system_metrics?:Record<string,any>};
 type Pending = {id:string;metadata?:Record<string,any>;verification_code?:string;expires_at?:number};
 type BrowserSession = {client_id:string; session_id?:string;state?:string;title?:string};
-async function request<T=any>(path:string,method='GET',body?:unknown):Promise<T>{
- const res=await fetch(path,{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body===undefined?undefined:JSON.stringify(body)});
- const data=await res.json().catch(()=>({}));
- if(!res.ok){const error=new Error(String(data.detail||data.message||'HTTP '+res.status));(error as any).status=res.status;throw error;}
- return data as T;
-}
 @Component({
  selector:'app-root', standalone:true, imports:[CommonModule,FormsModule],
  templateUrl:'./app.html'
