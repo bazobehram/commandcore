@@ -1,0 +1,15 @@
+name: Public-private workspace parity (read-only)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 5 * * *'
+permissions:
+  contents: read
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify deployed workspace UI hashes (no credentials)
+        run: python3 scripts/check_dual_workspace_parity.py
