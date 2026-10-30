@@ -284,7 +284,7 @@ def install_routes(
                         if request.query_params.get("access") != "standard"
                         else "commandcore:read commandcore:standard"
                     ),
-                    "resource": settings.oauth_audience,
+                    "audience": settings.oauth_audience,
                 }
             )
         )
@@ -354,7 +354,7 @@ def install_routes(
                         "code_verifier": row["verifier"],
                         "redirect_uri": settings.public_base_url.rstrip("/")
                         + "/auth/callback",
-                        "resource": settings.oauth_audience,
+                        "audience": settings.oauth_audience,
                     },
                 )
                 exchanged.raise_for_status()
