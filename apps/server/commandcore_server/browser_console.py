@@ -133,6 +133,11 @@ HTML = """<!doctype html>
       <section class="sidebar-card finish-card">
         <div class="card-heading"><h2>Finished?</h2><span>EXPLICIT HANDOFF</span></div>
         <p class="card-copy">Return control to your AI. This ends private interaction and allows it to continue.</p>
+        <label class="reveal" style="display:block;margin-bottom:12px">
+          <input id="ai-interaction-consent" type="checkbox">
+          Allow AI to click and fill ordinary controls on this website for 15 minutes.
+        </label>
+        <p class="finish-note">Optional: only for the current website and Browser session. Password/MFA fields and recognizable high-risk controls remain restricted; always review AI actions. No grant survives a restart.</p>
         <button id="resume" class="resume-button" type="button">Resume AI control <span aria-hidden="true">→</span></button>
         <p class="finish-note">Only you can resume this session.</p>
       </section>
@@ -252,6 +257,10 @@ async def _private_png_stream(
 class HumanAction(BaseModel):
     name: str
     args: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeOptions(BaseModel):
+    allow_ai_interaction: bool = False
 
 
 def install_browser_console(
@@ -470,6 +479,7 @@ def install_browser_console(
     async def browser_console_resume(
         token: str,
         request: Request,
+        options: ResumeOptions | None = None,
         principal: Principal = Depends(principal_dependency),
     ) -> JSONResponse:
         authorize(token, principal)
@@ -478,9 +488,18 @@ def install_browser_console(
             raise HTTPException(403, "same-origin browser interaction required")
         try:
             result = await browser.human_resume(
-                token, principal.subject, principal.issuer
+                token,
+                principal.subject,
+                principal.issuer,
+                allow_ai_interaction=bool(options and options.allow_ai_interaction),
             )
         except BrowserError as exc:
             raise HTTPException(409, "handoff not found or expired") from exc
-        audit(principal, "browser.handoff.resume", {})
+        audit(
+            principal,
+            "browser.handoff.resume",
+            {
+                "ai_interaction_granted": result.get("ai_interaction_granted") is True,
+            },
+        )
         return private(JSONResponse(result))
