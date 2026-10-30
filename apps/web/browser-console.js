@@ -531,12 +531,27 @@
   const reloadButton=document.createElement("button");
   reloadButton.id="reload-page";reloadButton.type="button";
   reloadButton.className="control-button wide-button";
-  reloadButton.textContent="↻ Reload remote page";
+  reloadButton.textContent="↻ Reload website (retry verification)";
   document.getElementById("refresh").after(reloadButton);
   controls.push(reloadButton);
   reloadButton.addEventListener("click",()=>{
-    clearKeyboard(); action("browser.reload");
+    clearKeyboard();
+    setAction("Reloading the actual website with fresh resources (not just the screenshot)…");
+    action("browser.reload");
   });
+  // Human-only, locally rendered guidance. No page content, credentials or
+  // cross-origin details are sent to the AI, telemetry, or an external site.
+  const help = document.createElement("details");
+  help.id = "browser-login-help";
+  help.className = "browser-login-help";
+  const heading = document.createElement("summary");
+  heading.textContent = "Verification or CAPTCHA stuck?";
+  const explanation = document.createElement("p");
+  explanation.textContent = "Refresh image only updates your view. Reload website requests the real login page again without clearing cookies. If a challenge hangs, retry it once, then inspect the new page before entering anything.";
+  const fallback = document.createElement("p");
+  fallback.textContent = "Some identity providers do not support automated or headless browser environments. If verification still fails, use your normal browser for login. CommandCore cannot copy that session or bypass the provider's challenge.";
+  help.append(heading, explanation, fallback);
+  reloadButton.after(help);
   const inputHint=document.querySelector(".viewer-hint");
   if(inputHint)inputHint.textContent="Click view to type · Shift+Tab to leave · Wheel to scroll";
   document.getElementById("resume").addEventListener("click",clearKeyboard);
