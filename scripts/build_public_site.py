@@ -22,6 +22,7 @@ if OUT.exists():
     shutil.rmtree(OUT)
 shutil.copytree(SITE, OUT)
 shutil.copytree(ANGULAR, OUT / "app")
+shutil.copytree(ANGULAR, OUT / "workspace")
 # Angular's current base href may be '/' in some builds; retain same-origin root assets.
 for item in ANGULAR.iterdir():
     if item.is_dir():
@@ -66,7 +67,7 @@ for source in sorted(DOCS.rglob("*")):
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{title} · CommandCore Docs</title><style>{style}</style>"
-        '</head><body><nav><a href="/">CommandCore</a><a href="/app/">Dashboard</a>'
+        '</head><body><nav><a href="/">CommandCore</a><a href="/workspace/">Dashboard</a>'
         '<a href="/docs/">Documentation</a>'
         '<a href="https://github.com/bazobehram/commandcore">GitHub</a>'
         f"</nav><main>{body}</main></body></html>"
@@ -75,6 +76,7 @@ for source in sorted(DOCS.rglob("*")):
     rendered += 1
 shutil.copy2(docs_target / "README.html", docs_target / "index.html")
 assert (OUT / "app/index.html").is_file()
+assert (OUT / "workspace/index.html").is_file()
 assert (OUT / "docs/index.html").is_file()
 assert list((OUT / "app").glob("main-*.js"))
 assert list((OUT / "app").glob("styles-*.css"))
