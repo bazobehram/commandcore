@@ -61,6 +61,24 @@ before packaging the Angular app. Add a negative test for any change that
 could affect the session cookie, error handling, retry behavior or privilege
 boundaries. The UI must never be treated as the authorization authority.
 
+## Workspace session lifecycle and stale-response protection
+
+The Angular workspace uses `src/app/session-epoch.ts` to track a monotonically
+increasing session generation. A request that was started before logout,
+HTTP 401 expiry or an account switch must not repopulate the UI with stale
+device details, permissions, audit records, Browser frames or activity data.
+
+`App.endSession()` invalidates the generation and clears user-specific state.
+The backend continues to enforce all authorization; these guards are a
+**client-side privacy and correctness defense**, not a substitute for
+server-side access control. Network timeouts or HTTP 503 do not imply an
+expired session, and authentication is not reattempted automatically.
+
+Run `npm run test:api` for deterministic, credential-free tests of the
+session generation contract, and `npm run build` for Angular type-checking.
+The two-account Browser/authorization end-to-end acceptance tests are tracked
+separately in the 1.0 release-readiness program.
+
 ## Code boundaries
 
 Do not put provider/client-specific behavior into device registry, job dispatcher, policy or Agent protocol. Client integration belongs under `docs/clients/` and future northbound adapter packages.
