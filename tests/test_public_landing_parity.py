@@ -31,7 +31,7 @@ def test_public_home_is_the_approved_workspace_landing():
     assert "/auth/login" in refs.refs
     assert "/workspace/" in refs.refs
     assert 'href="/app/"' not in html
-    assert "ascent-gx10" not in html and "homeserver" not in html
+    assert "your server" in html and "AI workstation" in html
     assert (SITE / "site/landing.css").stat().st_size > 1000
     assert (SITE / "site/landing.js").stat().st_size > 100
 
