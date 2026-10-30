@@ -49,7 +49,7 @@ Requirements:
 
 - Python 3.11 or newer
 - Rust toolchain pinned by `rust-toolchain.toml`
-- Node.js for panel syntax checks
+- Node.js 24+ and npm for the Angular workspace (Node.js also checks legacy panels)
 - Docker for the locked container build and selected integration tests
 
 Setup:
@@ -79,6 +79,21 @@ cargo build --locked --release --manifest-path agent/rust/Cargo.toml
 python scripts/public_repo_check.py
 python scripts/secret_scan.py --history
 ~~~
+
+Angular workspace verification (isolated API contract tests run before the
+production build):
+
+~~~bash
+cd apps/workspace-angular
+npm ci
+npm run test:api
+npm run build
+~~~
+
+The API boundary lives in `src/app/api-client.ts`. Preserve its same-origin
+cookie, no-cache, HTTP-status and error semantics when refactoring. The server,
+not the Angular UI, enforces OAuth scopes and per-device permissions. See
+[Development](docs/DEVELOPMENT.md) for the architecture and testing contract.
 
 Privileged helper tests must run only in a disposable VM/container or another
 explicitly isolated test environment. Never run privileged acceptance against

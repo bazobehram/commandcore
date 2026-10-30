@@ -30,6 +30,8 @@ jobs:
           cache-dependency-path: apps/workspace-angular/package-lock.json
       - run: npm ci
         working-directory: apps/workspace-angular
+      - run: npm run test:api
+        working-directory: apps/workspace-angular
       - run: npm run build
         working-directory: apps/workspace-angular
       - uses: actions/setup-python@v5

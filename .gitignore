@@ -51,3 +51,7 @@ htmlcov/
 *.pfx
 
 *.session-key
+
+# Angular and Node build artifacts (not source)
+node_modules/
+.angular/
