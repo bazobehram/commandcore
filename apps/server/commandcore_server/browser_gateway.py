@@ -214,6 +214,9 @@ class OwnedSession:
     action_running: bool = False
     # Transient, owner-only proposed click. No credentials, screenshots or durable grants.
     pending_click: dict[str, Any] | None = None
+    # Explicit authenticated owner consent, never serialized or recovered.
+    ai_input_origin: str | None = None
+    ai_input_until: float = 0.0
     # Short-lived, owner-scoped navigation state. Never written to recovery journals.
     link_targets: dict[str, dict[str, Any]] = field(default_factory=dict)
     navigation_pages: list[dict[str, str]] = field(default_factory=list)
@@ -670,7 +673,12 @@ class BrowserGateway:
             return {"url": url, "screenshot_base64": encoded}
 
     async def human_resume(
-        self, token: str, subject: str, issuer: str = ""
+        self,
+        token: str,
+        subject: str,
+        issuer: str = "",
+        *,
+        allow_ai_interaction: bool = False,
     ) -> dict[str, Any]:
         owner = self.handoff_owner(token, subject, issuer)
         if self.worker_binding is not None:
@@ -685,7 +693,23 @@ class BrowserGateway:
                 entry.handoff_token or "", token
             ):
                 raise BrowserError("handoff not found or expired")
+            # The owner must explicitly opt in through a same-origin private
+            # console, while the verified handoff is active. Capture the
+            # current origin, not an untrusted client-supplied hostname.
+            consent_origin = None
+            if allow_ai_interaction:
+                page = await self._snapshot_private_frame(entry)
+                page_url = page.get("url")
+                check_url(page_url, self.allow_hosts)
+                parsed = urlsplit(page_url)
+                if parsed.scheme != "https" or not parsed.hostname:
+                    raise BrowserError("invalid Browser consent origin")
+                consent_origin = parsed.scheme + "://" + parsed.netloc
+            old_origin = entry.ai_input_origin
+            old_expires = entry.ai_input_until
             old_until = entry.handoff_until
+            entry.ai_input_origin = consent_origin
+            entry.ai_input_until = time.monotonic() + 900 if consent_origin else 0.0
             entry.pending_click = None
             entry.handoff_token = None
             entry.handoff_until = 0.0
@@ -706,9 +730,15 @@ class BrowserGateway:
                 entry.paused_for_human = True
                 entry.handoff_token = token
                 entry.handoff_until = old_until
+                entry.ai_input_origin = old_origin
+                entry.ai_input_until = old_expires
                 entry.last_action = "Private handoff still active; retry Resume"
                 raise
-        return {"state": "resumed_for_agent"}
+        return {
+            "state": "resumed_for_agent",
+            "ai_interaction_granted": bool(consent_origin),
+            "expires_in_seconds": 900 if consent_origin else 0,
+        }
 
     async def _new_session(self, owner: tuple[str, str, str]) -> OwnedSession:
         async with self._create_lock:
@@ -1388,6 +1418,31 @@ class BrowserGateway:
                     )
                 await asyncio.sleep(5)
 
+            # A short consent to UI interaction never follows to other origins.
+            # The actual URL is read at the moment of each action, never from
+            # the last AI screenshot, redirect target or page-supplied claims.
+            async def scoped_ai_input_allowed() -> bool:
+                if (
+                    human
+                    or not entry.ai_input_origin
+                    or time.monotonic() >= entry.ai_input_until
+                ):
+                    return False
+                page = await cdp.send(
+                    "Runtime.evaluate",
+                    {
+                        "expression": "location.origin",
+                        "returnByValue": True,
+                        "awaitPromise": False,
+                    },
+                    session=session,
+                )
+                found = page.get("result") or {}
+                return (
+                    found.get("type") == "string"
+                    and found.get("value") == entry.ai_input_origin
+                )
+
             if name == "browser.reload":
                 if not human:
                     raise BrowserError("reload requires authenticated human control")
@@ -1462,7 +1517,52 @@ class BrowserGateway:
                     session=session,
                 )
                 if name == "browser.click":
-                    if not human:
+                    if not human and await scoped_ai_input_allowed():
+                        # The owner consented to ordinary UI input on exactly
+                        # one HTTPS origin. Sensitive fields and destructive
+                        # controls still fail closed. Page labels are untrusted;
+                        # this is a guard, not a comprehensive risk classifier.
+                        check = await cdp.send(
+                            "Runtime.evaluate",
+                            {
+                                "expression": (
+                                    "(() => {const e=document.elementFromPoint("
+                                    + str(x)
+                                    + ","
+                                    + str(y)
+                                    + ");"
+                                    "if(!e || !e.closest || e.closest('iframe,frame,object,embed'))return false;"
+                                    "const target=e.closest('button,input,select,textarea,a,[role=button],[role=menuitem],label')||e;"
+                                    "if(target.closest('[aria-hidden=true],[disabled],[inert]'))return false;"
+                                    "const type=(target.getAttribute('type')||'').toLowerCase();"
+                                    "const ac=(target.getAttribute('autocomplete')||'').toLowerCase();"
+                                    "if(['password','file','hidden'].includes(type) ||"
+                                    "['current-password','new-password','one-time-code'].includes(ac))return false;"
+                                    "const text=((target.getAttribute('aria-label')||'')+' '+"
+                                    "(target.innerText||'')+' '+(target.getAttribute('title')||'')+' '+"
+                                    "(target.getAttribute('name')||'')+' '+(target.getAttribute('value')||'')+' '+"
+                                    "(target.getAttribute('href')||'')).toLowerCase();"
+                                    "if(/\b(delete|revoke|remove|disable|deactivate|rotate|"
+                                    "billing|payment|purchase|checkout|credit.card|"
+                                    "secret|password|passkey|mfa|2fa|grant.permissions|"
+                                    "assign.role|logout|sign.out)\b/.test(text))return false;"
+                                    "return true;})()"
+                                ),
+                                "returnByValue": True,
+                                "awaitPromise": False,
+                            },
+                            session=session,
+                        )
+                        result = check.get("result") or {}
+                        if (
+                            result.get("type") != "boolean"
+                            or result.get("value") is not True
+                        ):
+                            raise BrowserManualStepRequired(
+                                "Sensitive Browser control requires private owner approval. "
+                                "The action was not performed. Use browser.handoff."
+                            )
+                    elif not human:
                         # Fail closed for obvious submissions and scripted
                         # controls. Unknown websites remain untrusted; this
                         # UI check is not a complete action-consent policy.
@@ -1593,12 +1693,38 @@ class BrowserGateway:
                 if key not in allowed:
                     raise BrowserError("unsupported key")
                 if key == "Enter" and not human:
-                    raise BrowserManualStepRequired(
-                        "Manual step required. Enter was not sent and no form was submitted. "
-                        "Choose Use privately to complete this step, then explicitly resume "
-                        "AI control. Agent: request browser.handoff for manual approval; "
-                        "do not retry the submission automatically."
+                    if not await scoped_ai_input_allowed():
+                        raise BrowserManualStepRequired(
+                            "Manual step required. Enter was not sent and no form was submitted. "
+                            "Use private control to approve this action."
+                        )
+                    verification = await cdp.send(
+                        "Runtime.evaluate",
+                        {
+                            "expression": (
+                                "(() => {const a=document.activeElement;if(!a)return false;"
+                                "const t=(a.getAttribute('type')||'').toLowerCase();"
+                                "const ac=(a.getAttribute('autocomplete')||'').toLowerCase();"
+                                "if(['password','file','hidden'].includes(t)||"
+                                "['current-password','new-password','one-time-code'].includes(ac))return false;"
+                                "const form=a.closest('form');const details=((a.getAttribute('aria-label')||'')+' '+"
+                                "(a.innerText||'')+' '+(a.getAttribute('name')||'')+' '+"
+                                "(form?.getAttribute('action')||'')).toLowerCase();"
+                                "return !/\b(delete|revoke|remove|disable|deactivate|rotate|"
+                                "billing|payment|purchase|checkout|credit.card|secret|password|"
+                                "passkey|mfa|2fa|grant.permissions|assign.role|logout|sign.out)\b/.test(details);"
+                                "})()"
+                            ),
+                            "returnByValue": True,
+                            "awaitPromise": False,
+                        },
+                        session=session,
                     )
+                    res = verification.get("result") or {}
+                    if res.get("type") != "boolean" or res.get("value") is not True:
+                        raise BrowserManualStepRequired(
+                            "Sensitive form submission requires private approval. Enter was not sent."
+                        )
                 await cdp.send(
                     "Input.dispatchKeyEvent",
                     {

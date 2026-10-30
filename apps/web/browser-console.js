@@ -407,15 +407,18 @@
     setBusy(true);
     stopStream();
     try {
+      const grant = document.getElementById("ai-interaction-consent")?.checked === true;
       const response = await boundedFetch(base + "/resume", {
-        method: "POST", credentials: "same-origin"
+        method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({allow_ai_interaction: grant}),
       }, 16000);
       if (!response.ok) throw new Error("Unable to resume agent");
       humanFinished = true;
       setStatus("Control returned to your AI client. You can close this tab.");
       if (live) live.textContent = "Returned to AI";
       if (updated) updated.textContent = "Private control ended";
-      setAction("Session safely resumed");
+      setAction(grant ? "AI controls approved on this website for 15 minutes" : "Session safely resumed");
       const field = document.getElementById("text");
       if (field) field.value = "";
       image.hidden = true;

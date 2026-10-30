@@ -310,7 +310,12 @@ class OwnerBrowserWorkerPool:
         return result
 
     async def human_resume(
-        self, token: str, subject: str, issuer: str = ""
+        self,
+        token: str,
+        subject: str,
+        issuer: str = "",
+        *,
+        allow_ai_interaction: bool = False,
     ) -> dict[str, Any]:
         owner = self.handoff_owner(token, subject, issuer)
         worker = self._find_worker(owner)
@@ -318,6 +323,7 @@ class OwnerBrowserWorkerPool:
             token,
             subject,
             issuer,
+            allow_ai_interaction=allow_ai_interaction,
         )
         self._verify_physical_assignment(worker)
         return result
