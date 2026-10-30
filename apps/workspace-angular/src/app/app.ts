@@ -2,6 +2,7 @@ import { Component, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { request } from './api-client';
+import { SessionEpoch, isUnauthorized } from './session-epoch';
 
 type View = 'workspace'|'hardware'|'browser'|'activity'|'access'|'files';
 type Device = {
@@ -42,6 +43,7 @@ export class App implements OnInit, OnDestroy {
  private staleInspect=0; private staleActivity=0;
  private timer:any; private metricsTimer:any; private browserTimer:any; private fastTimer:any; private activityTimer:any; private browserSessionsTimer:any;
  private fastBusy=false; private jobsBusy=false; private jobsTimer:any; private destroyed=false;
+ private readonly sessionEpoch=new SessionEpoch();
 
  selectedDevice=computed(()=>this.devices()[this.selected()] ?? null);
  filteredActivity=computed(()=>{const filter=this.activityFilter().trim().toLowerCase();return filter?this.activity().filter(e=>(this.dataItem(e)+' '+this.dataDetail(e)+' '+String(e.status||'')).toLowerCase().includes(filter)):this.activity();});
@@ -133,7 +135,7 @@ export class App implements OnInit, OnDestroy {
   window.addEventListener('beforeinstallprompt',this.onInstall as any);
  }
  ngOnInit(){void this.init();}
- ngOnDestroy(){this.destroyed=true;clearInterval(this.timer);clearInterval(this.fastTimer);clearInterval(this.jobsTimer);clearInterval(this.activityTimer);clearInterval(this.browserSessionsTimer);clearInterval(this.metricsTimer);clearInterval(this.browserTimer);document.removeEventListener('visibilitychange',this.onResume);window.removeEventListener('focus',this.onResume);window.removeEventListener('online',this.onResume);window.removeEventListener('keydown',this.onKey);window.removeEventListener('beforeinstallprompt',this.onInstall as any);}
+ ngOnDestroy(){this.destroyed=true;this.sessionEpoch.end();clearInterval(this.timer);clearInterval(this.fastTimer);clearInterval(this.jobsTimer);clearInterval(this.activityTimer);clearInterval(this.browserSessionsTimer);clearInterval(this.metricsTimer);clearInterval(this.browserTimer);document.removeEventListener('visibilitychange',this.onResume);window.removeEventListener('focus',this.onResume);window.removeEventListener('online',this.onResume);window.removeEventListener('keydown',this.onKey);window.removeEventListener('beforeinstallprompt',this.onInstall as any);}
  private onKey=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();this.overlay.set('palette');}
   if(event.key==='Escape'){this.overlay.set('none');this.accountMenu.set(false);return;}
   if(this.overlay()!=='none'&&event.key==='Tab'){
@@ -156,8 +158,25 @@ export class App implements OnInit, OnDestroy {
 
  mobileFocusWorkspace(){if(typeof window!=='undefined'&&window.matchMedia('(max-width:720px)').matches){requestAnimationFrame(()=>document.querySelector('.workspace-frame')?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'}));}}
  async installApp(){if(this.installPrompt){await this.installPrompt.prompt();this.installPrompt=null;}else this.message('Use your browser menu to add CommandCore to your home screen.');}
+ /** Clear user-specific cached data immediately when authentication ends. */
+ private endSession(message=''){
+  this.sessionEpoch.end();
+  this.staleInspect++;this.staleActivity++;this.browserEpoch++;
+  this.loggedIn.set(false);this.session.set(null);this.error.set(message);
+  this.devices.set([]);this.pending.set([]);this.detail.set(null);this.inspect.set(null);
+  this.activity.set([]);this.activityLoaded.set(false);this.activityError.set('');
+  this.browsers.set([]);this.browserClient.set('');this.browserFrame.set('');
+  this.browserPrivateLink.set('');this.browserPage.set('');this.browserAction.set('');
+  this.browserState.set('idle');this.browserBusy.set(false);this.browserSequence=-1;
+  this.jobsById.set({});this.audit.set([]);this.roleOverrides.set({});
+  this.pendingPermission=null;this.confirmation=null;this.typedCode='';this.grantSubject='';
+  this.grantToRemove='';this.selectedGrantSubject='';this.commandQuery.set('');
+  this.notice.set('');this.selected.set(0);this.activityLoading.set(false);
+  this.auditBusy.set(false);this.permissionBusy.set(false);
+  this.accountMenu.set(false);this.overlay.set('none');this.syncHealthy.set(false);
+ }
  async init(){
-  this.loading.set(true);try{const session=await request('/api/session');this.session.set(session);this.loggedIn.set(true);this.loadDeviceRoles();await this.refresh();await this.loadSelectedJobs();this.restorePermissionIntent();
+  this.loading.set(true);try{const session=await request('/api/session');if(this.destroyed)return;this.sessionEpoch.start();this.session.set(session);this.loggedIn.set(true);this.error.set('');this.loadDeviceRoles();await this.refresh();if(!this.loggedIn())return;await this.loadSelectedJobs();if(!this.loggedIn())return;this.restorePermissionIntent();
    this.fastTimer=setInterval(()=>{if(!document.hidden)void this.refreshDeviceStates();},4000);
    this.timer=setInterval(()=>{if(this.loggedIn()&&!document.hidden)void this.refresh(true);},16000);
    this.activityTimer=setInterval(()=>{if(this.loggedIn()&&!document.hidden&&['workspace','activity','files'].includes(this.view()))void this.loadActivity();if(this.loggedIn()&&!document.hidden)void this.loadSelectedJobs();},5000);
@@ -167,33 +186,34 @@ export class App implements OnInit, OnDestroy {
    this.browserSessionsTimer=setInterval(()=>{if(this.loggedIn()&&!document.hidden&&this.view()==='browser')void this.loadBrowserSessions();},10000);
    this.browserTimer=setInterval(()=>{if(this.loggedIn()&&!document.hidden&&this.view()==='browser'&&!this.browserPaused())void this.refreshBrowserFrame();},2800);
    document.addEventListener('visibilitychange',this.onResume);window.addEventListener('focus',this.onResume);window.addEventListener('online',this.onResume);
-  }catch(e){this.loggedIn.set(false);this.error.set(this.err(e));}finally{this.loading.set(false);}
+  }catch(e){if(isUnauthorized(e))this.endSession('Session expired. Sign in again.');else if(!this.loggedIn())this.error.set(this.err(e));else this.message(this.err(e));}finally{this.loading.set(false);}
  }
  async signOut(){
    if(this.logoutBusy())return;this.logoutBusy.set(true);
    try{
-    await request('/api/session','DELETE');this.accountMenu.set(false);this.session.set(null);this.loggedIn.set(false);
-    this.devices.set([]);this.detail.set(null);this.activity.set([]);this.overlay.set('none');
+    await request('/api/session','DELETE');this.endSession();
     location.replace('/');
    }catch(e){this.message('Sign out failed: '+this.err(e));this.logoutBusy.set(false);}
  }
  async refreshDeviceStates(){
-  if(this.fastBusy||!this.loggedIn())return;this.fastBusy=true;this.syncing.set(true);
+  if(this.fastBusy||!this.loggedIn())return;const sessionVersion=this.sessionEpoch.snapshot();this.fastBusy=true;this.syncing.set(true);
   try{
    const result=await request<{devices:Device[]}>('/api/devices');
+   if(!this.sessionEpoch.isCurrent(sessionVersion))return;
    const previous=this.devices();const retained=new Map(previous.map(d=>[d.id,d]));
    const updated:Device[]=(result.devices||[]).filter(d=>!d.revoked_at).map(d=>({...retained.get(d.id),...d,managed_by_me:retained.get(d.id)?.managed_by_me||d.managed_by_me,grants:retained.get(d.id)?.grants||d.grants}));
    for(const old of previous){if(old.managed_by_me&&!old.revoked_at&&!updated.some(d=>d.id===old.id))updated.push(old);}
    const prior=this.selectedDevice()?.id;this.devices.set(updated);if(prior){const index=updated.findIndex(d=>d.id===prior);if(index>=0)this.selected.set(index);else this.selected.set(0);}
    this.syncHealthy.set(true);this.lastSynced.set(Date.now());
-  }catch(e){this.syncHealthy.set(false);if((e as any)?.status===401){this.loggedIn.set(false);this.error.set('Session expired. Sign in again.');}}
+  }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)){this.syncHealthy.set(false);if(isUnauthorized(e))this.endSession('Session expired. Sign in again.');}}
   finally{this.fastBusy=false;this.syncing.set(false);}
  }
  async refreshActiveJobs(){
-   if(this.jobsBusy||!this.loggedIn())return;this.jobsBusy=true;
+   if(this.jobsBusy||!this.loggedIn())return;const sessionVersion=this.sessionEpoch.snapshot();this.jobsBusy=true;
    const candidates=this.devices().filter(d=>this.deviceOnline(d)).slice(0,6);
    try{
      const results=await Promise.allSettled(candidates.map(d=>request<{device:Device}>('/api/devices/'+encodeURIComponent(d.id))));
+     if(!this.sessionEpoch.isCurrent(sessionVersion))return;
      const next={...this.jobsById()};
      candidates.forEach((d,i)=>{const result=results[i];next[d.id]=result.status==='fulfilled'&&Array.isArray(result.value.device?.active_jobs)?result.value.device.active_jobs.length:0;});
      for(const d of this.devices())if(!this.deviceOnline(d))next[d.id]=0;
@@ -201,12 +221,15 @@ export class App implements OnInit, OnDestroy {
    }finally{this.jobsBusy=false;}
  }
  async loadSelectedJobs(){
+   const sessionVersion=this.sessionEpoch.snapshot();
    const d=this.selectedDevice();if(!d||!this.deviceOnline(d)){this.detail.set(null);return;}
-   try{const payload=await request<{device:Device}>('/api/devices/'+encodeURIComponent(d.id));if(this.selectedDevice()?.id===d.id){this.detail.set(payload.device);this.jobsById.update(map=>({...map,[d.id]:Array.isArray(payload.device.active_jobs)?payload.device.active_jobs.length:0}));}}
-   catch{ /* a temporarily unavailable detail endpoint must not invent an active job */if(this.selectedDevice()?.id===d.id){this.detail.set(null);this.jobsById.update(map=>({...map,[d.id]:0}));} }
+   try{const payload=await request<{device:Device}>('/api/devices/'+encodeURIComponent(d.id));if(this.sessionEpoch.isCurrent(sessionVersion)&&this.selectedDevice()?.id===d.id){this.detail.set(payload.device);this.jobsById.update(map=>({...map,[d.id]:Array.isArray(payload.device.active_jobs)?payload.device.active_jobs.length:0}));}}
+   catch{ /* a temporarily unavailable detail endpoint must not invent an active job */if(this.sessionEpoch.isCurrent(sessionVersion)&&this.selectedDevice()?.id===d.id){this.detail.set(null);this.jobsById.update(map=>({...map,[d.id]:0}));} }
  }
 
  async refresh(quiet=false){
+  const sessionVersion=this.sessionEpoch.snapshot();
+  if(!this.sessionEpoch.isCurrent(sessionVersion))return;
   try{
    const [d,m,p]=await Promise.all([
     request<{devices:Device[]}>('/api/devices'),
@@ -217,35 +240,36 @@ export class App implements OnInit, OnDestroy {
    for(const device of d.devices||[])merged.set(device.id,device);
    for(const item of m.devices||[])merged.set(item.id,{...(merged.get(item.id)||{}),...item,managed_by_me:true});
    const list=Array.from(merged.values()).filter(x=>!x.revoked_at);
+   if(!this.sessionEpoch.isCurrent(sessionVersion))return;
    const prior=this.selectedDevice()?.id;
    this.devices.set(list);this.pending.set(p.enrollments||[]);
    if(prior){const idx=list.findIndex(x=>x.id===prior);this.selected.set(idx>=0?idx:0);}
    if(!quiet){this.lastSynced.set(Date.now());this.syncHealthy.set(true);this.permissionChoice=this.ownGrant()||'STANDARD';this.renameValue=this.selectedDevice()?.display_name||'';if(this.view()==='workspace'||this.view()==='hardware')await this.loadInspect();if(this.view()==='activity'||this.view()==='workspace')await this.loadActivity();await this.loadSelectedJobs();}
-  }catch(e){if((e as any)?.status===401){this.loggedIn.set(false);this.error.set('Your session expired. Sign in again to continue.');}if(!quiet)this.message('Devices: '+this.err(e));}
+  }catch(e){if(!this.sessionEpoch.isCurrent(sessionVersion))return;if(isUnauthorized(e))this.endSession('Your session expired. Sign in again to continue.');else if(!quiet)this.message('Devices: '+this.err(e));}
  }
  async move(step:number){const n=this.devices().length;if(!n)return;await this.select((this.selected()+step+n)%n);}
  async select(i:number){this.selected.set(i);this.detail.set(null);this.inspect.set(null);this.resetActivity();this.browserFrame.set('');this.permissionError.set('');this.permissionChoice=this.ownGrant()||'STANDARD';this.renameValue=this.selectedDevice()?.display_name||'';this.mobileFocusWorkspace();if(this.view()==='workspace'||this.view()==='hardware')await this.loadInspect();if(this.view()==='activity'||this.view()==='workspace')await this.loadActivity();await this.loadSelectedJobs();}
  async show(view:View){this.view.set(view);this.accountMenu.set(false);this.overlay.set('none');this.mobileFocusWorkspace();if(view==='hardware'||(view==='workspace'&&!this.inspect()))await this.loadInspect();if(view==='access')this.onAccess();if(view==='activity'||view==='workspace'||view==='files')await this.loadActivity();if(view==='browser')await this.loadBrowserSessions();}
- async loadInspect(){const device=this.selectedDevice();if(!device)return;if(!this.deviceOnline(device)){this.inspect.set(null);return;}
+ async loadInspect(){const sessionVersion=this.sessionEpoch.snapshot();const device=this.selectedDevice();if(!device)return;if(!this.deviceOnline(device)){this.inspect.set(null);return;}
   const generation=++this.staleInspect;
-  try{const result=await request<Inspect>('/api/devices/'+encodeURIComponent(device.id)+'/inspect','POST');if(generation===this.staleInspect&&this.selectedDevice()?.id===device.id)this.inspect.set(result);}catch{if(generation===this.staleInspect)this.inspect.set(null);}
+  try{const result=await request<Inspect>('/api/devices/'+encodeURIComponent(device.id)+'/inspect','POST');if(this.sessionEpoch.isCurrent(sessionVersion)&&generation===this.staleInspect&&this.selectedDevice()?.id===device.id)this.inspect.set(result);}catch{if(this.sessionEpoch.isCurrent(sessionVersion)&&generation===this.staleInspect)this.inspect.set(null);}
  }
  fileActivity=computed(()=>this.activity().filter((e:any)=>/^(fs\.|transfer\.|file\.)/i.test(String(e.tool||e.operation||''))).slice(0,12));
- async loadActivity(){const d=this.selectedDevice();if(!d)return;const generation=++this.staleActivity;const first=!this.activityLoaded();if(first)this.activityLoading.set(true);
-  try{const result=await request<any>('/api/devices/'+encodeURIComponent(d.id)+'/activity');if(generation!==this.staleActivity||this.selectedDevice()?.id!==d.id)return;
+ async loadActivity(){const sessionVersion=this.sessionEpoch.snapshot();const d=this.selectedDevice();if(!d)return;const generation=++this.staleActivity;const first=!this.activityLoaded();if(first)this.activityLoading.set(true);
+  try{const result=await request<any>('/api/devices/'+encodeURIComponent(d.id)+'/activity');if(!this.sessionEpoch.isCurrent(sessionVersion)||generation!==this.staleActivity||this.selectedDevice()?.id!==d.id)return;
   this.activityError.set('');this.activityLoaded.set(true);
   this.activity.set(Array.isArray(result)?result:Array.isArray(result.events)?result.events:Array.isArray(result.activity)?result.activity:Array.isArray(result.rows)?result.rows:[]);
   this.activityPage.set(Math.min(this.activityPage(),Math.max(1,Math.ceil(this.filteredActivity().length/this.activityPageSize))));
- }catch(e){if(generation===this.staleActivity){this.activityError.set(this.err(e));this.activityLoaded.set(true);}}finally{if(generation===this.staleActivity)this.activityLoading.set(false);}}
- async loadBrowserSessions(){try{const result=await request<any>('/api/browser/sessions');this.browsers.set(result.sessions||[]);
+ }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)&&generation===this.staleActivity){this.activityError.set(this.err(e));this.activityLoaded.set(true);}}finally{if(this.sessionEpoch.isCurrent(sessionVersion)&&generation===this.staleActivity)this.activityLoading.set(false);}}
+ async loadBrowserSessions(){const sessionVersion=this.sessionEpoch.snapshot();if(!this.sessionEpoch.isCurrent(sessionVersion))return;try{const result=await request<any>('/api/browser/sessions');if(!this.sessionEpoch.isCurrent(sessionVersion))return;this.browsers.set(result.sessions||[]);
   const existing=this.browserClient();const next=(result.sessions||[]).find((s:BrowserSession)=>s.client_id===existing)?.client_id || result.sessions?.[0]?.client_id || '';
   if(next!==existing){this.browserEpoch++;this.browserClient.set(next);this.browserSequence=-1;this.browserFrame.set('');this.browserPrivateLink.set('');this.browserPage.set('');}
   if(next)await this.refreshBrowserFrame();else {this.browserFrame.set('');this.browserPrivateLink.set('');this.browserState.set(result.enabled===false?'unavailable':'empty');}
- }catch(e){this.browsers.set([]);this.browserState.set('unavailable');this.message(this.err(e));}}
+ }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)){this.browsers.set([]);this.browserState.set('unavailable');this.message(this.err(e));}}}
  async chooseBrowser(id:string){this.browserEpoch++;this.browserClient.set(id);this.browserSequence=-1;this.browserFrame.set('');this.browserPrivateLink.set('');this.browserPage.set('');await this.refreshBrowserFrame();}
- async refreshBrowserFrame(){const id=this.browserClient(),epoch=this.browserEpoch;if(!id||this.browserPaused()||this.browserState()==='requesting_human')return;
+ async refreshBrowserFrame(){const sessionVersion=this.sessionEpoch.snapshot();const id=this.browserClient(),epoch=this.browserEpoch;if(!id||this.browserPaused()||this.browserState()==='requesting_human')return;
   try{const data=await request<any>('/api/browser/frame?client_id='+encodeURIComponent(id)+'&after_sequence='+this.browserSequence);
-   if(this.browserClient()!==id||this.browserEpoch!==epoch||this.browserPaused())return;const state=String(data.state||'ready');this.browserState.set(state);this.browserBusy.set(data.busy===true);
+   if(!this.sessionEpoch.isCurrent(sessionVersion)||this.browserClient()!==id||this.browserEpoch!==epoch||this.browserPaused())return;const state=String(data.state||'ready');this.browserState.set(state);this.browserBusy.set(data.busy===true);
    if(state==='awaiting_human'){this.browserFrame.set('');this.browserPage.set('Private human control is active');return;}
    this.browserPrivateLink.set('');
    if(data.changed&&typeof data.screenshot_base64==='string'&&/^[A-Za-z0-9+/=]+$/.test(data.screenshot_base64)){
@@ -254,15 +278,15 @@ export class App implements OnInit, OnDestroy {
     this.browserPage.set(String(data.title||'')+(data.url?' · '+String(data.url):''));
    }
    this.browserAction.set(String(data.action||''));
-  }catch(e){if(this.browserClient()!==id||this.browserEpoch!==epoch||this.browserPaused())return;this.browserState.set('unavailable');this.message('Browser: '+this.err(e));}
+  }catch(e){if(!this.sessionEpoch.isCurrent(sessionVersion)||this.browserClient()!==id||this.browserEpoch!==epoch||this.browserPaused())return;this.browserState.set('unavailable');this.message('Browser: '+this.err(e));}
  }
- async handoff(){if(!this.browserClient()||this.browserState()==='awaiting_human'||this.browserState()==='requesting_human')return;const id=this.browserClient(),epoch=++this.browserEpoch;this.browserFrame.set('');this.browserState.set('requesting_human');this.browserBusy.set(true);try{
+ async handoff(){const sessionVersion=this.sessionEpoch.snapshot();if(!this.sessionEpoch.isCurrent(sessionVersion)||!this.browserClient()||this.browserState()==='awaiting_human'||this.browserState()==='requesting_human')return;const id=this.browserClient(),epoch=++this.browserEpoch;this.browserFrame.set('');this.browserState.set('requesting_human');this.browserBusy.set(true);try{
   const data=await request<any>('/api/browser/handoff','POST',{client_id:id});
-  if(this.browserClient()!==id||this.browserEpoch!==epoch)return;
+  if(!this.sessionEpoch.isCurrent(sessionVersion)||this.browserClient()!==id||this.browserEpoch!==epoch)return;
   if(typeof data.handoff_path!=='string'||!/^\/browser\/console\/[A-Za-z0-9_-]+$/.test(data.handoff_path))throw Error('Invalid private-control URL');
   this.browserPrivateLink.set(data.handoff_path);this.browserFrame.set('');this.browserState.set('awaiting_human');this.browserBusy.set(false);
   this.message('Private control is ready. Open it to sign in or approve, then resume AI control there.');
- }catch(e){if(this.browserClient()===id&&this.browserEpoch===epoch){this.browserState.set('unavailable');this.browserBusy.set(false);void this.loadBrowserSessions();}this.message(this.err(e));}}
+ }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)&&this.browserClient()===id&&this.browserEpoch===epoch){this.browserState.set('unavailable');this.browserBusy.set(false);void this.loadBrowserSessions();}if(this.sessionEpoch.isCurrent(sessionVersion))this.message(this.err(e));}}
  async checkInstall(){this.installChecked.set(false);try{const res=await fetch('/install/linux-ready',{method:'HEAD',credentials:'same-origin',cache:'no-store'});this.helperAvailable.set(res.ok);}catch{this.helperAvailable.set(false);}this.installChecked.set(true);}
  openAdd(){this.overlay.set('add');void this.checkInstall();}
  openPending(){this.initialPermission=this.oauthFullReady()?'FULL_CONTROL':'STANDARD';this.overlay.set('pending');void this.refresh(true);}
@@ -350,11 +374,11 @@ export class App implements OnInit, OnDestroy {
   }catch(e){this.message('Grant update failed: '+this.err(e));}
   finally{this.permissionBusy.set(false);}
  }
- async loadAudit(){const d=this.selectedDevice();if(!d?.managed_by_me)return;this.auditBusy.set(true);this.overlay.set('audit');
-  try{const result=await request<any>('/api/managed-devices/'+encodeURIComponent(d.id)+'/audit');this.audit.set(result.events||[]);}
-  catch(e){this.audit.set([]);this.message('Audit unavailable: '+this.err(e));}finally{this.auditBusy.set(false);}
+ async loadAudit(){const sessionVersion=this.sessionEpoch.snapshot();const d=this.selectedDevice();if(!d?.managed_by_me||!this.sessionEpoch.isCurrent(sessionVersion))return;this.auditBusy.set(true);this.overlay.set('audit');
+  try{const result=await request<any>('/api/managed-devices/'+encodeURIComponent(d.id)+'/audit');if(this.sessionEpoch.isCurrent(sessionVersion)&&this.selectedDevice()?.id===d.id)this.audit.set(result.events||[]);}
+  catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)){this.audit.set([]);this.message('Audit unavailable: '+this.err(e));}}finally{if(this.sessionEpoch.isCurrent(sessionVersion))this.auditBusy.set(false);}
  }
- async reloadDeviceDetail(){const d=this.selectedDevice();if(!d)return;try{const result=await request<{device:Device}>('/api/devices/'+encodeURIComponent(d.id));this.detail.set(result.device);}catch(e){this.message(this.err(e));}}
+ async reloadDeviceDetail(){const sessionVersion=this.sessionEpoch.snapshot();const d=this.selectedDevice();if(!d||!this.sessionEpoch.isCurrent(sessionVersion))return;try{const result=await request<{device:Device}>('/api/devices/'+encodeURIComponent(d.id));if(this.sessionEpoch.isCurrent(sessionVersion)&&this.selectedDevice()?.id===d.id)this.detail.set(result.device);}catch(e){if(this.sessionEpoch.isCurrent(sessionVersion))this.message(this.err(e));}}
  onAccess(){this.permissionChoice=this.ownGrant()||'STANDARD';this.renameValue=this.selectedDevice()?.display_name||'';void this.reloadDeviceDetail();}
  confirmDanger(task:()=>Promise<void>){this.confirmation=task;this.confirmName='';this.overlay.set('confirm');}
  async confirmAction(){if(this.confirmName!==this.selectedDevice()?.display_name)return;try{await this.confirmation?.();this.overlay.set('none');}catch(e){this.message(this.err(e));}}
