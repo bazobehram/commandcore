@@ -51,6 +51,7 @@ def test_one_workspace_in_build_and_redirect():
 def test_public_https_oauth_callback_and_workspace_redirects_never_expose_internal_ports():
     nginx = (ROOT / "deploy/public/nginx-public.conf").read_text()
     assert "port_in_redirect off;" in nginx
+    assert "absolute_redirect off;" in nginx
     assert "proxy_redirect ~^/$ https://commandcore.app/workspace/;" in nginx
     assert "return 302 https://commandcore.app/workspace/;" in nginx
     assert "location = /auth/callback" in nginx
