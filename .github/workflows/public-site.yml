@@ -40,6 +40,9 @@ jobs:
       - run: |
           test -s dist/public-site/index.html
           test -s dist/public-site/app/index.html
+          test -s dist/public-site/workspace/index.html
+          test -s dist/public-site/site/landing.css
+          test -s dist/public-site/site/landing.js
           test -s dist/public-site/docs/index.html
           test -s dist/public-site/docs/SELF_HOSTING.html
           test -n "$(find dist/public-site/app -name 'main-*.js' -print -quit)"
