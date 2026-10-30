@@ -53,6 +53,33 @@ class ConsequentialActionGuardTests(unittest.IsolatedAsyncioTestCase):
             patch("commandcore_server.browser_gateway.asyncio.sleep", new=AsyncMock()),
         )
 
+    async def test_human_reload_fetches_fresh_page_resources(self):
+        """Explicit owner reload bypasses cached scripts but does not clear cookies."""
+        with (
+            self._patches()[0],
+            self._patches()[1],
+            self._patches()[2],
+            self._patches()[3],
+        ):
+            await self.gateway._perform_action(
+                self.owner, self.entry, "browser.reload", {}, human=True
+            )
+        self.cdp.send.assert_awaited_once()
+        self.assertEqual(self.cdp.send.await_args.args[0], "Page.reload")
+        self.assertEqual(self.cdp.send.await_args.args[1], {"ignoreCache": True})
+
+    async def test_agent_cannot_reload_private_page(self):
+        self.gateway.sessions[self.owner] = self.entry
+        with self.assertRaisesRegex(BrowserError, "unknown browser tool"):
+            await self.gateway.call(
+                subject=self.owner[1],
+                issuer=self.owner[0],
+                client_id=self.owner[2],
+                name="browser.reload",
+                args={},
+            )
+        self.cdp.send.assert_not_awaited()
+
     async def test_agent_enter_denied_before_any_key_dispatch(self):
         with (
             self._patches()[0],

@@ -1446,7 +1446,9 @@ class BrowserGateway:
             if name == "browser.reload":
                 if not human:
                     raise BrowserError("reload requires authenticated human control")
-                await cdp.send("Page.reload", {}, session=session)
+                # Explicit private-owner retry. Bypass stale cached scripts but
+                # preserve session cookies and normal provider verification.
+                await cdp.send("Page.reload", {"ignoreCache": True}, session=session)
             elif name == "browser.open":
                 await navigate(args["url"])
             elif name == "browser.follow":

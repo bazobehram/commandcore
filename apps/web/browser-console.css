@@ -56,3 +56,8 @@ h1{font-size:clamp(26px,3vw,40px);font-weight:760;letter-spacing:-.05em;line-hei
 .viewport-stage{position:relative}
 #pending-click-marker{position:absolute;z-index:5;width:34px;height:34px;pointer-events:none;transform:translate(-50%,-50%);border:3px solid #ffd15e;border-radius:50%;background:rgba(255,209,94,.16);box-shadow:0 0 0 3px #18202f}
 #pending-click-marker[hidden]{display:none!important}
+
+/* Private owner-only sign-in recovery guidance (never an auth bypass). */
+.browser-login-help{grid-column:1/-1;border:1px solid var(--line);background:var(--card);border-radius:10px;margin-top:11px;padding:11px 13px;color:var(--muted);font-size:12px;line-height:1.55}
+.browser-login-help summary{cursor:pointer;font-weight:650;color:var(--text)}
+.browser-login-help p{margin:10px 0 0}
