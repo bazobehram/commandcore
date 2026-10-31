@@ -130,7 +130,7 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
 def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
     process = subprocess.run(
         [
-            "powershell.exe",
+            "pwsh.exe",
             "-NoProfile",
             "-NonInteractive",
             "-File",
