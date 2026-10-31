@@ -58,6 +58,7 @@ def call_remote(origin: str, token: str, tool: str, args: dict[str, Any]) -> dic
             "Authorization": "Bearer " + token,
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "User-Agent": "CommandCore-M1-Acceptance/1.0",
         },
         method="POST",
     )
