@@ -219,3 +219,52 @@ def test_non_oauth_and_missing_identity_cannot_access_viewer(viewer, headers):
     )
     assert pool.actions == []
     assert audit.rows == []
+
+
+def test_closed_browser_session_cannot_be_reused_from_prior_listing(viewer):
+    """A previously listed client ID is not a persistent ownership grant."""
+    client, pool, audit = viewer
+    initial = client.get("/api/browser/sessions")
+    assert initial.status_code == 200
+    assert initial.json()["sessions"][0]["client_id"] == "alice-browser"
+
+    # Simulate a session closing between UI discovery and a later request.
+    pool.clients[("https://issuer-a.example/", "alice")] = []
+    assert (
+        client.get(
+            "/api/browser/frame", params={"client_id": "alice-browser"}
+        ).status_code
+        == 404
+    )
+    response = client.post(
+        "/api/browser/handoff",
+        json={"client_id": "alice-browser"},
+        headers={"origin": "https://panel.example"},
+    )
+    assert response.status_code == 404
+    assert not any(a[0] in {"frame", "handoff"} for a in pool.actions)
+    assert audit.rows == []
+
+
+def test_reassigned_client_id_never_inherits_previous_subject_access(viewer):
+    """Client IDs can be reused, but subject and issuer still control access."""
+    client, pool, audit = viewer
+    pool.clients[("https://issuer-a.example/", "alice")] = []
+    pool.clients[("https://issuer-a.example/", "bob")].append(
+        {"client_id": "alice-browser", "session_id": "bob-new-session"}
+    )
+
+    assert client.get(
+        "/api/browser/frame", params={"client_id": "alice-browser"}
+    ).status_code == 404
+    bob = client.get(
+        "/api/browser/frame",
+        params={"client_id": "alice-browser"},
+        headers={"x-fixture-subject": "bob"},
+    )
+    assert bob.status_code == 200
+    assert ("frame", "https://issuer-a.example/", "bob", "alice-browser") in pool.actions
+    assert not any(
+        a[0] == "frame" and a[2] == "alice" for a in pool.actions
+    )
+    assert audit.rows == []
