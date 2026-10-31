@@ -96,3 +96,45 @@ async def test_older_agent_never_silently_ignores_narrowing_arguments(
         )
     assert error.value.code == "unsupported_argument"
     assert agents.last_device is None
+
+
+@pytest.mark.parametrize(
+    "scopes,expected",
+    [
+        (frozenset(), "READ_ONLY"),
+        (frozenset({"commandcore:standard"}), "STANDARD"),
+        (frozenset({"commandcore:full"}), "FULL_CONTROL"),
+    ],
+)
+def test_effective_profile_shared_between_whoami_and_dispatch(scopes, expected):
+    from commandcore_server.auth import FULL_SCOPE, STANDARD_SCOPE
+
+    scope_map = {
+        "commandcore:standard": STANDARD_SCOPE,
+        "commandcore:full": FULL_SCOPE,
+    }
+    principal = Principal(
+        "owner",
+        "test-client",
+        auth_kind="oauth2",
+        scopes=frozenset(scope_map[s] for s in scopes),
+    )
+    device = {
+        "permission_profile": "FULL_CONTROL",
+        "access_max_permission_profile": "FULL_CONTROL",
+        "capabilities": {"local_max_permission_profile": "FULL_CONTROL"},
+    }
+    assert ToolService._effective_device_profile(principal, device) == expected
+
+
+def test_effective_profile_honors_all_permission_ceiling_layers():
+    principal = Principal("owner", "test-client", auth_kind="panel-cookie")
+    device = {
+        "permission_profile": "FULL_CONTROL",
+        "access_max_permission_profile": "STANDARD",
+        "capabilities": {"local_max_permission_profile": "FULL_CONTROL"},
+    }
+    assert ToolService._effective_device_profile(principal, device) == "STANDARD"
+    device["access_max_permission_profile"] = "FULL_CONTROL"
+    device["capabilities"]["local_max_permission_profile"] = "READ_ONLY"
+    assert ToolService._effective_device_profile(principal, device) == "READ_ONLY"

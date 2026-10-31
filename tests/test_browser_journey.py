@@ -331,6 +331,11 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         # resolution, grant checks, dispatch and human approval logic remain
         # unchanged. See test_tool_scope_policy.py for metadata/runtime parity
         # and the compared pre-refactor class for semantic equivalence.
+        # M2 PR #144 review: _effective_device_profile centralizes the
+        # previously duplicated four-ceiling calculation in auth.whoami and
+        # device dispatch. Device ownership, selection, permission enforcement,
+        # audit and agent dispatch remain in their existing call paths.
+        # See test_tool_service.py for scope and ceiling regression coverage.
         import hashlib
 
         path = (
@@ -346,7 +351,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "615b479a795fad9730975da31e0e493646939d4e492a586007caaed74e4d942c",
+            "00282fd182bb10c508f9633d5cd0a3a483b3db3ea20d49755d5acacb11b0334a",
         )
 
 
