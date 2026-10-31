@@ -15,10 +15,12 @@ $result = Join-Path $FixtureRoot 'result\worker.result.json'
 $worker = Join-Path $FixtureRoot 'installers\worker.ps1'
 $createdUser = $false
 $createdTask = $false
+$stage = 'create_user'
 try {
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
     New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI Agent installer acceptance' | Out-Null
     $createdUser = $true
+    $stage = 'fixture_acl'
     # Least privilege: read/traverse public installer assets, but write only
     # the result folder. TLS private keys are outside this entire fixture.
     & icacls.exe $FixtureRoot /grant '*S-1-5-32-545:RX' /Q | Out-Null
@@ -27,18 +29,26 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Failed to grant installer read access.' }
     & icacls.exe (Join-Path $FixtureRoot 'result') /grant '*S-1-5-32-545:(OI)(CI)M' /T /Q | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Failed to grant result write access.' }
+    $stage = 'register_task'
     $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
         $worker + '" -FixtureRoot "' + $FixtureRoot + '" -Origin "' + $Origin + '"'
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
     $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(10))
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -User $account -Password $password -RunLevel Limited -Force | Out-Null
     $createdTask = $true
+    $stage = 'start_task'
     Start-ScheduledTask -TaskName $taskName
+    $stage = 'read_worker_report'
     $deadline = (Get-Date).AddSeconds(110)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
             $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
             if ($report.status -ne 'PASS' -or $report.non_admin -ne $true -or $report.signed_install -ne $true) {
+                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll')) {
+                    $stage = 'worker_' + $report.stage
+                } else {
+                    $stage = 'worker_unknown'
+                }
                 throw 'Standard-user signed installer failed its assertions.'
             }
             Write-Output 'PASS: isolated non-admin Windows signed Agent install'
@@ -46,7 +56,13 @@ try {
         }
         Start-Sleep -Milliseconds 500
     }
+    $stage = 'worker_timeout'
     throw 'Standard-user installation did not report success before deadline.'
+} catch {
+    # The diagnostic code is static and never contains credentials, usernames,
+    # filesystem locations or raw PowerShell exception messages.
+    Write-Output ('CI_INSTALL_STAGE:' + $stage)
+    throw 'Disposable Windows installer acceptance failed (redacted).'
 } finally {
     if ($createdTask) {
         try { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue } catch {}
