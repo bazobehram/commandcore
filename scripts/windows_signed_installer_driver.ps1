@@ -55,7 +55,8 @@ try {
     $stage = 'start_task'
     Start-ScheduledTask -TaskName $taskName
     $stage = 'read_worker_report'
-    $deadline = (Get-Date).AddSeconds(110)
+    $deadlineSeconds = if ($OnlyTask) { 20 } else { 110 }
+    $deadline = (Get-Date).AddSeconds($deadlineSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
             $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
