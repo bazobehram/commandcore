@@ -14,12 +14,9 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable
 
-DENIED = {
-    "device_not_found",
-    "permission_denied",
-    "selection_not_found_or_expired",
-    "insufficient_scope",
-}
+FOREIGN_DENIED = {"device_not_found", "permission_denied"}
+SELECTION_DENIED = FOREIGN_DENIED | {"selection_not_found_or_expired"}
+SCOPE_DENIED = {"insufficient_scope", "permission_denied"}
 
 
 class ProbeFailure(Exception):
@@ -105,9 +102,11 @@ def success(call: Callable, token: str, tool: str, args: dict) -> dict:
     return result["data"]
 
 
-def denied(call: Callable, token: str, tool: str, args: dict) -> None:
+def denied(
+    call: Callable, token: str, tool: str, args: dict, accepted: set[str]
+) -> None:
     result = call(token, tool, args)
-    if result.get("ok") is not False or result.get("code") not in DENIED:
+    if result.get("ok") is not False or result.get("code") not in accepted:
         raise ProbeFailure("expected_explicit_denial")
 
 
@@ -168,15 +167,15 @@ def run_checks(
     check(
         "A03",
         lambda: (
-            denied(call, a, "devices.info", {"device_id": db}),
-            denied(call, a, "system.info", {"device_id": db}),
+            denied(call, a, "devices.info", {"device_id": db}, FOREIGN_DENIED),
+            denied(call, a, "system.info", {"device_id": db}, FOREIGN_DENIED),
         ),
     )
     check(
         "A04",
         lambda: (
-            denied(call, b, "devices.info", {"device_id": da}),
-            denied(call, b, "system.info", {"device_id": da}),
+            denied(call, b, "devices.info", {"device_id": da}, FOREIGN_DENIED),
+            denied(call, b, "system.info", {"device_id": da}, FOREIGN_DENIED),
         ),
     )
 
@@ -185,15 +184,15 @@ def run_checks(
         b_sel = success(call, b, "devices.select", {"device": db}).get("selection_id")
         if not isinstance(a_sel, str) or not isinstance(b_sel, str):
             raise ProbeFailure("selection_missing")
-        denied(call, a, "devices.info", {"selection_id": b_sel})
-        denied(call, b, "devices.info", {"selection_id": a_sel})
+        denied(call, a, "devices.info", {"selection_id": b_sel}, SELECTION_DENIED)
+        denied(call, b, "devices.info", {"selection_id": a_sel}, SELECTION_DENIED)
 
     check("A05", selection_isolation)
     check(
         "A06",
         lambda: (
-            denied(call, a, "shell.exec", {"device_id": da, "command": "true"}),
-            denied(call, b, "shell.exec", {"device_id": db, "command": "true"}),
+            denied(call, a, "shell.exec", {"device_id": da, "command": "true"}, SCOPE_DENIED),
+            denied(call, b, "shell.exec", {"device_id": db, "command": "true"}, SCOPE_DENIED),
         ),
     )
     return outcomes
