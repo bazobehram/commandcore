@@ -1479,6 +1479,37 @@ class ToolService:
                 "insufficient_scope", f"{name} requires OAuth scope {required}"
             )
 
+    @staticmethod
+    def _oauth_permission_ceiling(principal: Principal) -> str:
+        if principal.auth_kind in {"bootstrap-bearer", "panel-cookie"} or scope_allows(
+            principal.scopes, FULL_SCOPE
+        ):
+            return "FULL_CONTROL"
+        if scope_allows(principal.scopes, STANDARD_SCOPE):
+            return "STANDARD"
+        return "READ_ONLY"
+
+    @classmethod
+    def _effective_device_profile(
+        cls, principal: Principal, device: dict[str, Any]
+    ) -> str:
+        access_max = str(
+            device.get(
+                "access_max_permission_profile",
+                "FULL_CONTROL" if device.get("is_owner") else "READ_ONLY",
+            )
+        )
+        return cls._min_profile(
+            str(device["permission_profile"]),
+            access_max,
+            str(
+                device.get("capabilities", {}).get(
+                    "local_max_permission_profile", "STANDARD"
+                )
+            ),
+            cls._oauth_permission_ceiling(principal),
+        )
+
     def _resolve_device(
         self, principal: Principal, args: dict[str, Any]
     ) -> dict[str, Any]:
@@ -1642,30 +1673,11 @@ class ToolService:
                     ui_sink["operation_id"] = live_key
             if name == "auth.whoami":
                 devices = self.db.list_accessible_devices(principal.subject)
-                rank = {"READ_ONLY": 0, "STANDARD": 1, "FULL_CONTROL": 2}
                 grants = []
                 for d in devices:
                     if d["revoked_at"]:
                         continue
-                    oauth_ceiling = (
-                        "FULL_CONTROL"
-                        if principal.auth_kind in {"bootstrap-bearer", "panel-cookie"}
-                        or scope_allows(principal.scopes, FULL_SCOPE)
-                        else (
-                            "STANDARD"
-                            if scope_allows(principal.scopes, STANDARD_SCOPE)
-                            else "READ_ONLY"
-                        )
-                    )
-                    profiles = [
-                        d["permission_profile"],
-                        d["access_max_permission_profile"],
-                        d["capabilities"].get(
-                            "local_max_permission_profile", "STANDARD"
-                        ),
-                        oauth_ceiling,
-                    ]
-                    effective = min(profiles, key=lambda p: rank.get(p, 0))
+                    effective = self._effective_device_profile(principal, d)
                     grants.append(
                         {
                             "device_id": d["id"],
@@ -1803,32 +1815,7 @@ class ToolService:
             self.live_activity.set_device(live_key, device_id)
             if device["status"] != "online":
                 raise ToolError("device_offline")
-            access_max = str(
-                device.get(
-                    "access_max_permission_profile",
-                    "FULL_CONTROL" if device.get("is_owner") else "READ_ONLY",
-                )
-            )
-            oauth_ceiling = (
-                "FULL_CONTROL"
-                if principal.auth_kind in {"bootstrap-bearer", "panel-cookie"}
-                or scope_allows(principal.scopes, FULL_SCOPE)
-                else (
-                    "STANDARD"
-                    if scope_allows(principal.scopes, STANDARD_SCOPE)
-                    else "READ_ONLY"
-                )
-            )
-            effective_profile = self._min_profile(
-                str(device["permission_profile"]),
-                access_max,
-                str(
-                    device.get("capabilities", {}).get(
-                        "local_max_permission_profile", "STANDARD"
-                    )
-                ),
-                oauth_ceiling,
-            )
+            effective_profile = self._effective_device_profile(principal, device)
             if not allowed(effective_profile, name):
                 raise ToolError(
                     "permission_denied",
