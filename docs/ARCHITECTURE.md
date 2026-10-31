@@ -126,6 +126,7 @@ on the server/Agent boundary; the Angular UI is not a security authority.
 | Angular workspace UI and session privacy | `apps/workspace-angular/src/app/app.ts`, `api-client.ts`, `session-epoch.ts` | No stale account data after logout/401; no client-side privilege escalation |
 | Legacy operator/recovery UI | `apps/web/panel.js` and related legacy assets | Do not remove recovery workflows before an accepted replacement |
 | Managed Browser orchestration | `browser_gateway.py`, `browser_worker_pool.py`, `browser_worker_binding.py` | OAuth owner binding, verified worker identity, no direct untrusted CDP |
+| Chromium DevTools Protocol command transport and errors | `browser_cdp.py`, `browser_errors.py` | Bounded per-command deadline and explicitly pinned target; neither module decides authorization |
 | First-party Browser viewer and handoff | `browser_viewer.py` and Browser approval/policy modules | Issuer/subject/session checks; private control blocks AI access |
 
 All short server paths in the last two rows are under
