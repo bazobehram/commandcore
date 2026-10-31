@@ -46,6 +46,9 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha,format=long
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
       - uses: docker/build-push-action@v6
         id: build
         with:
@@ -60,6 +63,23 @@ jobs:
           set -euo pipefail
           [[ "${{ steps.build.outputs.digest }}" =~ ^sha256:[0-9a-f]{64}$ ]]
           printf "image=ghcr.io/%s@%s\n" "${GITHUB_REPOSITORY,,}" "${{ steps.build.outputs.digest }}" > "$RUNNER_TEMP/commandcore-image.txt"
+      - name: Verify published image revision and source labels
+        shell: bash
+        env:
+          RELEASE_IMAGE: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "$RELEASE_IMAGE"
+          image_id="$(docker image inspect --format '{{.Id}}' "$RELEASE_IMAGE")"
+          revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$RELEASE_IMAGE")"
+          source="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$RELEASE_IMAGE")"
+          python scripts/verify_image_identity.py \
+            --expected-commit "$GITHUB_SHA" \
+            --image-id "$image_id" \
+            --revision "$revision" \
+            --source "$source"
+          printf 'source_commit=%s\n' "$GITHUB_SHA" >> "$RUNNER_TEMP/commandcore-image.txt"
+          printf 'image_id=%s\n' "$image_id" >> "$RUNNER_TEMP/commandcore-image.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: commandcore-image-digest
