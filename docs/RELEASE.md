@@ -143,7 +143,10 @@ Consumers should verify the immutable digest, not a mutable tag:
 ```bash
 gh attestation verify oci://ghcr.io/OWNER/commandcore@sha256:IMAGE_DIGEST \
   --repo OWNER/commandcore \
-  --signer-workflow OWNER/commandcore/.github/workflows/ghcr-publish.yml
+  --signer-workflow OWNER/commandcore/.github/workflows/ghcr-publish.yml \
+  --source-ref refs/tags/v1.0.0 \
+  --source-digest COMMIT_SHA \
+  --deny-self-hosted-runners
 ```
 
 This attestation proves where and how the tagged image was built; it does not
