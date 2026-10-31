@@ -23,7 +23,8 @@ permissions:
 
 jobs:
   angular-build:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 does not support the ubuntu-26.04 runner image yet.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: apps/workspace-angular
