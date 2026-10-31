@@ -1,0 +1,108 @@
+"""Offline, credential-free tests of the M1 live OAuth acceptance probe."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+SOURCE = Path(__file__).resolve().parents[1] / "scripts/live_mcp_two_user_probe.py"
+spec = importlib.util.spec_from_file_location("live_mcp_two_user_probe", SOURCE)
+assert spec is not None and spec.loader is not None
+probe = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(probe)
+
+
+def fake_client(*, leak: bool = False, unsafe_shell: bool = False):
+    def call(token, name, args):
+        is_a = token == "token-a"
+        own = "device-a" if is_a else "device-b"
+        foreign = "device-b" if is_a else "device-a"
+        if name == "auth.whoami":
+            return {
+                "ok": True,
+                "data": {
+                    "subject": "subject-a" if is_a else "subject-b",
+                    "issuer": "https://example.test/",
+                    "oauth_scopes": ["commandcore:read"],
+                    "device_grants": [{"device_id": own}],
+                },
+            }
+        if name == "devices.list":
+            return {"ok": True, "data": {"devices": [{"id": own}]}}
+        if name == "devices.select":
+            if args["device"] != own:
+                return {"ok": False, "code": "device_not_found"}
+            return {
+                "ok": True,
+                "data": {"selection_id": "sel-a" if is_a else "sel-b"},
+            }
+        if name == "shell.exec":
+            if unsafe_shell:
+                return {"ok": True, "data": {"stdout": ""}}
+            return {"ok": False, "code": "insufficient_scope"}
+        if name in {"devices.info", "system.info"}:
+            if args.get("device_id") == foreign and leak:
+                return {"ok": True, "data": {"device": {"id": foreign}}}
+            foreign_selection = "sel-b" if is_a else "sel-a"
+            if (
+                args.get("device_id") == foreign
+                or args.get("selection_id") == foreign_selection
+            ):
+                return {"ok": False, "code": "device_not_found"}
+            return {"ok": True, "data": {"device": {"id": own}}}
+        raise AssertionError("unknown test tool")
+
+    return call
+
+
+def test_expected_two_account_isolation():
+    assert probe.run_checks(
+        fake_client(), "token-a", "token-b", "device-a", "device-b"
+    ) == [
+        ("A01_A02", True),
+        ("A03", True),
+        ("A04", True),
+        ("A05", True),
+        ("A06", True),
+    ]
+
+
+def test_cross_user_device_visibility_is_a_failure():
+    results = probe.run_checks(
+        fake_client(leak=True), "token-a", "token-b", "device-a", "device-b"
+    )
+    assert ("A03", False) in results
+    assert ("A04", False) in results
+
+
+def test_read_only_shell_regression_is_detected():
+    results = probe.run_checks(
+        fake_client(unsafe_shell=True), "token-a", "token-b", "device-a", "device-b"
+    )
+    assert ("A06", False) in results
+
+
+def test_identical_tokens_fail_without_device_calls():
+    assert probe.run_checks(
+        fake_client(), "token-a", "token-a", "device-a", "device-b"
+    ) == [("A01_A02", False)]
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://example.test",
+        "https://user:pass@example.test",
+        "https://example.test/path",
+        "https://example.test?q=x",
+    ],
+)
+def test_unsafe_origins_are_rejected(origin):
+    with pytest.raises(probe.ProbeFailure):
+        probe.https_origin(origin)
+
+
+def test_https_origin_is_normalized():
+    assert probe.https_origin("https://example.test/") == "https://example.test"
