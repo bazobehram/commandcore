@@ -143,6 +143,20 @@ should therefore be suitable as the final commit subject.
 Maintainers may require a rebase, split, additional tests, or a design discussion
 before review continues.
 
+## MCP and device authorization review checklist
+
+For `ToolService`, OAuth scope, device-selection or dispatch changes:
+
+- [ ] Check that principal, device-grant and local ceiling enforcement remain server-side.
+- [ ] Verify `auth.whoami` and tool execution use consistent effective permissions.
+- [ ] Include negative tests for affected authorization boundaries.
+- [ ] Review the `ToolService` source fingerprint deliberately rather than
+      replacing it just to make CI pass.
+- [ ] Follow the [device authorization contributor map](docs/DEVELOPMENT.md#device-authorization-and-execution-contributor-map)
+      and run the relevant release gates.
+
+Real two-user OAuth acceptance remains a distinct release requirement.
+
 ## Security-sensitive areas
 
 Changes in these areas receive stricter review:

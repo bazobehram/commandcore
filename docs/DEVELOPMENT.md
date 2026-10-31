@@ -79,6 +79,43 @@ tests/test_tool_scope_policy.py, tests/test_oauth_and_grants.py and
 tests/test_mcp.py, plus scripts/mcp_release_gate.py. New scope changes need
 positive and negative authorization tests and review of the MCP contract.
 
+## Device authorization and execution: contributor map
+
+The MCP-facing `mcp.py` handles protocol requests and task/UI tracking.
+`ToolService` in `tools.py` remains the authoritative execution boundary.
+Review changes in this order:
+
+1. `_require_scope` checks authenticated OAuth scopes against
+   `tool_scope_policy.py`; published annotations are not authorization.
+2. `_resolve_device` resolves a principal-scoped selection or explicit device
+   ID; explicit IDs take priority. Foreign or stale selections must fail.
+3. `_effective_device_profile` intersects server permission, account grant,
+   local Agent ceiling and OAuth ceiling. `auth.whoami` reports this result,
+   while execution enforces it using `allowed(profile, tool)`.
+4. Capability/argument validation happens before `AgentManager.dispatch`.
+   The forwarded request excludes device selection handles.
+5. Audit and operation tracking remain on the server side. Never move
+   authorization into the Angular UI or trust client-supplied permissions.
+
+For changes to this boundary, run:
+
+```bash
+PYTHONPATH=apps/server:agent pytest -q tests/test_tool_service.py tests/test_tool_scope_policy.py tests/test_oauth_and_grants.py tests/test_mcp.py tests/test_browser_journey.py
+```
+
+Add negative cases for denied scopes, missing/revoked/foreign devices, stale
+selections, downgraded grants, local ceilings and unsupported arguments.
+These tests do not replace full CI or real multi-account OAuth acceptance.
+
+### ToolService fingerprint review
+
+`tests/test_browser_journey.py` intentionally checks a source fingerprint
+of `ToolService`. Any legitimate class change requires an explicit baseline
+review: inspect the precise security/ownership/dispatch diff, add regression
+tests, document unchanged guarantees, and **only then** update the expected
+hash with a review comment. Never change the hash solely to silence CI.
+Run the release-candidate gate before merging.
+
 ## Angular workspace: API and session boundary
 
 The Angular SPA is at `apps/workspace-angular`. The root component in
