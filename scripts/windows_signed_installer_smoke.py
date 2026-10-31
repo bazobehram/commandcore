@@ -145,9 +145,7 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
     )
     # Do not expose task credentials, fixtures or raw PowerShell exceptions.
     if process.returncode:
-        stages = re.findall(
-            r"(?m)^CI_INSTALL_STAGE:([a-z_]+)\s*$", process.stdout
-        )
+        stages = re.findall(r"(?m)^CI_INSTALL_STAGE:([a-z_]+)\s*$", process.stdout)
         safe_stage = stages[-1] if stages else "unknown"
         print("FAIL: windows_installer_stage=" + safe_stage)
         raise RuntimeError("standard_user_installer_acceptance_failed")
