@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - 'apps/workspace-angular/**'
+      - 'tests/ui/workspace_mobile_smoke.cjs'
+      - 'tests/ui/package.json'
+      - 'tests/ui/package-lock.json'
       - '.github/workflows/angular-workspace.yml'
   push:
     branches: [main]
     paths:
       - 'apps/workspace-angular/**'
+      - 'tests/ui/workspace_mobile_smoke.cjs'
+      - 'tests/ui/package.json'
+      - 'tests/ui/package-lock.json'
       - '.github/workflows/angular-workspace.yml'
   workflow_dispatch:
 
@@ -32,6 +38,15 @@ jobs:
       - run: npm run test:api
       - run: npm run test:unit
       - run: npm run build
+      - name: Install headless browser test dependencies
+        run: npm ci
+        working-directory: tests/ui
+      - name: Install Chromium for mobile viewport acceptance
+        run: npx playwright install --with-deps chromium
+        working-directory: tests/ui
+      - name: Check workspace at mobile and desktop viewports
+        run: node tests/ui/workspace_mobile_smoke.cjs
+        working-directory: .
       - uses: actions/upload-artifact@v4
         with:
           name: commandcore-workspace-dist
