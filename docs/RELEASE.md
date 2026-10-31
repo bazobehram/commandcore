@@ -112,3 +112,22 @@ wire-incompatible changes must be explicitly versioned.
 Keep the previous known-good server image/artifact and database backup before
 production upgrades. Agent releases retain versioned known-good executables and
 use fresh-health validation before committing activation.
+
+
+## Immutable GHCR release image metadata
+
+The tagged GHCR workflow uses an immutable registry digest and verifies
+the pulled image's OCI source and revision labels. It records both the
+registry manifest digest reference (ghcr.io/...@sha256:...) and the pulled
+platform-specific Docker image ID (sha256:...) in a CI artifact, together
+with the source commit. These **different digest types are not interchangeable**.
+
+A release job fails if the image has a missing/mismatched revision or
+unexpected repository source label. The assertion is made against a freshly
+pulled image at the exact registry digest, not a mutable image tag.
+
+The uploaded report is evidence of the workflow's own consistency check.
+It is not a signed third-party provenance attestation, does not approve
+deployment, and does not demonstrate that the same image is running on
+Netti or the private homeserver. Independent promotion, protected approval,
+runtime image-ID checks and backup/rollback acceptance remain mandatory.
