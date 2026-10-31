@@ -150,10 +150,16 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         print("FAIL: windows_installer_stage=" + safe_stage)
         if safe_stage == "create_user":
             categories = re.findall(
-                r"(?m)^CI_USER_CREATE_CATEGORY:(password_policy|privilege|name_collision|argument|other)\\s*$",
-                process.stdout,
+                r"(?m)^CI_USER_CREATE_CATEGORY:([a-z_]+)\s*$", process.stdout
             )
-            if categories:
+            allowed = {
+                "password_policy",
+                "privilege",
+                "name_collision",
+                "argument",
+                "other",
+            }
+            if categories and categories[-1] in allowed:
                 print("FAIL: windows_user_create_category=" + categories[-1])
         raise RuntimeError("standard_user_installer_acceptance_failed")
 
