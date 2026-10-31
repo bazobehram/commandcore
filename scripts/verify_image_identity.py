@@ -1,4 +1,5 @@
 """Validate published OCI image identity metadata without authorizing deployment."""
+
 from __future__ import annotations
 
 import argparse
