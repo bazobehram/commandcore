@@ -102,10 +102,12 @@ def test_real_protected_resource_metadata_uses_configured_scopes(
             sys.executable,
             "-c",
             (
-                "import asyncio;"
-                "from commandcore_server.main import oauth_protected_resource;"
-                "r=asyncio.run(oauth_protected_resource());"
-                "print(r.body.decode())"
+                "import json;"
+                "from fastapi.testclient import TestClient;"
+                "from commandcore_server.main import app;"
+                "r=TestClient(app).get('/.well-known/oauth-protected-resource');"
+                "assert r.status_code==200,r.text;"
+                "print(json.dumps(r.json()))"
             ),
         ],
         env=env,
