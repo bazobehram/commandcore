@@ -6,17 +6,21 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $report = Join-Path $FixtureRoot 'result\worker.result.json'
+$stage = 'identity'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Must run as a standard user.'
     }
+    $stage = 'profile'
     if (!$env:LOCALAPPDATA) { throw 'User profile was not loaded.' }
     $installer = Join-Path $FixtureRoot 'installers\windows.ps1'
     if (!(Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Packaged installer missing.' }
+    $stage = 'installer'
     & $installer -Server $Origin -NoEnroll -NoTask
     if (!$?) { throw 'Signed installer returned an error.' }
+    $stage = 'activation'
     $root = Join-Path $env:LOCALAPPDATA 'CommandCore\Agent'
     $active = Join-Path $root 'active.json'
     if (!(Test-Path -LiteralPath $active -PathType Leaf)) { throw 'Activation metadata missing.' }
@@ -28,8 +32,10 @@ try {
     if (!(Test-Path -LiteralPath $config.binary -PathType Leaf)) {
         throw 'Native Agent executable missing.'
     }
+    $stage = 'native'
     & $config.binary --version | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Installed native Agent is not runnable.' }
+    $stage = 'no_enroll'
     if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'CommandCore\State\agent.json')) {
         throw 'Unexpected enrollment during no-enroll test.'
     }
@@ -37,7 +43,7 @@ try {
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
-    @{status='FAIL'; non_admin=$false; signed_install=$false} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
