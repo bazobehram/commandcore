@@ -19,13 +19,14 @@ operation_ui_context = ContextVar("operation_ui_context", default=None)
 
 from .activity import argument_summary, source
 from .agent_gateway import AgentManager
-from .auth import FULL_SCOPE, READ_SCOPE, STANDARD_SCOPE, scope_allows
+from .auth import FULL_SCOPE, STANDARD_SCOPE, scope_allows
 from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
 from .browser_worker_pool import OwnerBrowserWorkerPool
 from .db import Database
 from .live_activity import LiveActivity
 from .models import Principal
 from .permissions import allowed, risk_class
+from .tool_scope_policy import required_oauth_scope
 
 
 def _device_ref_schema() -> dict[str, Any]:
@@ -1064,26 +1065,7 @@ for _tool in TOOL_DEFINITIONS:
         "idempotentHint": _read_only,
         "openWorldHint": _name in _OPEN_WORLD_HINTS,
     }
-    if _name in {
-        "services.manage",
-        "package.install",
-        "system.reboot",
-        "system.shutdown",
-        "docker.ps",
-        "docker.inspect",
-        "docker.logs",
-        "docker.exec",
-        "docker.run",
-        "agent.update.stage",
-        "agent.update.activate",
-        "agent.update.rollback",
-        "agents.deliver",
-    }:
-        _scope = FULL_SCOPE
-    elif _name in _READ_ONLY_HINTS or _name in {"devices.select"}:
-        _scope = READ_SCOPE
-    else:
-        _scope = STANDARD_SCOPE
+    _scope = required_oauth_scope(_name, _READ_ONLY_HINTS)
     _tool["securitySchemes"] = [{"type": "oauth2", "scopes": [_scope]}]
     # Documented ChatGPT compatibility metadata; generic MCP clients can ignore
     # it. These labels do not prescribe the host's tool orchestration or UI.
@@ -1485,25 +1467,7 @@ class ToolService:
 
     @staticmethod
     def _required_scope(name: str) -> str:
-        if name in {
-            "services.manage",
-            "package.install",
-            "system.reboot",
-            "system.shutdown",
-            "docker.ps",
-            "docker.inspect",
-            "docker.logs",
-            "docker.exec",
-            "docker.run",
-            "agent.update.stage",
-            "agent.update.activate",
-            "agent.update.rollback",
-            "agents.deliver",
-        }:
-            return FULL_SCOPE
-        if name in _READ_ONLY_HINTS or name in {"devices.select"}:
-            return READ_SCOPE
-        return STANDARD_SCOPE
+        return required_oauth_scope(name, _READ_ONLY_HINTS)
 
     def _require_scope(self, principal: Principal, name: str) -> None:
         # Bootstrap/panel auth are deployment-admin paths and predate OAuth scopes.

@@ -61,6 +61,24 @@ gate and `ruff format` as the canonical Python formatter. Use `make format` befo
 submitting Python changes and keep formatting-only changes separate from behavior
 changes when practical.
 
+## Server tool scope policy
+
+The tool_scope_policy.py module centralizes the FULL/READ/STANDARD OAuth
+classification. Both published MCP securitySchemes and the ToolService
+execution path use it, preventing drift between advertised metadata and
+runtime checks. The existing tools.py exports and all schema definitions
+remain compatible.
+
+Classification is not authorization: the server still validates a signed
+principal, active device grant, permission profile, local Agent maximum
+and approval gates. MCP read-only/destructive annotations only describe
+UX, not actual permissions.
+
+Before editing scopes, run the focused Python tests in
+tests/test_tool_scope_policy.py, tests/test_oauth_and_grants.py and
+tests/test_mcp.py, plus scripts/mcp_release_gate.py. New scope changes need
+positive and negative authorization tests and review of the MCP contract.
+
 ## Angular workspace: API and session boundary
 
 The Angular SPA is at `apps/workspace-angular`. The root component in
