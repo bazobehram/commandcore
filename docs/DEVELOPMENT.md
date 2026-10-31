@@ -51,8 +51,9 @@ From a clean checkout with Node.js 24+ and npm:
 ```bash
 cd apps/workspace-angular
 npm ci
-npm run test:api  # Node built-in tests: login/session, logout, mutation, HTTP errors
-npm run build     # Angular AOT production compilation
+npm run test:api   # Node built-in tests: login/session, logout, mutation, HTTP errors
+npm run test:unit  # Angular component/DOM session lifecycle tests (Vitest/jsdom)
+npm run build      # Angular AOT production compilation
 ```
 
 `test/api-client.test.mjs` uses mocked `fetch`: it makes no external requests
@@ -76,8 +77,23 @@ expired session, and authentication is not reattempted automatically.
 
 Run `npm run test:api` for deterministic, credential-free tests of the
 session generation contract, and `npm run build` for Angular type-checking.
-The two-account Browser/authorization end-to-end acceptance tests are tracked
-separately in the 1.0 release-readiness program.
+Run `npm run test:unit` for component-level login, account-menu, expiry,
+logout and stale-request protections. Unit tests use synthetic API responses
+and a simulated DOM: they do **not** verify native mobile viewport rendering,
+physical Browser worker boundaries or real Auth0 multiuser access. Those
+end-to-end acceptance gates remain separately tracked under the 1.0 roadmap.
+
+## Dependency and CI reproducibility
+
+Use `npm ci`, not a populated developer `node_modules` tree, to validate
+the Angular dependency lockfile. GitHub CI runs API tests, component tests
+and the production build after a clean install. When updating dependencies,
+regenerate the lockfile with the project's declared npm major version, then
+run a fresh `npm ci` again before reviewing the change. Do not broaden
+runtime dependencies merely to support test fixtures.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the source-module ownership map,
+managed Browser boundaries and independent public/private release topology.
 
 ## Code boundaries
 
