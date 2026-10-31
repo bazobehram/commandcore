@@ -58,6 +58,7 @@ public visibility.
 - [ ] Linux x86_64 real lifecycle acceptance passes.
 - [ ] Linux ARM64 real/native acceptance evidence is current.
 - [ ] Signed manifest verification passes.
+- [ ] GHCR image has a GitHub-signed provenance attestation verified for its immutable digest, repository, exact signer workflow, and release tag.
 - [ ] Artifact hashes and sizes are recorded.
 - [ ] Update activation and failed-health rollback pass.
 - [ ] Server database backup/restore rehearsal passes.
@@ -70,6 +71,7 @@ public visibility.
 - [ ] Enable branch protection and private vulnerability reporting.
 - [ ] Publish release notes with known limitations.
 - [ ] Publish only artifacts produced from the reviewed source commit.
+- [ ] Verify the published GHCR image attestation against the exact immutable digest before any deployment promotion.
 - [ ] Verify public clone -> test -> build from a separate clean environment.
 - [ ] Verify public documentation and release downloads after publication.
 
