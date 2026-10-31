@@ -26,7 +26,7 @@ def main() -> int:
     driver = Path(__file__).resolve().with_name("windows_signed_installer_driver.ps1")
     result = subprocess.run(
         [
-            "powershell.exe",
+            "pwsh.exe",
             "-NoProfile",
             "-NonInteractive",
             "-File",
