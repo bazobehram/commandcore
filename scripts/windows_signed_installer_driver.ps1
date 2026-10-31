@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory)][string]$UserName,
     [Parameter(Mandatory)][string]$FixtureRoot,
     [Parameter(Mandatory)][string]$Origin,
-    [switch]$OnlyAccount
+    [switch]$OnlyAccount,
+    [switch]$OnlyTask
 )
 $ErrorActionPreference = 'Stop'
 $taskName = "CommandCore CI Install $UserName"
@@ -58,7 +59,13 @@ try {
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
             $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
-            if ($report.status -ne 'PASS' -or $report.non_admin -ne $true -or $report.signed_install -ne $true) {
+            $accepted = $report.status -eq 'PASS' -and $report.non_admin -eq $true
+            if ($OnlyTask) {
+                $accepted = $accepted -and $report.task_probe -eq $true
+            } else {
+                $accepted = $accepted -and $report.signed_install -eq $true
+            }
+            if (!$accepted) {
                 if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll')) {
                     $stage = 'worker_' + $report.stage
                 } else {
@@ -66,13 +73,31 @@ try {
                 }
                 throw 'Standard-user signed installer failed its assertions.'
             }
-            Write-Output 'PASS: isolated non-admin Windows signed Agent install'
+            if ($OnlyTask) {
+                Write-Output 'PASS: isolated non-admin Windows Scheduled Task probe'
+            } else {
+                Write-Output 'PASS: isolated non-admin Windows signed Agent install'
+            }
             return
         }
         Start-Sleep -Milliseconds 500
     }
     $stage = 'worker_timeout'
-    throw 'Standard-user installation did not report success before deadline.'
+    try {
+        $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
+        $lastResult = [string]$info.LastTaskResult
+        if ($lastResult -match '^-?[0-9]{1,11}$') {
+            Write-Output ('CI_TASK_LAST_RESULT:' + $lastResult)
+        }
+        $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        $taskState = [string]$task.State
+        if ($taskState -in @('Running', 'Ready', 'Disabled', 'Queued', 'Unknown')) {
+            Write-Output ('CI_TASK_STATE:' + $taskState)
+        }
+    } catch {
+        Write-Output 'CI_TASK_DIAGNOSTIC:unavailable'
+    }
+    throw 'Standard-user worker did not report success before deadline.'
 } catch {
     # The diagnostic code is static and never contains credentials, usernames,
     # filesystem locations or raw PowerShell exception messages.
