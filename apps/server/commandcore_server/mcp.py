@@ -19,6 +19,17 @@ from .tools import (
     operation_ui_context,
 )
 from .web_assets import web_asset
+from .mcp_protocol import (
+    LEGACY_PROTOCOLS,
+    MODERN_PROTOCOL,
+    _modernize,
+    _rpc_error,
+    _rpc_result,
+    _tool_error,
+    _tool_result,
+    _validate_modern,
+    _with_server_info,
+)
 
 # v2 resource identities are deployed successfully in the canonical OAuth
 # CommandCore plugin. Always retain the original v1 URI for old conversations,
@@ -285,186 +296,6 @@ LEGACY_UI_RESOURCES = {
         "CommandCore Live Views (v2 compatibility)",
     ),
 }
-
-MODERN_PROTOCOL = "2026-07-28"
-LEGACY_PROTOCOLS = {"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
-
-
-def _rpc_result(request_id: Any, result: dict[str, Any]) -> JSONResponse:
-    return JSONResponse({"jsonrpc": "2.0", "id": request_id, "result": result})
-
-
-def _rpc_error(
-    request_id: Any, code: int, message: str, data: Any = None, status_code: int = 400
-) -> JSONResponse:
-    err: dict[str, Any] = {"code": code, "message": message}
-    if data is not None:
-        err["data"] = data
-    return JSONResponse(
-        {"jsonrpc": "2.0", "id": request_id, "error": err}, status_code=status_code
-    )
-
-
-def _client_id(params: dict[str, Any]) -> str:
-    meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
-    info = (
-        meta.get("io.modelcontextprotocol/clientInfo")
-        if isinstance(meta, dict)
-        else None
-    )
-    if isinstance(info, dict):
-        name = str(info.get("name", "unknown"))
-        version = str(info.get("version", "unknown"))
-        return f"{name}/{version}"
-    return "unknown"
-
-
-def _validate_modern(
-    request: Request, body: dict[str, Any]
-) -> tuple[bool, JSONResponse | None]:
-    req_id = body.get("id")
-    method = body.get("method")
-    if request.headers.get("mcp-protocol-version") != MODERN_PROTOCOL:
-        return False, _rpc_error(
-            req_id,
-            -32022,
-            "UnsupportedProtocolVersion",
-            {"supportedVersions": [MODERN_PROTOCOL]},
-        )
-    if request.headers.get("mcp-method") != method:
-        return False, _rpc_error(
-            req_id, -32020, "HeaderMismatch: Mcp-Method does not match JSON-RPC method"
-        )
-    params = body.get("params") if isinstance(body.get("params"), dict) else {}
-    expected_name = None
-    if method == "tools/call":
-        expected_name = params.get("name")
-    header_name = request.headers.get("mcp-name")
-    if expected_name is not None and header_name != str(expected_name):
-        return False, _rpc_error(
-            req_id, -32020, "HeaderMismatch: Mcp-Name does not match params.name"
-        )
-    if expected_name is None and header_name:
-        return False, _rpc_error(
-            req_id, -32020, "HeaderMismatch: Mcp-Name not valid for this method"
-        )
-    meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else None
-    if (
-        not meta
-        or meta.get("io.modelcontextprotocol/protocolVersion") != MODERN_PROTOCOL
-    ):
-        return False, _rpc_error(
-            req_id,
-            -32602,
-            "Modern MCP requests require protocolVersion in params._meta",
-        )
-    if "io.modelcontextprotocol/clientCapabilities" not in meta:
-        return False, _rpc_error(
-            req_id,
-            -32602,
-            "Modern MCP requests require clientCapabilities in params._meta",
-        )
-    return True, None
-
-
-def _modernize(method: str, result: dict[str, Any]) -> dict[str, Any]:
-    result = dict(result)
-    result.setdefault("resultType", "complete")
-    if method in {"server/discover", "tools/list"}:
-        result.setdefault("ttlMs", 0)
-        result.setdefault("cacheScope", "private")
-    return result
-
-
-def _with_server_info(
-    result: dict[str, Any],
-    server_version: str,
-    name: str = "commandcore",
-    icons: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    out = dict(result)
-    meta = dict(out.get("_meta") or {})
-    info: dict[str, Any] = {"name": name, "version": server_version}
-    if icons:
-        info["icons"] = icons
-    meta.setdefault("io.modelcontextprotocol/serverInfo", info)
-    out["_meta"] = meta
-    return out
-
-
-def _tool_result(payload: dict[str, Any], modern: bool) -> dict[str, Any]:
-    payload = dict(payload)
-    operation = payload.pop("_ui_operation", None)
-    viewer = payload.pop("_ui_viewer", None)
-    # Screenshots must be returned as MCP images, not twice as huge
-    # text/structured JSON or in an activity log.
-    captured = payload.get("result") or {}
-    if (
-        isinstance(captured, dict)
-        and any(
-            payload.get("summary", "").startswith(p)
-            for p in ("screen.capture on ", "agents.observe on ")
-        )
-        and captured.get("mime_type") == "image/png"
-        and isinstance(captured.get("data_base64"), str)
-    ):
-        image = captured["data_base64"]
-        safe_payload = dict(payload)
-        safe_payload["result"] = {
-            key: captured.get(key)
-            for key in (
-                "mime_type",
-                "bytes",
-                "window_id",
-                "title",
-                "pid",
-                "input_coordinate_space",
-                "window_geometry",
-                "conversation_id_verified",
-                "agent_state",
-            )
-            if key in captured
-        }
-        answer = {
-            "content": [{"type": "image", "mimeType": "image/png", "data": image}],
-            "structuredContent": safe_payload,
-            "isError": False,
-        }
-        if operation:
-            answer["_meta"] = {
-                "commandcore/operation": operation,
-                "commandcore/viewer": viewer or {},
-            }
-        return _modernize("tools/call", answer) if modern else answer
-    meta = dict(payload)
-    screenshot = meta.pop("screenshot_base64", None)
-    content: list[dict[str, Any]] = [
-        {"type": "text", "text": json.dumps(meta, ensure_ascii=False, indent=2)}
-    ]
-    if screenshot:
-        content.append({"type": "image", "mimeType": "image/png", "data": screenshot})
-    result: dict[str, Any] = {
-        "content": content,
-        "structuredContent": meta,
-        "isError": False,
-    }
-    if operation:
-        result["_meta"] = {
-            "commandcore/operation": operation,
-            "commandcore/viewer": viewer or {},
-        }
-    return _modernize("tools/call", result) if modern else result
-
-
-def _tool_error(code: str, message: str, modern: bool) -> dict[str, Any]:
-    payload = {"error": code, "message": message}
-    result: dict[str, Any] = {
-        "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
-        "structuredContent": payload,
-        "isError": True,
-    }
-    return _modernize("tools/call", result) if modern else result
-
 
 CARD_STYLE = '<style id="cc-operation-card-style">\nbody[data-cc-operation-compact=true]{border-radius:12px!important;min-height:0!important;max-width:940px!important;background:var(--cc-card)!important}\nbody[data-cc-operation-compact=true]>:not(#cc-step):not(script):not(style){display:none!important}\n#cc-step{display:none;border:1px solid var(--cc-line);border-radius:12px;overflow:hidden;font:12px/1.45 system-ui,sans-serif;color:var(--cc-text);background:var(--cc-card)}\nbody[data-cc-operation-compact=true] #cc-step{display:block}\n#cc-step-head{display:flex;align-items:center;gap:8px;padding:4px 8px;min-width:0}\n#cc-step-mark{width:7px;height:7px;background:#929298;border-radius:50%;flex:none}\n#cc-step[data-status=ok] #cc-step-mark{background:var(--cc-ok)}\n#cc-step[data-status=error] #cc-step-mark{background:var(--cc-fail)}\n#cc-step-tool{font-weight:650;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}\n#cc-step-device{color:var(--cc-muted);font:10px/1.4 ui-monospace,monospace;max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n#cc-step-expand{flex:none;min-width:40px;min-height:40px;font-size:17px;padding:3px 8px}\n#cc-step-summary{padding:0 8px 5px;color:var(--cc-muted);overflow-wrap:anywhere;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n#cc-step-details{padding:0 8px 5px}#cc-step-details summary{color:var(--cc-muted);font-size:11px}\n#cc-step-context{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 ui-monospace,monospace;padding-top:6px}\n#cc-step-preview{display:block;width:100%;max-height:180px;object-fit:contain;background:#17181b;border-top:1px solid var(--cc-line)}\n#cc-step-caption{display:block;padding:7px 12px;color:var(--cc-muted);font-size:10px;border-top:1px solid var(--cc-line)}\n#cc-step-back{min-width:30px;min-height:34px;padding:3px 7px}\n@media(prefers-color-scheme:light){#cc-step{background:var(--color-background-secondary,#f7f7f8);color:var(--color-text-primary,#202124)}#cc-step-summary,#cc-step-device,#cc-step-details summary,#cc-step-caption{color:var(--color-text-secondary,#62646b)}}\n</style>\n'
 CARD_BODY = '\n<section id="cc-step" aria-label="CommandCore operation" data-status="pending">\n <div id="cc-step-head"><span id="cc-step-mark" aria-hidden="true"></span><strong id="cc-step-tool">CommandCore</strong><span id="cc-step-device">—</span><button id="cc-step-expand" type="button" aria-label="Expand operation in CommandCore" title="Open full workspace">⤢</button></div>\n <div id="cc-step-summary" role="status">Loading operation details…</div>\n <details id="cc-step-details" hidden><summary>Command &amp; target</summary><div id="cc-step-context"></div></details>\n <img id="cc-step-preview" alt="Browser screenshot returned by this operation" hidden>\n <small id="cc-step-caption" hidden>Snapshot of this step · expand for live Browser</small>\n</section>\n'

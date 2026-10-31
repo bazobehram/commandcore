@@ -30,6 +30,19 @@ python scripts/public_repo_check.py
 python scripts/secret_scan.py --history
 ```
 
+For the MCP wire contract, run the focused characterization suite before
+changing protocol framing or response shapes:
+
+```bash
+PYTHONPATH=apps/server:agent pytest -q tests/test_mcp_protocol.py tests/test_mcp.py
+```
+
+`commandcore_server/mcp_protocol.py` owns JSON-RPC envelopes, modern MCP
+header/metadata validation, and legacy/modern response shaping. It does not
+authenticate principals, authorize tools, or dispatch operations. These tests
+prove protocol compatibility only; OAuth, device grants and Browser ownership
+require their separate server-side security suites.
+
 The repository treats Pyflakes-class Ruff rules (`F`) as a whole-tree correctness
 gate and `ruff format` as the canonical Python formatter. Use `make format` before
 submitting Python changes and keep formatting-only changes separate from behavior
