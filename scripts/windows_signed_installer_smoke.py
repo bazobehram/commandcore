@@ -15,6 +15,7 @@ import ipaddress
 import json
 import os
 import secrets
+import shutil
 import ssl
 import subprocess
 import sys
@@ -153,15 +154,19 @@ def main() -> int:
     native = Path(os.environ["COMMANDCORE_NATIVE_VERIFIER"]).resolve()
     if not native.is_file():
         raise RuntimeError("native_verifier_missing")
-    parent = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
-    with tempfile.TemporaryDirectory(
-        prefix="commandcore-win-install-", dir=parent
-    ) as tmp:
+    # Public test assets are readable by the standard user. TLS private keys
+    # remain separately under the runner administrator's private temp root.
+    parent = Path(os.environ["PROGRAMDATA"])
+    with (
+        tempfile.TemporaryDirectory(prefix="commandcore-win-install-", dir=parent) as tmp,
+        tempfile.TemporaryDirectory(prefix="commandcore-ci-tls-") as tls_tmp,
+    ):
         base = Path(tmp)
         feed = base / "feed"
         output = base / "installers"
         feed.mkdir()
-        ca_path, cert_path, key_path = create_tls_files(base)
+        (base / "result").mkdir()
+        ca_path, cert_path, key_path = create_tls_files(Path(tls_tmp))
         handler = lambda *args, **kwargs: QuietHandler(
             *args, directory=str(feed), **kwargs
         )
@@ -184,6 +189,10 @@ def main() -> int:
         trusted = False
         try:
             create_release(feed, output, native, origin)
+            shutil.copyfile(
+                ROOT / "scripts" / "windows_signed_installer_worker.ps1",
+                output / "worker.ps1",
+            )
             add = subprocess.run(
                 ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
                 capture_output=True,
