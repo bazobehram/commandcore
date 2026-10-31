@@ -129,5 +129,5 @@ pulled image at the exact registry digest, not a mutable image tag.
 The uploaded report is evidence of the workflow's own consistency check.
 It is not a signed third-party provenance attestation, does not approve
 deployment, and does not demonstrate that the same image is running on
-Netti or the private homeserver. Independent promotion, protected approval,
+either the public or the operator-owned private installation. Independent promotion, protected approval,
 runtime image-ID checks and backup/rollback acceptance remain mandatory.
