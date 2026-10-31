@@ -127,7 +127,27 @@ unexpected repository source label. The assertion is made against a freshly
 pulled image at the exact registry digest, not a mutable image tag.
 
 The uploaded report is evidence of the workflow's own consistency check.
-It is not a signed third-party provenance attestation, does not approve
-deployment, and does not demonstrate that the same image is running on
-either the public or the operator-owned private installation. Independent promotion, protected approval,
-runtime image-ID checks and backup/rollback acceptance remain mandatory.
+It is not by itself a signed artifact attestation, does not approve deployment,
+and does not demonstrate that the same image is running on either the public or
+the operator-owned private installation.
+
+The GHCR tag workflow additionally generates a GitHub-signed SLSA provenance
+attestation for the exact registry digest using `actions/attest@v4`, publishes
+the attestation to GHCR, then verifies it with `gh attestation verify`. The
+verification is constrained to this repository, the exact
+`.github/workflows/ghcr-publish.yml` signer workflow, and the exact source tag
+ref. BuildKit provenance remains enabled as a separate build output.
+
+Consumers should verify the immutable digest, not a mutable tag:
+
+```bash
+gh attestation verify oci://ghcr.io/OWNER/commandcore@sha256:IMAGE_DIGEST \
+  --repo OWNER/commandcore \
+  --signer-workflow OWNER/commandcore/.github/workflows/ghcr-publish.yml
+```
+
+This attestation proves where and how the tagged image was built; it does not
+authorize production deployment or prove runtime parity. Independent promotion,
+protected approval, runtime image-ID checks and backup/rollback acceptance remain
+mandatory. The first real attestation will only exist after an approved release
+tag successfully completes the protected GHCR workflow.

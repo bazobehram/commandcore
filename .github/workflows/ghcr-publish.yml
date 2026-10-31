@@ -5,11 +5,15 @@ on:
       - 'v*'
 permissions:
   contents: read
-  packages: write
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: ghcr-publish
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +61,25 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
+      - name: Generate signed GitHub provenance attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Verify signed provenance for exact image digest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_IMAGE: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${RELEASE_IMAGE}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ghcr-publish.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
       - name: Record immutable image reference
         shell: bash
         run: |
