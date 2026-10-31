@@ -115,7 +115,8 @@ on the server/Agent boundary; the Angular UI is not a security authority.
 |---|---|---|
 | FastAPI routes, panel session lifecycle and OAuth resource metadata | `apps/server/commandcore_server/main.py` | Server revalidates identity and ownership; recovery is distinct from public OAuth |
 | OAuth JWT validation and scope hierarchy | `apps/server/commandcore_server/auth.py` | Signature, issuer, audience and expiration checks; FULL is **not** ADMIN |
-| MCP transport and tool protocol | `apps/server/commandcore_server/mcp.py` | Protocol identities and client-supplied state cannot replace authorization |
+| MCP HTTP transport, handler dispatch and UI task ledger | `apps/server/commandcore_server/mcp.py` | Transport/session state is not an authorization source; policy remains server-side |
+| MCP JSON-RPC framing, modern header validation and response shaping | `apps/server/commandcore_server/mcp_protocol.py` | Pure wire-contract helpers only; no principal authentication, tool authorization or dispatch |
 | Tool schemas, device selection and dispatch checks | `apps/server/commandcore_server/tools.py` | Resolve current subject-to-device grants/profile before execution |
 | SQLite registry, grants, selections, jobs and audit storage | `apps/server/commandcore_server/db.py`, `migrations.py` | Transactions, ownership filters and monotonic migrations |
 | Agent WebSocket registration and dispatch | `apps/server/commandcore_server/agent_gateway.py` | Device identity and authenticated outbound transport |
@@ -137,6 +138,7 @@ responsibilities. Refer to [DEVELOPMENT.md](DEVELOPMENT.md) and
 ```text
 External AI client -- OAuth JWT --> HTTPS MCP endpoint
                                      |
+                                    mcp.py --> mcp_protocol.py (wire contract)
                                     mcp.py --> tools.py --> DB grant/scope/profile
                                                            |
                                                       Agent gateway
