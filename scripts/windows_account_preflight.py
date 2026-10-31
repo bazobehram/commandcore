@@ -57,7 +57,7 @@ def main() -> int:
         "CI_USER_CREATE_HRESULT",
         "CI_USER_CREATE_ERROR_CLASS",
     ):
-        found = re.findall(rf"(?m)^{key}:([A-Za-z0-9_]+)\s*$", result.stdout)
+        found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\s*$", result.stdout)
         if found:
             print("FAIL: " + key + "=" + found[-1])
     return 1
