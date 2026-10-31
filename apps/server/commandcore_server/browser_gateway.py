@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import ipaddress
-import json
 import re
 import secrets
 import socket
@@ -94,12 +93,8 @@ BROWSER_TOOL_NAMES = {
 }
 
 
-class BrowserError(Exception):
-    pass
-
-
-class BrowserManualStepRequired(BrowserError):
-    """The action was blocked before dispatch; private human control is required."""
+from .browser_cdp import CDP
+from .browser_errors import BrowserError, BrowserManualStepRequired
 
 
 def check_url(raw: str, allow_hosts: tuple[str, ...]) -> str:
@@ -136,61 +131,6 @@ def check_url(raw: str, allow_hosts: tuple[str, ...]) -> str:
     ):
         raise BrowserError("host is not in the browser allowlist")
     return raw
-
-
-class CDP:
-    def __init__(self, websocket: Any):
-        self.ws = websocket
-        self.counter = 0
-
-    async def send(
-        self,
-        method: str,
-        params: dict[str, Any] | None = None,
-        session: str | None = None,
-    ) -> dict[str, Any]:
-        self.counter += 1
-        call_id = self.counter
-        msg: dict[str, Any] = {"id": call_id, "method": method, "params": params or {}}
-        if session:
-            msg["sessionId"] = session
-        await self.ws.send(json.dumps(msg))
-        # A single command must have a total deadline. A busy page can emit
-        # a stream of unrelated events; per-receive timeouts alone never bound
-        # the duration. Never retry state-changing actions on expiry.
-        try:
-            async with asyncio.timeout(20):
-                while True:
-                    # Ignore unrelated CDP notifications until this command's
-                    # response arrives. The enclosing deadline bounds the wait.
-                    result = json.loads(await self.ws.recv())
-                    if result.get("id") == call_id:
-                        if result.get("error"):
-                            raise BrowserError(f"CDP operation failed: {method}")
-                        return result.get("result") or {}
-        except TimeoutError as exc:
-            raise BrowserError("CDP response timeout") from exc
-        raise BrowserError("CDP response timeout")
-
-    async def attach_page(self, target_id: str | None) -> tuple[str, str]:
-        # Never attach to "the first page": Steel may have other tabs.
-        # The target is created explicitly and pinned for this owner.
-        if target_id is None:
-            created = await self.send("Target.createTarget", {"url": "about:blank"})
-            target_id = created["targetId"]
-        info = await self.send("Target.getTargets")
-        if not any(
-            t.get("targetId") == target_id and t.get("type") == "page"
-            for t in info.get("targetInfos", [])
-        ):
-            raise BrowserError("owned browser tab disappeared")
-        result = await self.send(
-            "Target.attachToTarget", {"targetId": target_id, "flatten": True}
-        )
-        session = result["sessionId"]
-        await self.send("Page.enable", session=session)
-        await self.send("Runtime.enable", session=session)
-        return session, target_id
 
 
 @dataclass
