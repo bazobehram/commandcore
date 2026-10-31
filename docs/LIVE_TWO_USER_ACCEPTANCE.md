@@ -73,6 +73,48 @@ dedicated disposable Browser worker and non-sensitive sites.
     preserve restricted evidence, and follow `SECURITY.md`; do not file
     exploit steps in a public issue.
 
+## Repeatable real-account preflight (A01–A06 subset)
+
+The repository includes `scripts/live_mcp_two_user_probe.py`, a manually
+invoked, read-only-scoped MCP test against the real HTTPS resource. It checks
+independent OAuth issuer/subjects, own/foreign grants and device lists,
+cross-user device references, foreign selection handles, and refusal of a
+harmless `shell.exec true` request under READ_ONLY scope.
+
+**Prerequisites:** two independently authenticated disposable test accounts,
+two separate disposable enrolled test devices, and **READ_ONLY-only** OAuth
+scopes for both accounts. Never point this test at personal machines. Obtain
+the two real access tokens through the normal OAuth/PKCE flow and supply them
+through a restricted, temporary operator environment. Do not paste them into
+chat, shell command arguments/history, issue comments, CI variables or logs.
+
+The script requires these five environment variables (values intentionally
+omitted from public documentation):
+
+```text
+COMMANDCORE_TEST_ORIGIN
+COMMANDCORE_TEST_A_TOKEN
+COMMANDCORE_TEST_B_TOKEN
+COMMANDCORE_TEST_A_DEVICE_ID
+COMMANDCORE_TEST_B_DEVICE_ID
+```
+
+Then, in the restricted operator session:
+
+```bash
+python scripts/live_mcp_two_user_probe.py
+```
+
+Without a fixture it exits with `NOT_RUN` (status 2). The script prints only
+test labels and PASS/FAIL (no tokens, users, device identifiers, selection
+handles or raw HTTP bodies). Exit 0 requires the tested subset to pass.
+HTTP errors, Cloudflare challenges, malformed protocol results, same-account
+tokens and unexpected execution **fail**, not count as authorization denials.
+
+This **does not** test A07–A15, Browser ownership, logout, operator audit,
+real agent dispatch-denial evidence, or release digest parity. Record those
+manually under this matrix. A passing probe alone never closes M1.
+
 ## Release decision
 
 M1 remains open until A01-A15 are evidenced on real independent accounts,
