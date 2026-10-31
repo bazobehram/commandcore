@@ -158,7 +158,9 @@ def main() -> int:
     # remain separately under the runner administrator's private temp root.
     parent = Path(os.environ["PROGRAMDATA"])
     with (
-        tempfile.TemporaryDirectory(prefix="commandcore-win-install-", dir=parent) as tmp,
+        tempfile.TemporaryDirectory(
+            prefix="commandcore-win-install-", dir=parent
+        ) as tmp,
         tempfile.TemporaryDirectory(prefix="commandcore-ci-tls-") as tls_tmp,
     ):
         base = Path(tmp)
