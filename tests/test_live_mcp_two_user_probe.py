@@ -165,16 +165,16 @@ def test_redirects_are_rejected_instead_of_forwarding_bearer():
 
 
 def test_denial_code_must_match_the_security_boundary():
-    scope_only = lambda _token, _tool, _args: {
-        "ok": False,
-        "code": "insufficient_scope",
-    }
+    def scope_only(_token, _tool, _args):
+        return {"ok": False, "code": "insufficient_scope"}
     with pytest.raises(probe.ProbeFailure):
-        probe.denied(scope_only, "test-token", "devices.info", {}, probe.FOREIGN_DENIED)
+        probe.denied(
+            scope_only, "test-token", "devices.info", {}, probe.FOREIGN_DENIED
+        )
 
-    missing_device = lambda _token, _tool, _args: {
-        "ok": False,
-        "code": "device_not_found",
-    }
+    def missing_device(_token, _tool, _args):
+        return {"ok": False, "code": "device_not_found"}
     with pytest.raises(probe.ProbeFailure):
-        probe.denied(missing_device, "test-token", "shell.exec", {}, probe.SCOPE_DENIED)
+        probe.denied(
+            missing_device, "test-token", "shell.exec", {}, probe.SCOPE_DENIED
+        )
