@@ -127,7 +127,14 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
 
 def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
     process = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script), *args],
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(script),
+            *args,
+        ],
         env=env,
         capture_output=True,
         text=True,
@@ -147,7 +154,9 @@ def main() -> int:
     if not native.is_file():
         raise RuntimeError("native_verifier_missing")
     parent = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir()))
-    with tempfile.TemporaryDirectory(prefix="commandcore-win-install-", dir=parent) as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="commandcore-win-install-", dir=parent
+    ) as tmp:
         base = Path(tmp)
         feed = base / "feed"
         output = base / "installers"
@@ -163,13 +172,13 @@ def main() -> int:
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         origin = f"https://localhost:{server.server_port}"
         root_hash = ca_path.read_bytes()
-        ca_thumbprint = x509.load_pem_x509_certificate(root_hash).fingerprint(
-            hashes.SHA1()
-        ).hex()
-        env = os.environ.copy()
-        env["COMMANDCORE_CI_USER_PASSWORD"] = (
-            "Cc!" + secrets.token_urlsafe(18).replace("-", "a").replace("_", "b")
+        ca_thumbprint = (
+            x509.load_pem_x509_certificate(root_hash).fingerprint(hashes.SHA1()).hex()
         )
+        env = os.environ.copy()
+        env["COMMANDCORE_CI_USER_PASSWORD"] = "Cc!" + secrets.token_urlsafe(18).replace(
+            "-", "a"
+        ).replace("_", "b")
         user = "cc" + secrets.token_hex(5)
         server_thread.start()
         trusted = False
