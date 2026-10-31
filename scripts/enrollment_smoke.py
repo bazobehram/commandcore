@@ -219,6 +219,7 @@ def main():
             "COMMANDCORE_HOST": "127.0.0.1",
             "COMMANDCORE_PORT": str(port),
             "COMMANDCORE_API_TOKEN": secret,
+            "COMMANDCORE_BOOTSTRAP_SUBJECT": "smoke-owner",
             "COMMANDCORE_PUBLIC_BOOTSTRAP_ENABLED": "true",
             "COMMANDCORE_DB": str(root / "db.sqlite3"),
             "COMMANDCORE_PUBLIC_BASE_URL": base,
@@ -550,7 +551,7 @@ def main():
                     # but has the administration authority needed by the panel.
                     panel_cookie = issue_panel_session(
                         secret=secret,
-                        subject="smoke-operator",
+                        subject="smoke-owner",
                         ttl_seconds=600,
                         scopes=("commandcore:read", "commandcore:standard"),
                         auth_kind="panel-cookie",
@@ -568,6 +569,12 @@ def main():
                             original.json()["device"]["permission_profile"]
                             == "STANDARD"
                         )
+                        # The OAuth grantee has execution rights, not ownership;
+                        # it cannot mutate another owner's device profile.
+                        unauthorized = client.post(
+                            permission_url, json={"profile": "READ_ONLY"}
+                        )
+                        assert unauthorized.status_code in {403, 404}
                         lowered = panel.post(
                             permission_url, json={"profile": "READ_ONLY"}
                         )
