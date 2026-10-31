@@ -1,4 +1,4 @@
-"""Fast disposable Windows CI gates for local users and Scheduled Tasks.
+"""Fast disposable Windows CI gates for local users and credential execution.
 
 No native build, installer, external network, or personal device is required.
 The same PowerShell driver is used by the signed installer acceptance job.
@@ -89,9 +89,9 @@ def main() -> int:
             Path(__file__).resolve().with_name("windows_task_preflight_worker.ps1"),
             fixture / "installers" / "worker.ps1",
         )
-        if not run_driver(driver, fixture, "-OnlyTask", timeout=40):
+        if not run_driver(driver, fixture, "-OnlyCredential", timeout=40):
             return 1
-    print("PASS: disposable Windows standard-user Scheduled Task/cleanup")
+    print("PASS: disposable Windows standard-user credential process/cleanup")
     return 0
 
 
