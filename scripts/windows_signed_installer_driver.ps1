@@ -28,7 +28,7 @@ try {
     }
     $stage = 'create_user'
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
-    New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI Agent installer acceptance' -ErrorAction Stop | Out-Null
+    New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI installer test' -ErrorAction Stop | Out-Null
     $createdUser = $true
     $stage = 'fixture_acl'
     # Least privilege: read/traverse public installer assets, but write only
