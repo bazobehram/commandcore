@@ -26,6 +26,13 @@ class ProbeFailure(Exception):
     """An acceptance prerequisite or invariant failed; details stay private."""
 
 
+class RejectRedirects(urllib.request.HTTPRedirectHandler):
+    """Never forward an OAuth bearer token through an HTTP redirect."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def https_origin(value: str) -> str:
     parsed = urllib.parse.urlsplit(value)
     if not (
@@ -63,7 +70,9 @@ def call_remote(origin: str, token: str, tool: str, args: dict[str, Any]) -> dic
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=12) as response:
+        with urllib.request.build_opener(RejectRedirects()).open(
+            req, timeout=12
+        ) as response:
             if response.status != 200:
                 raise ProbeFailure("unexpected_http_status")
             raw = response.read(1024 * 1024 + 1)
