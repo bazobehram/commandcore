@@ -149,6 +149,16 @@ jobs:
           PYTHONPATH: apps/server:agent
         run: python scripts/enrollment_smoke.py
 
+  windows-account-preflight:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Disposable standard-user account creation and cleanup
+        run: python scripts/windows_account_preflight.py
+
   windows-core-candidate:
     runs-on: windows-latest
     steps:
