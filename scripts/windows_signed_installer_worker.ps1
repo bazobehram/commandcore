@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][string]$Origin
 )
 $ErrorActionPreference = 'Stop'
-$report = Join-Path $FixtureRoot 'worker.result.json'
+$report = Join-Path $FixtureRoot 'result\worker.result.json'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
