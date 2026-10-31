@@ -106,3 +106,41 @@ def test_unsafe_origins_are_rejected(origin):
 
 def test_https_origin_is_normalized():
     assert probe.https_origin("https://example.test/") == "https://example.test"
+
+
+def test_remote_request_identifies_client_without_logging_token(monkeypatch, capsys):
+    import json
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _limit):
+            return json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "isError": False,
+                        "structuredContent": {"ready": True},
+                    },
+                }
+            ).encode()
+
+    def fake_urlopen(request, timeout):
+        assert timeout == 12
+        assert request.get_header("User-agent") == "CommandCore-M1-Acceptance/1.0"
+        assert request.get_header("Authorization") == "Bearer fixture-token"
+        return Response()
+
+    monkeypatch.setattr(probe.urllib.request, "urlopen", fake_urlopen)
+    result = probe.call_remote(
+        "https://example.test", "fixture-token", "auth.whoami", {}
+    )
+    assert result == {"ok": True, "data": {"ready": True}}
+    assert "fixture-token" not in capsys.readouterr().out
