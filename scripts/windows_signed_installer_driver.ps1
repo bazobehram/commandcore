@@ -11,17 +11,22 @@ $taskName = "CommandCore CI Install $UserName"
 $account = "$env:COMPUTERNAME\$UserName"
 $password = $env:COMMANDCORE_CI_USER_PASSWORD
 if (!$password -or $UserName -notmatch '^cc[a-f0-9]{10}$') { throw 'Invalid disposable account fixture.' }
-$result = Join-Path $FixtureRoot 'worker.result.json'
-$worker = Join-Path $PSScriptRoot 'windows_signed_installer_worker.ps1'
+$result = Join-Path $FixtureRoot 'result\worker.result.json'
+$worker = Join-Path $FixtureRoot 'installers\worker.ps1'
 $createdUser = $false
 $createdTask = $false
 try {
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
     New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI Agent installer acceptance' | Out-Null
     $createdUser = $true
-    # Only an ephemeral CI fixture folder is made writable by the Users group.
-    & icacls.exe $FixtureRoot /grant '*S-1-5-32-545:(OI)(CI)M' /T /Q | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to grant fixture access.' }
+    # Least privilege: read/traverse public installer assets, but write only
+    # the result folder. TLS private keys are outside this entire fixture.
+    & icacls.exe $FixtureRoot /grant '*S-1-5-32-545:RX' /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to grant fixture traversal.' }
+    & icacls.exe (Join-Path $FixtureRoot 'installers') /grant '*S-1-5-32-545:(OI)(CI)RX' /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to grant installer read access.' }
+    & icacls.exe (Join-Path $FixtureRoot 'result') /grant '*S-1-5-32-545:(OI)(CI)M' /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to grant result write access.' }
     $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
         $worker + '" -FixtureRoot "' + $FixtureRoot + '" -Origin "' + $Origin + '"'
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
