@@ -474,7 +474,11 @@ async def oauth_protected_resource() -> JSONResponse:
             "authorization_servers": list(
                 settings.oauth_authorization_servers or (settings.oauth_issuer,)
             ),
-            "scopes_supported": list(ALL_SCOPES),
+            "scopes_supported": list(
+                settings.oauth_discovery_scopes
+                if settings.oauth_discovery_scopes is not None
+                else ALL_SCOPES
+            ),
             "bearer_methods_supported": ["header"],
             "resource_name": "CommandCore MCP",
         }
