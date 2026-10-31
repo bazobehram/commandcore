@@ -4,7 +4,8 @@
 param(
     [Parameter(Mandatory)][string]$UserName,
     [Parameter(Mandatory)][string]$FixtureRoot,
-    [Parameter(Mandatory)][string]$Origin
+    [Parameter(Mandatory)][string]$Origin,
+    [switch]$OnlyAccount
 )
 $ErrorActionPreference = 'Stop'
 $taskName = "CommandCore CI Install $UserName"
@@ -30,6 +31,10 @@ try {
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
     New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI installer test' -ErrorAction Stop | Out-Null
     $createdUser = $true
+    if ($OnlyAccount) {
+        Write-Output 'PASS: disposable Windows account creation and cleanup'
+        return
+    }
     $stage = 'fixture_acl'
     # Least privilege: read/traverse public installer assets, but write only
     # the result folder. TLS private keys are outside this entire fixture.
@@ -80,6 +85,13 @@ try {
         elseif ($errorId -match 'AlreadyExists|AlreadyInUse|Exists') { $category = 'name_collision' }
         elseif ($errorId -match 'ParameterBinding|InvalidArgument') { $category = 'argument' }
         Write-Output ('CI_USER_CREATE_CATEGORY:' + $category)
+        # Numeric HRESULT and categorical PowerShell errors are safe diagnostic
+        # codes, not exception text, usernames, credentials or command args.
+        Write-Output ('CI_USER_CREATE_HRESULT:' + ([uint32]([int64]$_.Exception.HResult -band 0xffffffff)).ToString('X8'))
+        $class = [string]$_.CategoryInfo.Category
+        if ($class -in @('InvalidArgument', 'InvalidOperation', 'PermissionDenied', 'SecurityError', 'NotSpecified', 'ResourceExists')) {
+            Write-Output ('CI_USER_CREATE_ERROR_CLASS:' + $class)
+        }
     }
     throw 'Disposable Windows installer acceptance failed (redacted).'
 } finally {
