@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { request } from './api-client';
 import { SessionEpoch, isUnauthorized } from './session-epoch';
+import { deviceDisplayRole, deviceDisplayType, deviceDisplayOS, deviceDisplayOSSymbol, isDeviceDisplayRole } from './device-presentation';
 
 type View = 'workspace'|'hardware'|'browser'|'activity'|'access'|'files';
 type Device = {
@@ -54,17 +55,12 @@ export class App implements OnInit, OnDestroy {
  deviceOnline(d:Device){return typeof d.connected==='boolean'?d.connected:d.status==='online';}
  deviceWorking(d:Device){return this.deviceOnline(d)&&(this.jobsById()[d.id]||0)>0;}
  devicePermission(d:Device){return this.levelName(d.permission_profile||null);}
- deviceRole(d:Device):string{
-   const explicit=this.roleOverrides()[d.id];if(explicit&&explicit!=='auto')return explicit;
-   if(d.capabilities?.['desktop']===true)return 'workstation';
-   if(/server|nas|storage|node/i.test(d.hostname||d.display_name||'')&&d.capabilities?.['services'])return 'server';
-   return 'computer';
- }
- deviceType(d:Device){return ({server:'SERVER',workstation:'WORKSTATION',desktop:'DESKTOP PC',laptop:'LAPTOP',computer:'COMPUTER'} as Record<string,string>)[this.deviceRole(d)]||'DEVICE';}
- deviceOS(d:Device){const v=String(d.platform||'').toLowerCase();return v.includes('windows')?'Windows':v.includes('linux')?'Linux':v.includes('darwin')||v.includes('mac')?'macOS':d.platform||'Unknown OS';}
+ deviceRole(d:Device){return deviceDisplayRole(d, this.roleOverrides());}
+ deviceType(d:Device){return deviceDisplayType(this.deviceRole(d));}
+ deviceOS(d:Device){return deviceDisplayOS(d.platform);}
  roleSelection(d:Device){return this.roleOverrides()[d.id]||'auto';}
  setDeviceRole(d:Device,role:string){
-   if(!['auto','server','workstation','desktop','laptop','computer'].includes(role))return;
+   if(role!=='auto'&&!isDeviceDisplayRole(role))return;
    const next={...this.roleOverrides()};if(role==='auto')delete next[d.id];else next[d.id]=role;
    this.roleOverrides.set(next);
    try{localStorage.setItem('commandcore:display-types:'+String(this.session()?.subject||'local'),JSON.stringify(next));}catch{}
@@ -74,7 +70,7 @@ export class App implements OnInit, OnDestroy {
   if(raw){const obj=JSON.parse(raw);if(obj&&typeof obj==='object'&&!Array.isArray(obj))this.roleOverrides.set(obj);}
  }catch{}
  }
- osSymbol(d:Device){return this.deviceOS(d)==='Windows'?'⊞':this.deviceOS(d)==='Linux'?'◈':this.deviceOS(d)==='macOS'?'⌘':'◇';}
+ osSymbol(d:Device){return deviceDisplayOSSymbol(d.platform);}
 
  resetActivity(){this.activityPage.set(1);this.activityFilter.set('');this.activityLoaded.set(false);this.activity.set([]);this.activityError.set('');}
  activitySearch(v:string){this.activityFilter.set(v);this.activityPage.set(1);}
