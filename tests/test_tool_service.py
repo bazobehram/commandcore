@@ -108,6 +108,7 @@ async def test_older_agent_never_silently_ignores_narrowing_arguments(
 )
 def test_effective_profile_shared_between_whoami_and_dispatch(scopes, expected):
     from commandcore_server.auth import FULL_SCOPE, STANDARD_SCOPE
+
     scope_map = {
         "commandcore:standard": STANDARD_SCOPE,
         "commandcore:full": FULL_SCOPE,
