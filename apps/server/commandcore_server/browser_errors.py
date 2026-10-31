@@ -1,5 +1,6 @@
 """Errors shared by the optional Browser gateway and CDP transport."""
 
+
 class BrowserError(Exception):
     pass
 

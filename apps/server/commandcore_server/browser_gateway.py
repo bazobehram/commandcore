@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import ipaddress
-import json
 import re
 import secrets
 import socket
