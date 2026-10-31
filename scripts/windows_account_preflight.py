@@ -24,9 +24,7 @@ def fixture_env() -> dict[str, str]:
     return env
 
 
-def run_driver(
-    driver: Path, root: Path, mode: str, *, timeout: int
-) -> bool:
+def run_driver(driver: Path, root: Path, mode: str, *, timeout: int) -> bool:
     env = fixture_env()
     name = "cc" + secrets.token_hex(5)
     result = subprocess.run(
@@ -81,7 +79,9 @@ def main() -> int:
     if not run_driver(driver, root, "-OnlyAccount", timeout=30):
         return 1
     print("PASS: disposable Windows local-account creation/cleanup")
-    with tempfile.TemporaryDirectory(prefix="commandcore-task-preflight-", dir=root) as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="commandcore-task-preflight-", dir=root
+    ) as tmp:
         fixture = Path(tmp)
         (fixture / "installers").mkdir()
         (fixture / "result").mkdir()
