@@ -138,9 +138,27 @@ def test_remote_request_identifies_client_without_logging_token(monkeypatch, cap
         assert request.get_header("Authorization") == "Bearer fixture-token"
         return Response()
 
-    monkeypatch.setattr(probe.urllib.request, "urlopen", fake_urlopen)
+    class FakeOpener:
+        def open(self, request, timeout):
+            return fake_urlopen(request, timeout)
+
+    def fake_build_opener(handler):
+        assert isinstance(handler, probe.RejectRedirects)
+        return FakeOpener()
+
+    monkeypatch.setattr(probe.urllib.request, "build_opener", fake_build_opener)
     result = probe.call_remote(
         "https://example.test", "fixture-token", "auth.whoami", {}
     )
     assert result == {"ok": True, "data": {"ready": True}}
     assert "fixture-token" not in capsys.readouterr().out
+
+
+def test_redirects_are_rejected_instead_of_forwarding_bearer():
+    handler = probe.RejectRedirects()
+    assert (
+        handler.redirect_request(
+            None, None, 302, "Found", {}, "https://other.example/"
+        )
+        is None
+    )
