@@ -157,9 +157,7 @@ def test_remote_request_identifies_client_without_logging_token(monkeypatch, cap
 def test_redirects_are_rejected_instead_of_forwarding_bearer():
     handler = probe.RejectRedirects()
     assert (
-        handler.redirect_request(
-            None, None, 302, "Found", {}, "https://other.example/"
-        )
+        handler.redirect_request(None, None, 302, "Found", {}, "https://other.example/")
         is None
     )
 
@@ -168,13 +166,9 @@ def test_denial_code_must_match_the_security_boundary():
     def scope_only(_token, _tool, _args):
         return {"ok": False, "code": "insufficient_scope"}
     with pytest.raises(probe.ProbeFailure):
-        probe.denied(
-            scope_only, "test-token", "devices.info", {}, probe.FOREIGN_DENIED
-        )
+        probe.denied(scope_only, "test-token", "devices.info", {}, probe.FOREIGN_DENIED)
 
     def missing_device(_token, _tool, _args):
         return {"ok": False, "code": "device_not_found"}
     with pytest.raises(probe.ProbeFailure):
-        probe.denied(
-            missing_device, "test-token", "shell.exec", {}, probe.SCOPE_DENIED
-        )
+        probe.denied(missing_device, "test-token", "shell.exec", {}, probe.SCOPE_DENIED)
