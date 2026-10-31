@@ -138,7 +138,9 @@ def validate_accounts(call: Callable, a: str, b: str, da: str, db: str) -> None:
             raise ProbeFailure("list_not_isolated")
 
 
-def run_checks(call: Callable, a: str, b: str, da: str, db: str) -> list[tuple[str, bool]]:
+def run_checks(
+    call: Callable, a: str, b: str, da: str, db: str
+) -> list[tuple[str, bool]]:
     """A01-A06 subset; use only on disposable devices with READ_ONLY scopes."""
     outcomes = []
 
@@ -196,7 +198,9 @@ def main() -> int:
         "COMMANDCORE_TEST_B_DEVICE_ID",
     )
     if any(not os.environ.get(key) for key in required):
-        print("NOT_RUN: disposable test origin, two OAuth tokens and device IDs required")
+        print(
+            "NOT_RUN: disposable test origin, two OAuth tokens and device IDs required"
+        )
         return 2
     try:
         origin = https_origin(os.environ["COMMANDCORE_TEST_ORIGIN"])
