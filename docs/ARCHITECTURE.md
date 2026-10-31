@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **0.9 release-candidate architecture**. Platform-specific limits are tracked in [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md).
+Status: **1.0 release-readiness source architecture** (not a statement of production or multiuser security acceptance). Platform-specific limits are tracked in [PLATFORM_SUPPORT.md](PLATFORM_SUPPORT.md).
 
 ## Product boundary
 
@@ -98,11 +98,98 @@ SQLite tables include devices, grants, enrollment tokens, selection handles, job
 
 ## Capability model
 
-Implemented capability families include filesystem, shell, process, system, transfer, Git, Docker, Linux services/packages/power and Agent update lifecycle. Interactive desktop/screen/keyboard/mouse/clipboard capabilities are experimental and advertised only when a usable backend exists; browser automation is not implemented. Capability/version advertisement lets old and new Agents coexist.
+Implemented capability families include filesystem, shell, process, system, transfer, Git, Docker, Linux services/packages/power and Agent update lifecycle. Interactive desktop/screen/keyboard/mouse/clipboard capabilities are experimental and advertised only when a usable backend exists. The **optional managed Browser** has a separate owner-bound worker architecture; it is not an Agent-hosted browser and is not enabled by default. Capability/version advertisement lets old and new Agents coexist. See [BROWSER.md](BROWSER.md) for operator prerequisites and deployment limits.
 
 ## Native Agent
 
 The native Rust Agent is the preferred release-candidate runtime for supported Linux x86_64 and ARM64 deployments. CI covers format, strict Clippy, locked tests/build and black-box parity. The Python Agent remains a reference implementation and controlled fallback.
+
+
+## Contributor source map and trust boundaries
+
+This is a **source responsibility map**, not a claim that all candidate deployments
+have passed real-world acceptance. Keep authentication and permission enforcement
+on the server/Agent boundary; the Angular UI is not a security authority.
+
+| Boundary / responsibility | Primary source | Invariant when changing it |
+|---|---|---|
+| FastAPI routes, panel session lifecycle and OAuth resource metadata | `apps/server/commandcore_server/main.py` | Server revalidates identity and ownership; recovery is distinct from public OAuth |
+| OAuth JWT validation and scope hierarchy | `apps/server/commandcore_server/auth.py` | Signature, issuer, audience and expiration checks; FULL is **not** ADMIN |
+| MCP transport and tool protocol | `apps/server/commandcore_server/mcp.py` | Protocol identities and client-supplied state cannot replace authorization |
+| Tool schemas, device selection and dispatch checks | `apps/server/commandcore_server/tools.py` | Resolve current subject-to-device grants/profile before execution |
+| SQLite registry, grants, selections, jobs and audit storage | `apps/server/commandcore_server/db.py`, `migrations.py` | Transactions, ownership filters and monotonic migrations |
+| Agent WebSocket registration and dispatch | `apps/server/commandcore_server/agent_gateway.py` | Device identity and authenticated outbound transport |
+| Linux Agent execution | `agent/rust/src/executor.rs`; Python fallback: `agent/commandcore_agent/executor.py` | Operations stay within effective device-local and server policy |
+| Privileged Linux helper | `agent/` helper implementation and local policy | Root operations require authenticated IPC and explicit local opt-in |
+| Angular workspace UI and session privacy | `apps/workspace-angular/src/app/app.ts`, `api-client.ts`, `session-epoch.ts` | No stale account data after logout/401; no client-side privilege escalation |
+| Legacy operator/recovery UI | `apps/web/panel.js` and related legacy assets | Do not remove recovery workflows before an accepted replacement |
+| Managed Browser orchestration | `browser_gateway.py`, `browser_worker_pool.py`, `browser_worker_binding.py` | OAuth owner binding, verified worker identity, no direct untrusted CDP |
+| First-party Browser viewer and handoff | `browser_viewer.py` and Browser approval/policy modules | Issuer/subject/session checks; private control blocks AI access |
+
+All short server paths in the last two rows are under
+`apps/server/commandcore_server/`. Module size alone is not a refactoring
+requirement; add behavior-preserving tests before splitting security-sensitive
+responsibilities. Refer to [DEVELOPMENT.md](DEVELOPMENT.md) and
+[SECURITY_MODEL.md](SECURITY_MODEL.md).
+
+### Independent request flows
+
+```text
+External AI client -- OAuth JWT --> HTTPS MCP endpoint
+                                     |
+                                    mcp.py --> tools.py --> DB grant/scope/profile
+                                                           |
+                                                      Agent gateway
+                                                           |
+                                                 authenticated outbound WSS
+                                                           |
+                                                    device Agent
+                                                           |
+                                       optional locally approved root helper
+
+Browser request --> server authorization --> owner-bound worker pool
+                                               | worker proof + egress policy
+                                               v
+                                        isolated Browser worker / Steel
+                                               |
+                                        public HTTPS-only proxy
+                                  (no private/LAN/metadata destinations)
+
+Angular UI -- same-origin session cookie --> server panel/API
+       |                                  |
+       +-- session-epoch privacy guard    +-- authoritative OAuth/ownership checks
+```
+
+Browser workers are separately provisioned and operator-attested. They do not
+control the user's existing desktop Chrome. A first-party preview or Browser
+handoff must re-check the OAuth issuer and subject; a known `client_id` is
+not proof of ownership. Physical isolation and proxy policy require deployment
+acceptance beyond passing Python route tests. See
+[BROWSER_SECURITY_REVIEW.md](BROWSER_SECURITY_REVIEW.md).
+
+### Public and private deployments
+
+A public instance and an operator-owned private instance may consume **the same
+reviewed immutable release artifact**, but must retain independent databases,
+OAuth audiences/clients, session keys, device identities, grants and audit
+history. Merging a PR does **not** itself authorize an update of either system.
+Test the public canary, verify rollback, then separately back up and verify the
+private target with the vetted digest. See [PUBLIC_HOSTING.md](PUBLIC_HOSTING.md)
+and [DEPLOYMENT.md](DEPLOYMENT.md).
+
+### How to verify a change
+
+- **API/session transport:** `npm run test:api` in `apps/workspace-angular`.
+- **Angular lifecycle/DOM:** `npm run test:unit` (Vitest + simulated DOM) and
+  `npm run build`. These tests cannot establish real mobile layout or live OAuth.
+- **MCP/OAuth, grants, Browser and Agent:** `pytest -q` plus targeted negative
+  suites for the changed boundary; release CI includes Python, Rust and Windows
+  checks where applicable.
+- **Browser visuals and cross-account acceptance:** use the documented isolated
+  Browser UI suite and real separate user acceptance, not just a unit fixture.
+- **Release:** verify required GitHub checks, provenance, canary, rollback and
+  each deployment's authorization/health independently.
+
 
 ## Platform direction
 
