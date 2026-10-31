@@ -1,4 +1,5 @@
 """Credential-free edge vs OAuth diagnostic; no device control or secrets."""
+
 from __future__ import annotations
 
 import argparse
@@ -38,7 +39,9 @@ def probe(url: str, user_agent: str, timeout: float) -> dict:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             code, headers, body = (
-                response.status, response.headers, response.read(2048)
+                response.status,
+                response.headers,
+                response.read(2048),
             )
     except urllib.error.HTTPError as exc:
         code, headers, body = exc.code, exc.headers, exc.read(2048)
@@ -46,9 +49,7 @@ def probe(url: str, user_agent: str, timeout: float) -> dict:
         return {"status": None, "classification": "network_failure"}
     return {
         "status": code,
-        "classification": classify(
-            code, bool(headers.get("WWW-Authenticate")), body
-        ),
+        "classification": classify(code, bool(headers.get("WWW-Authenticate")), body),
     }
 
 
