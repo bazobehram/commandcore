@@ -81,6 +81,16 @@ class Settings:
         for x in os.getenv("COMMANDCORE_OAUTH_AUTHORIZATION_SERVERS", "").split(",")
         if x.strip()
     )
+    # Discovery metadata only: absence preserves historical scope advertisement.
+    # This never changes JWT validation, management rights or device grants.
+    oauth_discovery_scopes: tuple[str, ...] | None = (
+        tuple(
+            x.strip()
+            for x in os.environ["COMMANDCORE_OAUTH_DISCOVERY_SCOPES"].split(",")
+        )
+        if "COMMANDCORE_OAUTH_DISCOVERY_SCOPES" in os.environ
+        else None
+    )
     recommended_agent_version: str = os.getenv(
         "COMMANDCORE_RECOMMENDED_AGENT_VERSION", "0.9.0-rc7"
     )
@@ -194,6 +204,20 @@ class Settings:
             raise RuntimeError(
                 "COMMANDCORE_PANEL_SESSION_TTL_SECONDS must be at least 300"
             )
+        if self.oauth_discovery_scopes is not None:
+            from .auth import ALL_SCOPES
+
+            scopes = self.oauth_discovery_scopes
+            if (
+                not scopes
+                or len(scopes) != len(set(scopes))
+                or any(scope not in ALL_SCOPES for scope in scopes)
+            ):
+                raise RuntimeError(
+                    "COMMANDCORE_OAUTH_DISCOVERY_SCOPES must be a nonempty, "
+                    "unique subset of known scopes"
+                )
+
         if self.oauth_enabled:
             missing = [
                 name

@@ -71,6 +71,22 @@ https://commandcore.example.com/mcp
 
 The configured audience/resource must match the token issued by the provider.
 
+The scopes_supported list describes the permissions advertised by the
+authorization server; it does **not** grant them. By default CommandCore
+advertises all four known scopes for compatibility. If the deployment
+provider exposes only the three execution scopes, explicitly set:
+
+~~~env
+COMMANDCORE_OAUTH_DISCOVERY_SCOPES=commandcore:read,commandcore:standard,commandcore:full
+~~~
+
+This optional setting changes **only** protected-resource discovery metadata.
+Startup rejects unknown, duplicate or empty configured values. It never changes
+JWT scope checks, management API authorization, device ownership, grants or
+device-local FULL_CONTROL. Omitting admin from discovery does not prove the
+identity provider cannot issue admin: audit its real RBAC configuration.
+
+
 ## Browser/operator panel
 
 The operator panel should use a public Code+PKCE client where possible. Tokens
@@ -99,6 +115,7 @@ access tokens are not this server's validation path.
 | `COMMANDCORE_OAUTH_JWKS_URL` | Provider's published asymmetric signing-key URL |
 | `COMMANDCORE_OAUTH_AUTHORIZATION_SERVERS` | Provider authorization-server origin(s) |
 | `COMMANDCORE_OAUTH_ALGORITHMS` | Matching supported asymmetric algorithm allowlist |
+| `COMMANDCORE_OAUTH_DISCOVERY_SCOPES` | Optional comma-separated provider-supported scopes; metadata only |
 
 **Current panel compatibility limit:** the browser login implementation builds
 `<issuer>/authorize` and `<issuer>/oauth/token` directly. It does not discover
