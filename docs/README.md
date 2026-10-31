@@ -47,6 +47,7 @@ security material, and contributor/release documentation.
 ## Development and project process
 
 - [Development](DEVELOPMENT.md)
+- [Frontend transition and legacy UI](FRONTEND_TRANSITION.md)
 - [Versioning](VERSIONING.md)
 - [Compatibility](COMPATIBILITY.md)
 - [Release process](RELEASE.md)
