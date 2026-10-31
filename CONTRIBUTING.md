@@ -87,8 +87,11 @@ production build):
 cd apps/workspace-angular
 npm ci
 npm run test:api
+npm run test:unit
 npm run build
 ~~~
+
+Angular component tests use Vitest and a simulated DOM (no live OAuth accounts or real devices). New components/services generate tests by default; keep these tests isolated and include negative session cases. CI runs API tests, component tests, and the production build.
 
 The API boundary lives in `src/app/api-client.ts`. Preserve its same-origin
 cookie, no-cache, HTTP-status and error semantics when refactoring. The server,

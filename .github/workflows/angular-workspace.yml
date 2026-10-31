@@ -29,6 +29,8 @@ jobs:
           cache: npm
           cache-dependency-path: apps/workspace-angular/package-lock.json
       - run: npm ci
+      - run: npm run test:api
+      - run: npm run test:unit
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
