@@ -56,3 +56,15 @@ def test_diagnostic_request_never_sends_credentials(monkeypatch):
         "status": 401,
         "classification": "oauth_challenge_present",
     }
+
+
+def test_diagnostic_handles_network_failure_without_credentials(monkeypatch):
+    def fail_network(_request, timeout):
+        assert timeout == 2
+        raise probe_module.urllib.error.URLError("offline")
+
+    monkeypatch.setattr(probe_module.urllib.request, "urlopen", fail_network)
+    assert probe_module.probe("https://example.com/mcp/core", "Python-urllib/3", 2) == {
+        "status": None,
+        "classification": "network_failure",
+    }
