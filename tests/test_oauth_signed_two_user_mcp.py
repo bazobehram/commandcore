@@ -94,6 +94,7 @@ def context(tmp_path, monkeypatch):
         "get_signing_key_from_jwt",
         lambda token: SimpleNamespace(key=key.public_key()),
     )
+    monkeypatch.setenv("COMMANDCORE_UI_TASK_DB", str(tmp_path / "ui-tasks.sqlite3"))
     agents = FakeAgents()
     handler = MCPHandler(
         ToolService(db, agents, 60),
