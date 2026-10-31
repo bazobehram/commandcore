@@ -1,7 +1,7 @@
 <div class="app-shell">
   <div class="aurora" aria-hidden="true"><div class="aurora-a"></div><div class="aurora-b"></div><div class="aurora-c"></div></div>
   <header class="topbar">
-    <div class="brand" (click)="show('workspace')" role="button" tabindex="0" (keydown.enter)="show('workspace')">
+    <div class="brand" (click)="show('workspace')" role="button" tabindex="0" (keydown.enter)="show('workspace')" (keydown.space)="show('workspace'); $event.preventDefault()">
       <img class="brand-octopus" [src]="logoFor(onlineCount()>0?'online':'idle')" alt="" aria-hidden="true"/>
       <span class="brand-wordmark">Command<span>Core</span></span><span class="brand-slash">/</span><span class="brand-context">workspace</span>
     </div>
