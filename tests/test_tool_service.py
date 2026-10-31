@@ -112,8 +112,12 @@ def test_effective_profile_shared_between_whoami_and_dispatch(scopes, expected):
         "commandcore:standard": STANDARD_SCOPE,
         "commandcore:full": FULL_SCOPE,
     }
-    principal = Principal("owner", "test-client", auth_kind="oauth2",
-                          scopes=frozenset(scope_map[s] for s in scopes))
+    principal = Principal(
+        "owner",
+        "test-client",
+        auth_kind="oauth2",
+        scopes=frozenset(scope_map[s] for s in scopes),
+    )
     device = {
         "permission_profile": "FULL_CONTROL",
         "access_max_permission_profile": "FULL_CONTROL",
