@@ -326,6 +326,11 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
     def test_toolservice_isolation_implementation_unchanged(self):
         # Port the b10 candidate isolation gate without /test/ fixture paths.
         # A changed ToolService requires an explicit baseline review.
+        # M2 PR #142 scope-policy extraction review: the _required_scope method
+        # now delegates to the shared pure policy function, while all device
+        # resolution, grant checks, dispatch and human approval logic remain
+        # unchanged. See test_tool_scope_policy.py for metadata/runtime parity
+        # and the compared pre-refactor class for semantic equivalence.
         import hashlib
 
         path = (
@@ -341,7 +346,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "5c5e34137fbc54cda2dcc6ebb9d24bd15c2b40fc840fec27d22b514aa826b52e",
+            "615b479a795fad9730975da31e0e493646939d4e492a586007caaed74e4d942c",
         )
 
 
