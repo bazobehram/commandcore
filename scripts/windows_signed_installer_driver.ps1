@@ -87,18 +87,7 @@ try {
         Write-Output ('CI_USER_CREATE_CATEGORY:' + $category)
         $record = $_
         $hresult = [string]$record.Exception.HResult
-        if ($hresult -match '^-?[0-9]{1,11}
-    throw 'Disposable Windows installer acceptance failed (redacted).'
-} finally {
-    if ($createdTask) {
-        try { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue } catch {}
-        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-    }
-    if ($createdUser) {
-        Remove-LocalUser -Name $UserName -ErrorAction SilentlyContinue
-    }
-}
-) {
+        if ($hresult -match '^-?[0-9]{1,11}$') {
             Write-Output ('CI_USER_CREATE_HRESULT:' + $hresult)
         }
         $class = [string]$record.CategoryInfo.Category
