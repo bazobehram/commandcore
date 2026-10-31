@@ -168,6 +168,10 @@ jobs:
         env:
           COMMANDCORE_NATIVE_VERIFIER: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust.exe
         run: python scripts/native_release_smoke.py
+      - name: Real signed Windows installer in disposable standard user
+        env:
+          COMMANDCORE_NATIVE_VERIFIER: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust.exe
+        run: python scripts/windows_signed_installer_smoke.py
       - name: Native Windows runtime core and disconnect acceptance
         env:
           COMMANDCORE_ENROLLMENT_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust.exe
