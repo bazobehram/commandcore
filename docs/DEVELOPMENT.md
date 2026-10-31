@@ -43,6 +43,19 @@ authenticate principals, authorize tools, or dispatch operations. These tests
 prove protocol compatibility only; OAuth, device grants and Browser ownership
 require their separate server-side security suites.
 
+For MCP task lifecycle and persistence changes, run the owner-scoped ledger and
+restart suites:
+
+```bash
+PYTHONPATH=apps/server:agent pytest -q tests/test_mcp_task_ledger.py tests/test_task_lifecycle.py tests/test_task_memory_ledger.py tests/test_task_restart_identity.py
+```
+
+`commandcore_server/mcp_task_ledger.py` stores only task/call summaries. It
+must not persist command arguments, output, file paths, screenshots, browser
+tokens or credentials. Owner identity includes issuer, subject and client ID;
+all task lookups and history queries must remain conversation-scoped. On
+restart, in-flight remote calls are marked interrupted, never assumed complete.
+
 The repository treats Pyflakes-class Ruff rules (`F`) as a whole-tree correctness
 gate and `ruff format` as the canonical Python formatter. Use `make format` before
 submitting Python changes and keep formatting-only changes separate from behavior
