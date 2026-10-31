@@ -2,7 +2,16 @@
 
 import pytest
 
-from scripts.verify_image_identity import SOURCE, verify
+# Script tools are not packaged as a Python module. Load by source path,
+# so CI's setuptools-free pytest command does not rely on a root PYTHONPATH.
+from pathlib import Path
+from runpy import run_path
+
+_scope = run_path(
+    str(Path(__file__).resolve().parents[1] / "scripts" / "verify_image_identity.py")
+)
+SOURCE = _scope["SOURCE"]
+verify = _scope["verify"]
 
 COMMIT = "a" * 40
 IMAGE = "sha256:" + "b" * 64
