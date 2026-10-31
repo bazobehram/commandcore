@@ -56,6 +56,9 @@ def main() -> int:
         "CI_USER_CREATE_CATEGORY",
         "CI_USER_CREATE_HRESULT",
         "CI_USER_CREATE_ERROR_CLASS",
+        "CI_USER_CREATE_ERROR_ID",
+        "CI_USER_CREATE_EXCEPTION_TYPE",
+        "CI_USER_CREATE_MESSAGE_HINT",
     ):
         found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\s*$", result.stdout)
         if found:
