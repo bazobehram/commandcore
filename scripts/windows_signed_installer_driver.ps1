@@ -85,15 +85,9 @@ try {
         elseif ($errorId -match 'AlreadyExists|AlreadyInUse|Exists') { $category = 'name_collision' }
         elseif ($errorId -match 'ParameterBinding|InvalidArgument') { $category = 'argument' }
         Write-Output ('CI_USER_CREATE_CATEGORY:' + $category)
-        # Numeric HRESULT and categorical PowerShell errors are safe diagnostic
-        # codes, not exception text, usernames, credentials or command args.
         $record = $_
         $hresult = [string]$record.Exception.HResult
         if ($hresult -match '^-?[0-9]{1,11}
-        if ($class -in @('InvalidArgument', 'InvalidOperation', 'PermissionDenied', 'SecurityError', 'NotSpecified', 'ResourceExists')) {
-            Write-Output ('CI_USER_CREATE_ERROR_CLASS:' + $class)
-        }
-    }
     throw 'Disposable Windows installer acceptance failed (redacted).'
 } finally {
     if ($createdTask) {
