@@ -38,6 +38,7 @@ security material, and contributor/release documentation.
 ## Security and operations
 
 - [Security model](SECURITY_MODEL.md)
+- [Live two-user OAuth acceptance](LIVE_TWO_USER_ACCEPTANCE.md)
 - [Threat model](THREAT_MODEL.md)
 - [Observability](OBSERVABILITY.md)
 - [Release signing](RELEASE_SIGNING.md)
