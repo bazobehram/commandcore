@@ -254,17 +254,23 @@ def test_reassigned_client_id_never_inherits_previous_subject_access(viewer):
         {"client_id": "alice-browser", "session_id": "bob-new-session"}
     )
 
-    assert client.get(
-        "/api/browser/frame", params={"client_id": "alice-browser"}
-    ).status_code == 404
+    assert (
+        client.get(
+            "/api/browser/frame", params={"client_id": "alice-browser"}
+        ).status_code
+        == 404
+    )
     bob = client.get(
         "/api/browser/frame",
         params={"client_id": "alice-browser"},
         headers={"x-fixture-subject": "bob"},
     )
     assert bob.status_code == 200
-    assert ("frame", "https://issuer-a.example/", "bob", "alice-browser") in pool.actions
-    assert not any(
-        a[0] == "frame" and a[2] == "alice" for a in pool.actions
-    )
+    assert (
+        "frame",
+        "https://issuer-a.example/",
+        "bob",
+        "alice-browser",
+    ) in pool.actions
+    assert not any(a[0] == "frame" and a[2] == "alice" for a in pool.actions)
     assert audit.rows == []
