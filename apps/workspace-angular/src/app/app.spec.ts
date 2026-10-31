@@ -130,4 +130,89 @@ describe('Workspace component: authenticated session lifecycle', () => {
     expect(component.loggedIn()).toBe(true);
     fixture.destroy();
   });
+
+  it('clears all account state and redirects after a successful sign-out', async () => {
+    const { requests } = stubApi({
+      ...loggedInApi,
+      'DELETE /api/session': { body: { ok: true } },
+    });
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    component.devices.set([{ id: 'synthetic-device', display_name: 'Fixture' }]);
+    component.browsers.set([{ client_id: 'fixture-browser' }]);
+    component.browserFrame.set('private-frame');
+    component.activity.set([{ tool: 'synthetic-operation' }]);
+    const redirect = vi.fn();
+    vi.stubGlobal('location', { replace: redirect });
+
+    await component.signOut();
+    fixture.detectChanges();
+
+    expect(requests).toContain('DELETE /api/session');
+    expect(component.loggedIn()).toBe(false);
+    expect(component.session()).toBeNull();
+    expect(component.devices()).toEqual([]);
+    expect(component.browsers()).toEqual([]);
+    expect(component.browserFrame()).toBe('');
+    expect(component.activity()).toEqual([]);
+    expect(redirect).toHaveBeenCalledWith('/');
+    fixture.destroy();
+  });
+
+  it('discards a delayed previous-account device response after session replacement', async () => {
+    const routes: Record<string, Reply> = { ...loggedInApi };
+    const { fetchMock } = stubApi(routes);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    let resolveOld: ((response: Response) => void) | undefined;
+    const oldResponse = new Promise<Response>(resolve => { resolveOld = resolve; });
+    let deviceCall = 0;
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      const key = (options?.method ?? 'GET') + ' ' + url;
+      if (key === 'GET /api/devices') {
+        deviceCall++;
+        if (deviceCall === 1) return oldResponse;
+        if (deviceCall === 2) return apiReply({ status: 401, body: { detail: 'Expired' } });
+        return apiReply({ body: { devices: [{ id: 'new-device', display_name: 'New account' }] } });
+      }
+      if (key === 'GET /api/session') {
+        return apiReply({ body: {
+          subject: 'second-account', auth_kind: 'oauth2-panel',
+          scopes: ['commandcore:read', 'commandcore:standard'],
+        } });
+      }
+      return apiReply(routes[key] ?? { body: {} });
+    });
+
+    const pendingOld = component.refreshDeviceStates();
+    await component.refresh();
+    expect(component.loggedIn()).toBe(false);
+    await component.init();
+    expect(component.loggedIn()).toBe(true);
+    expect(component.session()?.subject).toBe('second-account');
+    expect(component.devices().map(d => d.id)).toEqual(['new-device']);
+
+    resolveOld!(apiReply({ body: { devices: [{ id: 'old-device', display_name: 'Previous account' }] } }));
+    await pendingOld;
+    fixture.detectChanges();
+    expect(component.devices().map(d => d.id)).toEqual(['new-device']);
+    fixture.destroy();
+  });
+
+  it('closes the account menu with Escape without signing out', async () => {
+    const { requests } = stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    const accountButton: HTMLButtonElement = fixture.nativeElement.querySelector('.account-trigger');
+    accountButton.click();
+    fixture.detectChanges();
+    expect(component.accountMenu()).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    expect(component.accountMenu()).toBe(false);
+    expect(accountButton.getAttribute('aria-expanded')).toBe('false');
+    expect(requests).not.toContain('DELETE /api/session');
+    fixture.destroy();
+  });
 });
