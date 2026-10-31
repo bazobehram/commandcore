@@ -199,6 +199,28 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
+  it('supports Enter and Space on the keyboard-accessible workspace brand', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    // jsdom has no matchMedia; keep this fixture in the desktop branch.
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const brand: HTMLElement = fixture.nativeElement.querySelector('.brand[role="button"]');
+    expect(brand).not.toBeNull();
+    expect(brand.getAttribute('tabindex')).toBe('0');
+
+    component.view.set('browser');
+    brand.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(component.view()).toBe('workspace');
+
+    component.view.set('browser');
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    brand.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(true);
+    expect(component.view()).toBe('workspace');
+    fixture.destroy();
+  });
+
   it('closes the account menu with Escape without signing out', async () => {
     const { requests } = stubApi(loggedInApi);
     const fixture = await mountWorkspace();
