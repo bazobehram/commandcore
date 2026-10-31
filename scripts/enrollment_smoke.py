@@ -561,12 +561,8 @@ def main():
                         cookies={"commandcore_session": panel_cookie},
                         timeout=15,
                     ) as panel:
-                        permission_url = (
-                            "/api/devices/" + device_id + "/permissions"
-                        )
-                        original = panel.get(
-                            "/api/devices/" + device_id
-                        )
+                        permission_url = "/api/devices/" + device_id + "/permissions"
+                        original = panel.get("/api/devices/" + device_id)
                         original.raise_for_status()
                         assert (
                             original.json()["device"]["permission_profile"]
