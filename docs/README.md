@@ -39,6 +39,7 @@ security material, and contributor/release documentation.
 
 - [Security model](SECURITY_MODEL.md)
 - [Live two-user OAuth acceptance](LIVE_TWO_USER_ACCEPTANCE.md)
+- [Public MCP edge preflight](PUBLIC_MCP_EDGE_PREFLIGHT.md)
 - [Threat model](THREAT_MODEL.md)
 - [Observability](OBSERVABILITY.md)
 - [Release signing](RELEASE_SIGNING.md)
