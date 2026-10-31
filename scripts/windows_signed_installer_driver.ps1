@@ -90,6 +90,22 @@ try {
         if ($hresult -match '^-?[0-9]{1,11}$') {
             Write-Output ('CI_USER_CREATE_HRESULT:' + $hresult)
         }
+        $errorName = ([string]$record.FullyQualifiedErrorId).Split(',')[0]
+        if ($errorName -match '^[A-Za-z0-9_]{1,60}$') {
+            Write-Output ('CI_USER_CREATE_ERROR_ID:' + $errorName)
+        }
+        $errorType = [string]$record.Exception.GetType().Name
+        if ($errorType -match '^[A-Za-z0-9_]{1,60}$') {
+            Write-Output ('CI_USER_CREATE_EXCEPTION_TYPE:' + $errorType)
+        }
+        $detail = [string]$record.Exception.Message
+        $hint = 'other'
+        if ($detail -match '(?i)password|complexity') { $hint = 'password_policy' }
+        elseif ($detail -match '(?i)description|too long|48 characters') { $hint = 'description' }
+        elseif ($detail -match '(?i)already exists|already in use') { $hint = 'name_collision' }
+        elseif ($detail -match '(?i)denied|permission|privilege') { $hint = 'privilege' }
+        elseif ($detail -match '(?i)invalid parameter|incorrect parameter') { $hint = 'invalid_parameter' }
+        Write-Output ('CI_USER_CREATE_MESSAGE_HINT:' + $hint)
         $class = [string]$record.CategoryInfo.Category
         if ($class -in @('InvalidArgument', 'InvalidOperation', 'PermissionDenied', 'SecurityError', 'NotSpecified', 'ResourceExists')) {
             Write-Output ('CI_USER_CREATE_ERROR_CLASS:' + $class)
