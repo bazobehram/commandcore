@@ -19,9 +19,9 @@ def main() -> int:
         print("NOT_RUN: disposable Windows CI runner required")
         return 2
     env = os.environ.copy()
-    env["COMMANDCORE_CI_USER_PASSWORD"] = (
-        "Cc!" + secrets.token_urlsafe(18).replace("-", "a").replace("_", "b")
-    )
+    env["COMMANDCORE_CI_USER_PASSWORD"] = "Cc!" + secrets.token_urlsafe(18).replace(
+        "-", "a"
+    ).replace("_", "b")
     name = "cc" + secrets.token_hex(5)
     driver = Path(__file__).resolve().with_name("windows_signed_installer_driver.ps1")
     result = subprocess.run(
@@ -57,10 +57,7 @@ def main() -> int:
         "CI_USER_CREATE_HRESULT",
         "CI_USER_CREATE_ERROR_CLASS",
     ):
-        found = re.findall(
-            rf"(?m)^{key}:([A-Za-z0-9_]+)\s*$",
-            result.stdout,
-        )
+        found = re.findall(rf"(?m)^{key}:([A-Za-z0-9_]+)\s*$", result.stdout)
         if found:
             print("FAIL: " + key + "=" + found[-1])
     return 1
