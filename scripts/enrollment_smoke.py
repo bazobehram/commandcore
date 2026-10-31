@@ -451,7 +451,7 @@ def main():
 
                     eventually(online)
 
-                    def call(name, args):
+                    def call(name, args, *, expected_error=None):
                         response = client.post(
                             "/mcp",
                             headers={
@@ -481,6 +481,11 @@ def main():
                         )
                         response.raise_for_status()
                         result = response.json()["result"]
+                        if expected_error is not None:
+                            assert result.get("isError") is True, result
+                            error = result["structuredContent"]["error"]
+                            assert error in expected_error, error
+                            return error
                         assert not result.get("isError"), result
                         return result["structuredContent"]
 
@@ -539,6 +544,89 @@ def main():
                         ]["total"]
                         > 0
                     )
+                    # This is the real connected Agent on the test OS (including
+                    # Windows runners), not a mocked database permission change.
+                    # The operator session belongs to the same fixture subject,
+                    # but has the administration authority needed by the panel.
+                    panel_cookie = issue_panel_session(
+                        secret=secret,
+                        subject="smoke-operator",
+                        ttl_seconds=600,
+                        scopes=("commandcore:read", "commandcore:standard"),
+                        auth_kind="panel-cookie",
+                    )
+                    with httpx.Client(
+                        base_url=base,
+                        headers={"Origin": base},
+                        cookies={"commandcore_session": panel_cookie},
+                        timeout=15,
+                    ) as panel:
+                        permission_url = (
+                            "/api/devices/" + device_id + "/permissions"
+                        )
+                        original = panel.get(
+                            "/api/devices/" + device_id
+                        )
+                        original.raise_for_status()
+                        assert (
+                            original.json()["device"]["permission_profile"]
+                            == "STANDARD"
+                        )
+                        lowered = panel.post(
+                            permission_url, json={"profile": "READ_ONLY"}
+                        )
+                        lowered.raise_for_status()
+                        assert (
+                            lowered.json()["device"]["permission_profile"]
+                            == "READ_ONLY"
+                        )
+                        # An existing selection must not cache old authority.
+                        call(
+                            "shell.exec",
+                            {
+                                "selection_id": selection,
+                                "command": "hostname",
+                            },
+                            expected_error={
+                                "permission_denied",
+                                "insufficient_scope",
+                            },
+                        )
+                        # Device can still read a disposable fixture.
+                        assert (
+                            call(
+                                "fs.read",
+                                {
+                                    "selection_id": selection,
+                                    "path": str(probe),
+                                },
+                            )["result"]["data"]
+                            == "enrollment-read-ok"
+                        )
+                        # No privileged helper was installed in this test.
+                        denied_full = panel.post(
+                            permission_url, json={"profile": "FULL_CONTROL"}
+                        )
+                        assert denied_full.status_code == 409
+                        restored = panel.post(
+                            permission_url, json={"profile": "STANDARD"}
+                        )
+                        restored.raise_for_status()
+                        assert (
+                            restored.json()["device"]["permission_profile"]
+                            == "STANDARD"
+                        )
+                    assert (
+                        call(
+                            "shell.exec",
+                            {
+                                "selection_id": selection,
+                                "command": "hostname",
+                            },
+                        )["stdout"].strip()
+                        == socket.gethostname()
+                    )
+                    assert json.loads(state.read_text())["device_id"] == device_id
                     transfer_probe = root / "transfer-probe.bin"
                     transfer_data = base64.b64encode(
                         b"\x00\xfftransfer-roundtrip"
@@ -753,6 +841,9 @@ def main():
                             "outbound_websocket": True,
                             "read": True,
                             "standard_shell": True,
+                            "panel_permission_roundtrip": True,
+                            "read_only_blocks_existing_selection": True,
+                            "full_control_without_helper_denied": True,
                             "filesystem_write_read_delete": True,
                             "system_info_metrics": True,
                             "managed_process_lifecycle": True,
