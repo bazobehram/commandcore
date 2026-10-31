@@ -225,14 +225,13 @@ async def test_distinct_public_accounts_cannot_list_or_dispatch_to_other_devices
     # The fake Agent must never receive a command addressed to another owner.
     assert agents.calls == []
 
+
 @pytest.mark.asyncio
 async def test_grant_downgrade_and_revocation_invalidate_prior_selection(tmp_path):
     """An existing selection handle never freezes a guest's old privileges."""
     db = Database(str(tmp_path / "grant-lifecycle.sqlite3"))
     device = _device(db, owner="alice")
-    assert db.upsert_device_grant(
-        "alice", device["id"], "bob", "FULL_CONTROL", "alice"
-    )
+    assert db.upsert_device_grant("alice", device["id"], "bob", "FULL_CONTROL", "alice")
     agents = FakeAgents()
     service = ToolService(db, agents, 60)
     bob = Principal(
@@ -246,22 +245,16 @@ async def test_grant_downgrade_and_revocation_invalidate_prior_selection(tmp_pat
     assert agents.calls[-1][1] == "FULL_CONTROL"
 
     # Downgrades must be enforced even with a handle issued at FULL_CONTROL.
-    assert db.upsert_device_grant(
-        "alice", device["id"], "bob", "READ_ONLY", "alice"
-    )
+    assert db.upsert_device_grant("alice", device["id"], "bob", "READ_ONLY", "alice")
     for device_args in ({"selection_id": handle}, {"device_id": device["id"]}):
         with pytest.raises(ToolError) as error:
-            await service.call(
-                bob, "shell.exec", {**device_args, "command": "id"}
-            )
+            await service.call(bob, "shell.exec", {**device_args, "command": "id"})
         assert error.value.code == "permission_denied"
     assert len(agents.calls) == 1
     await service.call(bob, "system.info", {"selection_id": handle})
     assert agents.calls[-1][1] == "READ_ONLY"
 
-    assert db.upsert_device_grant(
-        "alice", device["id"], "bob", "STANDARD", "alice"
-    )
+    assert db.upsert_device_grant("alice", device["id"], "bob", "STANDARD", "alice")
     await service.call(bob, "shell.exec", {"selection_id": handle, "command": "id"})
     assert agents.calls[-1][1] == "STANDARD"
     calls_before_revocation = len(agents.calls)
@@ -269,9 +262,7 @@ async def test_grant_downgrade_and_revocation_invalidate_prior_selection(tmp_pat
     assert db.revoke_device_grant("alice", device["id"], "bob")
     for device_args in ({"selection_id": handle}, {"device_id": device["id"]}):
         with pytest.raises(ToolError) as error:
-            await service.call(
-                bob, "shell.exec", {**device_args, "command": "id"}
-            )
+            await service.call(bob, "shell.exec", {**device_args, "command": "id"})
         assert error.value.code == "device_not_found"
     assert len(agents.calls) == calls_before_revocation
     assert (await service.call(bob, "devices.list", {}))["devices"] == []
@@ -279,7 +270,9 @@ async def test_grant_downgrade_and_revocation_invalidate_prior_selection(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_selection_handle_is_subject_bound_and_rechecks_device_revocation(tmp_path):
+async def test_selection_handle_is_subject_bound_and_rechecks_device_revocation(
+    tmp_path,
+):
     db = Database(str(tmp_path / "device-revocation.sqlite3"))
     alice_device = _device(db, owner="alice")
     _device(db, owner="bob")
