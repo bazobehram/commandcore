@@ -15,10 +15,20 @@ $result = Join-Path $FixtureRoot 'result\worker.result.json'
 $worker = Join-Path $FixtureRoot 'installers\worker.ps1'
 $createdUser = $false
 $createdTask = $false
-$stage = 'create_user'
+$stage = 'runner_privileges'
 try {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Runner must have rights to create a disposable local test account.'
+    }
+    $stage = 'localaccounts_module'
+    if (!(Get-Command New-LocalUser -ErrorAction SilentlyContinue)) {
+        throw 'Windows LocalAccounts cmdlets unavailable.'
+    }
+    $stage = 'create_user'
     $secure = ConvertTo-SecureString $password -AsPlainText -Force
-    New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI Agent installer acceptance' | Out-Null
+    New-LocalUser -Name $UserName -Password $secure -AccountNeverExpires -Description 'Disposable CommandCore CI Agent installer acceptance' -ErrorAction Stop | Out-Null
     $createdUser = $true
     $stage = 'fixture_acl'
     # Least privilege: read/traverse public installer assets, but write only
@@ -62,6 +72,15 @@ try {
     # The diagnostic code is static and never contains credentials, usernames,
     # filesystem locations or raw PowerShell exception messages.
     Write-Output ('CI_INSTALL_STAGE:' + $stage)
+    if ($stage -eq 'create_user') {
+        $category = 'other'
+        $errorId = [string]$_.FullyQualifiedErrorId
+        if ($errorId -match 'Password|Complexity') { $category = 'password_policy' }
+        elseif ($errorId -match 'AccessDenied|UnauthorizedAccess|Privilege') { $category = 'privilege' }
+        elseif ($errorId -match 'AlreadyExists|AlreadyInUse|Exists') { $category = 'name_collision' }
+        elseif ($errorId -match 'ParameterBinding|InvalidArgument') { $category = 'argument' }
+        Write-Output ('CI_USER_CREATE_CATEGORY:' + $category)
+    }
     throw 'Disposable Windows installer acceptance failed (redacted).'
 } finally {
     if ($createdTask) {
