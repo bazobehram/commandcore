@@ -87,8 +87,27 @@ try {
         Write-Output ('CI_USER_CREATE_CATEGORY:' + $category)
         # Numeric HRESULT and categorical PowerShell errors are safe diagnostic
         # codes, not exception text, usernames, credentials or command args.
-        Write-Output ('CI_USER_CREATE_HRESULT:' + ([uint32]([int64]$_.Exception.HResult -band 0xffffffff)).ToString('X8'))
-        $class = [string]$_.CategoryInfo.Category
+        $record = $_
+        $hresult = [string]$record.Exception.HResult
+        if ($hresult -match '^-?[0-9]{1,11}
+        if ($class -in @('InvalidArgument', 'InvalidOperation', 'PermissionDenied', 'SecurityError', 'NotSpecified', 'ResourceExists')) {
+            Write-Output ('CI_USER_CREATE_ERROR_CLASS:' + $class)
+        }
+    }
+    throw 'Disposable Windows installer acceptance failed (redacted).'
+} finally {
+    if ($createdTask) {
+        try { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue } catch {}
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    if ($createdUser) {
+        Remove-LocalUser -Name $UserName -ErrorAction SilentlyContinue
+    }
+}
+) {
+            Write-Output ('CI_USER_CREATE_HRESULT:' + $hresult)
+        }
+        $class = [string]$record.CategoryInfo.Category
         if ($class -in @('InvalidArgument', 'InvalidOperation', 'PermissionDenied', 'SecurityError', 'NotSpecified', 'ResourceExists')) {
             Write-Output ('CI_USER_CREATE_ERROR_CLASS:' + $class)
         }
