@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory)][string]$FixtureRoot,
     [Parameter(Mandatory)][string]$Origin,
     [switch]$OnlyAccount,
-    [switch]$OnlyTask
+    [switch]$OnlyTask,
+    [switch]$OnlyCredential
 )
 $ErrorActionPreference = 'Stop'
 $taskName = "CommandCore CI Install $UserName"
@@ -17,6 +18,7 @@ $result = Join-Path $FixtureRoot 'result\worker.result.json'
 $worker = Join-Path $FixtureRoot 'installers\worker.ps1'
 $createdUser = $false
 $createdTask = $false
+$workerProcess = $null
 $stage = 'runner_privileges'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -48,20 +50,28 @@ try {
     $stage = 'register_task'
     $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
         $worker + '" -FixtureRoot "' + $FixtureRoot + '" -Origin "' + $Origin + '"'
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
-    $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(10))
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -User $account -Password $password -RunLevel Limited -Force | Out-Null
-    $createdTask = $true
-    $stage = 'start_task'
-    Start-ScheduledTask -TaskName $taskName
+    if ($OnlyTask) {
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
+        $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(10))
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -User $account -Password $password -RunLevel Limited -Force | Out-Null
+        $createdTask = $true
+        $stage = 'start_task'
+        Start-ScheduledTask -TaskName $taskName
+    } else {
+        # Test the signed installer under a real standard-user logon without
+        # coupling this gate to Windows Task Scheduler lifecycle support.
+        $stage = 'start_credential_process'
+        $credential = [pscredential]::new($account, $secure)
+        $workerProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Credential $credential -LoadUserProfile -PassThru -ErrorAction Stop
+    }
     $stage = 'read_worker_report'
-    $deadlineSeconds = if ($OnlyTask) { 20 } else { 110 }
+    $deadlineSeconds = if ($OnlyTask -or $OnlyCredential) { 20 } else { 110 }
     $deadline = (Get-Date).AddSeconds($deadlineSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
             $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
             $accepted = $report.status -eq 'PASS' -and $report.non_admin -eq $true
-            if ($OnlyTask) {
+            if ($OnlyTask -or $OnlyCredential) {
                 $accepted = $accepted -and $report.task_probe -eq $true
             } else {
                 $accepted = $accepted -and $report.signed_install -eq $true
@@ -76,15 +86,21 @@ try {
             }
             if ($OnlyTask) {
                 Write-Output 'PASS: isolated non-admin Windows Scheduled Task probe'
+            } elseif ($OnlyCredential) {
+                Write-Output 'PASS: isolated non-admin Windows credential process probe'
             } else {
                 Write-Output 'PASS: isolated non-admin Windows signed Agent install'
             }
             return
         }
+        if (!$OnlyTask -and $workerProcess -and $workerProcess.HasExited) {
+            $stage = 'worker_exited_without_report'
+            throw 'Standard-user worker exited without producing a report.'
+        }
         Start-Sleep -Milliseconds 500
     }
     $stage = 'worker_timeout'
-    try {
+    if ($OnlyTask) { try {
         $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
         $lastResult = [string]$info.LastTaskResult
         if ($lastResult -match '^-?[0-9]{1,11}$') {
@@ -97,7 +113,7 @@ try {
         }
     } catch {
         Write-Output 'CI_TASK_DIAGNOSTIC:unavailable'
-    }
+    } }
     throw 'Standard-user worker did not report success before deadline.'
 } catch {
     # The diagnostic code is static and never contains credentials, usernames,
@@ -139,6 +155,9 @@ try {
     }
     throw 'Disposable Windows installer acceptance failed (redacted).'
 } finally {
+    if ($workerProcess -and !$workerProcess.HasExited) {
+        Stop-Process -Id $workerProcess.Id -Force -ErrorAction SilentlyContinue
+    }
     if ($createdTask) {
         try { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue } catch {}
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
