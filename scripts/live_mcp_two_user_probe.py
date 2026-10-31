@@ -191,8 +191,20 @@ def run_checks(
     check(
         "A06",
         lambda: (
-            denied(call, a, "shell.exec", {"device_id": da, "command": "true"}, SCOPE_DENIED),
-            denied(call, b, "shell.exec", {"device_id": db, "command": "true"}, SCOPE_DENIED),
+            denied(
+                call,
+                a,
+                "shell.exec",
+                {"device_id": da, "command": "true"},
+                SCOPE_DENIED,
+            ),
+            denied(
+                call,
+                b,
+                "shell.exec",
+                {"device_id": db, "command": "true"},
+                SCOPE_DENIED,
+            ),
         ),
     )
     return outcomes
