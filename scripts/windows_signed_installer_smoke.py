@@ -217,6 +217,17 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         }
         if hints and hints[-1] in allowed_hints:
             print("FAIL: windows_installer_failure_hint=" + hints[-1])
+        missing = re.findall(
+            r"(?m)^CI_INSTALLER_MISSING_COMMAND:([A-Za-z_]+)\s*$",
+            process.stdout,
+        )
+        allowed_missing = {
+            "Get_ScheduledTask", "Get_Command", "curl_exe", "Get_FileHash",
+            "Get_ReleaseFile", "Get_ItemProperty", "Set_Acl", "New_Item",
+            "ConvertFrom_Json", "Get_Content", "Remove_Item",
+        }
+        if missing and missing[-1] in allowed_missing:
+            print("FAIL: windows_installer_missing_command=" + missing[-1])
         numbers = re.findall(
             r"(?m)^CI_INSTALLER_SOURCE_LINE:([0-9]{1,3})\s*$", process.stdout
         )
