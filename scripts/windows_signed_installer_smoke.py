@@ -225,10 +225,23 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         safe_stage = stages[-1] if stages else "unknown"
         print("FAIL: windows_installer_stage=" + safe_stage)
         for field, choices in (
-            ("CI_ROLLBACK_PHASE", {"none", "preconditions", "signed_upgrade", "restore", "hashes"}),
-            ("CI_ROLLBACK_CATEGORY", {"none", "expected_task_failure", "release_verification", "task_preflight", "rollback", "unexpected_failure"}),
+            (
+                "CI_ROLLBACK_PHASE",
+                {"none", "preconditions", "signed_upgrade", "restore", "hashes"},
+            ),
+            (
+                "CI_ROLLBACK_CATEGORY",
+                {
+                    "none",
+                    "expected_task_failure",
+                    "release_verification",
+                    "task_preflight",
+                    "rollback",
+                    "unexpected_failure",
+                },
+            ),
         ):
-            matches = re.findall(rf"(?m)^{field}:([a-z_]+)\\s*$", process.stdout)
+            matches = re.findall(rf"(?m)^{field}:([a-z_]+)\s*$", process.stdout)
             if matches and matches[-1] in choices:
                 print("FAIL: " + field.lower() + "=" + matches[-1])
         gate_failures = re.findall(
