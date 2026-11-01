@@ -267,6 +267,72 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
+  it('moves focus into Add Device and returns to the opener after Escape', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const opener: HTMLButtonElement = fixture.nativeElement.querySelector('.machine-empty');
+    opener.focus();
+    opener.click();
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.sheet .x-close'));
+    });
+    const dialog = fixture.nativeElement.querySelector('.sheet[role="dialog"]');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelector('.sheet')).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    });
+    fixture.destroy();
+  });
+
+  it('keeps device arrow navigation inside the device rail', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    component.devices.set([
+      { id: 'first-device', display_name: 'First device', status: 'offline' },
+      { id: 'second-device', display_name: 'Second device', status: 'offline' },
+    ]);
+    fixture.detectChanges();
+    const account: HTMLButtonElement = fixture.nativeElement.querySelector('.account-trigger');
+    account.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    expect(component.selected()).toBe(0);
+
+    const tile: HTMLButtonElement = fixture.nativeElement.querySelector('.device-tile:not(.add-tile)');
+    const arrow = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+    tile.dispatchEvent(arrow);
+    expect(arrow.defaultPrevented).toBe(true);
+    expect(component.selected()).toBe(1);
+    fixture.destroy();
+  });
+
+  it('focuses the command palette and does not replace a permission dialog with Ctrl+K', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    const trigger: HTMLButtonElement = fixture.nativeElement.querySelector('.search-trigger');
+    trigger.focus();
+    const keyboard = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true });
+    trigger.dispatchEvent(keyboard);
+    expect(keyboard.defaultPrevented).toBe(true);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.palette-search input')));
+
+    component.overlay.set('permission-confirm');
+    fixture.detectChanges();
+    const another = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(another);
+    expect(component.overlay()).toBe('permission-confirm');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    fixture.destroy();
+  });
+
   it('closes the account menu with Escape without signing out', async () => {
     const { requests } = stubApi(loggedInApi);
     const fixture = await mountWorkspace();

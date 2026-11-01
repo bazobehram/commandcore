@@ -88,6 +88,17 @@ async function main() {
     await emptyPage.locator('.machine-empty').click();
     await emptyPage.getByRole('dialog', { name: 'Add device' }).waitFor();
     assert.equal(await emptyPage.getByRole('button', { name: 'Close dialog' }).count(), 1);
+    await emptyPage.waitForFunction(() => document.activeElement?.matches('.sheet .x-close'));
+    assert.equal(await emptyPage.locator('.sheet[aria-modal="true"]').count(), 1, 'Expected modal semantics');
+    await emptyPage.keyboard.press('Shift+Tab');
+    assert.equal(await emptyPage.evaluate(() => !!document.querySelector('.sheet')?.contains(document.activeElement)), true, 'Shift+Tab escaped the dialog');
+    await emptyPage.keyboard.press('Escape');
+    await emptyPage.waitForFunction(() => !document.querySelector('.sheet') && document.activeElement?.matches('.machine-empty'));
+    await emptyPage.locator('.search-trigger').focus();
+    await emptyPage.keyboard.press('Control+k');
+    await emptyPage.waitForFunction(() => document.activeElement?.matches('.palette-search input'));
+    await emptyPage.keyboard.press('Escape');
+    await emptyPage.waitForFunction(() => !document.querySelector('.command-palette') && document.activeElement?.matches('.search-trigger'));
     const faviconPath = await emptyPage.locator('link[rel="icon"][type="image/svg+xml"]').getAttribute('href');
     assert.equal(faviconPath, '/brand/octopus-head.svg', 'Missing octopus SVG favicon');
     await emptyPage.close();
