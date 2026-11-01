@@ -37,6 +37,7 @@ from .fleet import FleetRolloutService
 from .mcp import MCPHandler
 from .metrics import Metrics
 from .models import Principal
+from .private_owner import owner_allowed
 from .security import (
     audit_summary,
     constant_time_token_equal,
@@ -289,7 +290,12 @@ def _authenticate_bearer(
         )
     if oauth_verifier is not None:
         try:
-            return oauth_verifier.verify(token)
+            principal = oauth_verifier.verify(token)
+            return (
+                principal
+                if owner_allowed(settings.private_owner_subject, principal.subject)
+                else None
+            )
         except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
             return None
     return None
@@ -310,6 +316,10 @@ def require_principal(
             secret=settings.session_secret, token=panel_cookie
         )
         if claims:
+            if not owner_allowed(
+                settings.private_owner_subject, str(claims.get("sub", ""))
+            ):
+                raise HTTPException(403, "private_instance_access_denied")
             if request.method not in SAFE_METHODS and not _same_origin(request):
                 raise HTTPException(403, "cross-origin panel mutation denied")
             kind = str(claims.get("auth_kind", "panel-cookie"))
