@@ -6,6 +6,8 @@ The installer runs with -NoEnroll -NoTask. We also assert that a repeat
 installation and a forced upgrade without identity/task fail without changing
 any installed binaries or metadata. Genuine interactive Scheduled Task,
 enrollment and authenticated upgrade lifecycle remain separate release gates.
+The same packaged installer also rejects corrupted Ed25519 manifests and verifier
+pins before creating local Agent state.
 """
 
 from __future__ import annotations
@@ -217,6 +219,9 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         )
         for gate in gate_failures:
             if gate in {
+                "tampered_manifest_denied",
+                "pinned_verifier_denied",
+                "clean_after_tamper_denial",
                 "repeat_denied",
                 "upgrade_without_identity_denied",
                 "unchanged_after_denial",
