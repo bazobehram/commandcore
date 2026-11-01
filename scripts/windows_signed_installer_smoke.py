@@ -274,10 +274,16 @@ def main() -> int:
         output = base / "installers"
         feed.mkdir()
         (base / "result").mkdir()
-        ca_path, cert_path, key_path = create_tls_files(Path(tls_tmp))
         handler = lambda *args, **kwargs: QuietHandler(
             *args, directory=str(feed), **kwargs
         )
+        crl_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        crl_thread = threading.Thread(target=crl_server.serve_forever, daemon=True)
+        crl_url = f"http://127.0.0.1:{crl_server.server_port}/ci.crl"
+        ca_path, cert_path, key_path = create_tls_files(
+            Path(tls_tmp), crl_url=crl_url
+        )
+        shutil.copyfile(Path(tls_tmp) / "ci.crl", feed / "ci.crl")
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(str(cert_path), str(key_path))
@@ -293,6 +299,7 @@ def main() -> int:
             "-", "a"
         ).replace("_", "b")
         user = "cc" + secrets.token_hex(5)
+        crl_thread.start()
         server_thread.start()
         trusted = False
         try:
@@ -336,6 +343,9 @@ def main() -> int:
             server.shutdown()
             server.server_close()
             server_thread.join(timeout=5)
+            crl_server.shutdown()
+            crl_server.server_close()
+            crl_thread.join(timeout=5)
             if trusted:
                 subprocess.run(
                     ["certutil.exe", "-delstore", "Root", ca_thumbprint],
