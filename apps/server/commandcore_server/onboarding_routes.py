@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from .auth import FULL_SCOPE, STANDARD_SCOPE, scope_allows
 from .enrollment import EnrollmentService
+from .private_owner import owner_allowed
 from .security import issue_panel_session, token_hash
 from .web_assets import web_page
 
@@ -360,6 +361,10 @@ def install_routes(
                 exchanged.raise_for_status()
                 token = exchanged.json()["access_token"]
             principal = verifier.verify(token)
+            if not owner_allowed(
+                getattr(settings, "private_owner_subject", ""), principal.subject
+            ):
+                raise HTTPException(403, "private_instance_access_denied")
         except (httpx.HTTPError, jwt.PyJWTError, KeyError, ValueError):
             raise HTTPException(400, "OAuth login failed") from None
         destination = request.cookies.get("commandcore_login_destination")

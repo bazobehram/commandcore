@@ -32,6 +32,11 @@ class Settings:
     bootstrap_subject: str = os.getenv(
         "COMMANDCORE_BOOTSTRAP_SUBJECT", "bootstrap-admin"
     )
+    # Optional private-only owner boundary; never enable on public/multi-user hosts.
+    # Supply an exact verified OAuth subject through deployment configuration.
+    private_owner_subject: str = os.getenv(
+        "COMMANDCORE_PRIVATE_OWNER_SUBJECT", ""
+    ).strip()
     public_base_url: str = os.getenv(
         "COMMANDCORE_PUBLIC_BASE_URL", "http://127.0.0.1:8787"
     )
@@ -134,6 +139,18 @@ class Settings:
     )
 
     def validate(self) -> None:
+        if self.private_owner_subject:
+            if not self.oauth_enabled or self.public_bootstrap_enabled:
+                raise RuntimeError(
+                    "private owner restriction requires OAuth and disabled public bootstrap"
+                )
+            if (
+                any(c.isspace() for c in self.private_owner_subject)
+                or self.private_owner_subject == "*"
+            ):
+                raise RuntimeError(
+                    "private owner subject must be a single exact OAuth subject"
+                )
         if self.browser_enabled and self.oauth_enabled:
             if (
                 not self.browser_worker_manifest
