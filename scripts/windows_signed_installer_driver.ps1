@@ -121,8 +121,17 @@ try {
                     if ($report.rollback_phase -in @('none', 'preconditions', 'signed_upgrade', 'restore', 'hashes')) {
                         Write-Output ('CI_ROLLBACK_PHASE:' + $report.rollback_phase)
                     }
-                    if ($report.rollback_category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'unexpected_failure')) {
+                    if ($report.rollback_category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'missing_property', 'parameter_binding', 'access_denied', 'unexpected_failure')) {
                         Write-Output ('CI_ROLLBACK_CATEGORY:' + $report.rollback_category)
+                    }
+                    if ($report.rollback_error_id -match '^[A-Za-z0-9_]{1,80}$') {
+                        Write-Output ('CI_ROLLBACK_ERROR_ID:' + $report.rollback_error_id)
+                    }
+                    if ($report.rollback_source_line -is [int] -and $report.rollback_source_line -gt 0 -and $report.rollback_source_line -lt 500) {
+                        Write-Output ('CI_ROLLBACK_SOURCE_LINE:' + $report.rollback_source_line)
+                    }
+                    if ($report.rollback_flags -match '^[01]{3}$') {
+                        Write-Output ('CI_ROLLBACK_FLAGS:' + $report.rollback_flags)
                     }
                 }
                 if ($report.missing_command -in @('Get_ScheduledTask', 'Get_Command', 'curl_exe', 'Get_FileHash', 'Get_ReleaseFile', 'Get_ItemProperty', 'Set_Acl', 'New_Item', 'ConvertFrom_Json', 'Get_Content', 'Remove_Item')) {
