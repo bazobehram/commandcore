@@ -187,7 +187,7 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     (dest / "manifest-tampered.json").write_text(
         json.dumps(tampered), encoding="utf-8"
     )
-    (feed / "tampered-verifier.exe").write_bytes(artifact.read_bytes() + b"\\x00")
+    (feed / "tampered-verifier.exe").write_bytes(artifact.read_bytes() + b"\x00")
     package(manifest_path, public, output, origin + "/releases/agent/manifest.json")
 
 
