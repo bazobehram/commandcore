@@ -78,6 +78,8 @@ def run_driver(
         "CI_TASK_STATE",
         "CI_TASK_DIAGNOSTIC",
         "CI_HTTPS_PREFLIGHT_CURL_EXIT",
+        "CI_HTTPS_CURL_BACKEND",
+        "CI_HTTPS_CURL_SOURCE",
     ):
         found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\s*$", result.stdout)
         if found:
