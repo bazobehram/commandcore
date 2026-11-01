@@ -156,7 +156,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Disposable standard-user account creation and cleanup
+      - name: Install HTTPS fixture dependency
+        run: python -m pip install 'cryptography>=45,<48'
+      - name: Disposable standard-user account and HTTPS transport preflight
         run: python scripts/windows_account_preflight.py
 
   windows-core-candidate:
