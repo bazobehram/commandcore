@@ -399,6 +399,10 @@ def main() -> int:
                 ROOT / "scripts" / "windows_upgrade_rollback_probe.ps1",
                 output / "upgrade_rollback_probe.ps1",
             )
+            shutil.copyfile(
+                ROOT / "scripts" / "windows_upgrade_task_ownership_probe.ps1",
+                output / "upgrade_task_ownership_probe.ps1",
+            )
             add = subprocess.run(
                 ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
                 capture_output=True,
