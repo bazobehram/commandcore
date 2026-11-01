@@ -237,12 +237,25 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
                     "release_verification",
                     "task_preflight",
                     "rollback",
+                    "missing_property",
+                    "parameter_binding",
+                    "access_denied",
                     "unexpected_failure",
                 },
             ),
         ):
             matches = re.findall(rf"(?m)^{field}:([a-z_]+)\s*$", process.stdout)
             if matches and matches[-1] in choices:
+                print("FAIL: " + field.lower() + "=" + matches[-1])
+        for field, allowed in (
+            ("CI_ROLLBACK_ERROR_ID", r"[A-Za-z0-9_]{1,80}"),
+            ("CI_ROLLBACK_SOURCE_LINE", r"[0-9]{1,3}"),
+            ("CI_ROLLBACK_FLAGS", r"[01]{3}"),
+        ):
+            matches = re.findall(
+                rf"(?m)^{field}:({allowed})\s*$", process.stdout
+            )
+            if matches:
                 print("FAIL: " + field.lower() + "=" + matches[-1])
         gate_failures = re.findall(
             r"(?m)^CI_SIGNED_INSTALL_MISSING_GATE:([a-z_]+)\s*$", process.stdout
