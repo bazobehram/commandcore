@@ -82,3 +82,14 @@ Each release should retain:
 - provenance record.
 
 See RELEASE.md and PUBLIC_RELEASE_CHECKLIST.md.
+
+## GHCR container provenance
+
+Container images use GitHub Artifact Attestations in addition to OCI labels and
+BuildKit provenance. The GHCR tag workflow signs the exact image digest and
+verifies the attestation against the repository, publishing workflow identity and
+tag source ref before recording the immutable image reference. This workflow
+attestation is distinct from the offline Ed25519 manifest used for native Agent
+artifacts; neither signing system replaces the other.
+
+See [Release procedure](RELEASE.md#immutable-ghcr-release-image-metadata).
