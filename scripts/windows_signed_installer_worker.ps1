@@ -54,6 +54,35 @@ try {
     }
     $installer = Join-Path $FixtureRoot 'installers\windows.ps1'
     if (!(Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Packaged installer missing.' }
+    # Exercise the actual packaged signed installer before *any* legitimate
+    # installation. Neither an invalid signed manifest nor a corrupted pinned
+    # executable may create activation metadata, a marker or enrollment state.
+    $root = Join-Path $env:LOCALAPPDATA 'CommandCore\Agent'
+    $stateRoot = Join-Path $env:LOCALAPPDATA 'CommandCore\State'
+    if (Test-Path -LiteralPath $root -PathType Container) {
+        throw 'Disposable Windows fixture unexpectedly contains an Agent.'
+    }
+    $stage = 'tampered_manifest_denial'
+    $badManifestDenied = $false
+    try {
+        & $installer -Server $Origin -NoEnroll -NoTask -ManifestUrl ($Origin + '/releases/agent/manifest-tampered.json') | Out-Null
+    } catch {
+        $badManifestDenied = [string]$_.Exception.Message -eq 'Manifest signature/metadata verification failed.'
+    }
+    if (!$badManifestDenied) { throw 'Tampered signed release manifest was not rejected.' }
+    $stage = 'pinned_verifier_denial'
+    $badVerifierDenied = $false
+    try {
+        & $installer -Server $Origin -NoEnroll -NoTask -VerifierUrl ($Origin + '/tampered-verifier.exe') | Out-Null
+    } catch {
+        $badVerifierDenied = [string]$_.Exception.Message -eq 'Native verifier checksum mismatch; nothing was executed.'
+    }
+    if (!$badVerifierDenied) { throw 'Tampered pinned verifier was not rejected.' }
+    $stage = 'clean_after_tamper_denial'
+    $noStateAfterTamper = !(Test-Path -LiteralPath $root) -and !(Test-Path -LiteralPath $stateRoot)
+    if (!$noStateAfterTamper) {
+        throw 'Rejected signed release input created an Agent installation or state.'
+    }
     $stage = 'installer'
     & $installer -Server $Origin -NoEnroll -NoTask
     if (!$?) { throw 'Signed installer returned an error.' }
@@ -115,7 +144,7 @@ try {
         (Test-Path -LiteralPath $enrollmentState)) {
         throw 'Rejected repeat or upgrade modified the installed release.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true} |
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
