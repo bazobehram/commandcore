@@ -340,3 +340,9 @@ button.brand{border:0;background:transparent;text-align:left;padding:0;appearanc
 .platform-preview-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .platform-preview-actions a{font-size:12px;color:#476e9f}
 @media(max-width:390px){.platform-picker{flex-direction:column}.platform-picker button{min-height:48px}}
+
+/* Consistent affordances for actual interactive controls. */
+a[href],button:not(:disabled),[role="button"]:not([aria-disabled="true"]),[role="link"],summary,select:not(:disabled),label[for]{cursor:pointer}
+button:disabled,[aria-disabled="true"],select:disabled{cursor:not-allowed}
+button:focus-visible,[role="button"]:focus-visible,a[href]:focus-visible,summary:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #648cbe;outline-offset:3px}
+button,[role="button"],a[href],select{touch-action:manipulation}
