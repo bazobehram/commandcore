@@ -58,7 +58,7 @@ try {
     @{status='PASS'; non_admin=$true; task_probe=$true; curl_backend=$backend; curl_source=$sourceKind; tls_hint=$tlsHint} |
         ConvertTo-Json -Compress | Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
-    @{status='FAIL'; non_admin=$false; task_probe=$false; stage='https_transport'; curl_exit=$exitCode; curl_backend=$backend; curl_source=$sourceKind} |
+    @{status='FAIL'; non_admin=$false; task_probe=$false; stage='https_transport'; curl_exit=$exitCode; curl_backend=$backend; curl_source=$sourceKind; tls_hint=$tlsHint} |
         ConvertTo-Json -Compress | Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
 }
