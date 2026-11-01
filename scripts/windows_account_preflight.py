@@ -110,8 +110,9 @@ def main() -> int:
     # A real localhost HTTPS server isolates Schannel/curl failures from the
     # signed installer and avoids rebuilding the native Rust Agent to diagnose.
     with (
-        tempfile.TemporaryDirectory(prefix="commandcore-https-preflight-", dir=root)
-        as fixture_name,
+        tempfile.TemporaryDirectory(
+            prefix="commandcore-https-preflight-", dir=root
+        ) as fixture_name,
         tempfile.TemporaryDirectory(prefix="commandcore-https-private-") as tls_name,
     ):
         fixture = Path(fixture_name)
