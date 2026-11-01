@@ -106,7 +106,18 @@ try {
             $installerLine = $number
         }
     }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine; curl_exit=$curlCode} |
+    $failureType = ([string]$_.Exception.GetType().Name)
+    if ($failureType -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureType = 'other' }
+    $failureId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
+    if ($failureId -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureId = 'other' }
+    $stack = [string]$_.ScriptStackTrace
+    if ($installerLine -eq 0 -and $stack -match '(?i)windows\.ps1:\s*line\s+([0-9]{1,3})') {
+        $installerLine = [int]$Matches[1]
+    }
+    $failureCommand = 'other'
+    if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
+    elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
