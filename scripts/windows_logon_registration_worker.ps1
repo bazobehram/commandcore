@@ -28,7 +28,10 @@ try {
     }
     # This is the real at-logon task configuration used by the user installer,
     # not an elevated task, password-bearing batch task or one-time trigger.
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -NonInteractive -Command "exit 0"'
+    $probe = Join-Path $FixtureRoot 'installers\task-action.ps1'
+    if (!(Test-Path -LiteralPath $probe -PathType Leaf)) { throw 'Missing disposable task action.' }
+    $taskArgs = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $probe + '" -FixtureRoot "' + $FixtureRoot + '"'
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $taskArgs
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $accountName
     $taskPrincipal = New-ScheduledTaskPrincipal -UserId $accountName -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero)
@@ -62,7 +65,21 @@ try {
         else { $identityPart = 'trigger' }
         throw 'Task user identity differs from the standard user.'
     }
-    # Registration only: CI does not create an interactive login or reboot.
+    # A manual Start-ScheduledTask probe is separate from at-logon/reboot acceptance.
+    # Task Scheduler must execute the harmless action using the disposable user.
+    $stage = 'task_launch'
+    $taskMarker = Join-Path $FixtureRoot 'result\task-executed.marker'
+    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    $deadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $deadline -and !(Test-Path -LiteralPath $taskMarker -PathType Leaf)) {
+        Start-Sleep -Milliseconds 250
+    }
+    if (!(Test-Path -LiteralPath $taskMarker -PathType Leaf)) { throw 'Disposable task action did not execute.' }
+    if ((Get-Content -LiteralPath $taskMarker -Raw).Trim() -ne 'commandcore-ci-disposable-task-executed') {
+        throw 'Unexpected disposable task result.'
+    }
+    $stage = 'task_launch_verify'
+    # Do not claim interactive logon or reboot, which require separate acceptance.
     # Defer PASS until the owned task has been removed successfully.
  } catch {
     $hint = 'other'
@@ -72,6 +89,7 @@ try {
     elseif ($message -match '(?i)access.denied|permission|unauthorized') { $hint = 'access_denied' }
     elseif ($message -match '(?i)logon|logon.type|account') { $hint = 'logon_policy' }
     elseif ($message -match '(?i)registered.task|limited interactive|user identity') { $hint = 'task_shape' }
+    elseif ($message -match '(?i)task action|task result|task execute') { $hint = 'task_launch' }
     elseif ($errorName -match '(?i)parameter|argument') { $hint = 'invalid_argument' }
     @{status='FAIL'; non_admin=$false; task_probe=$false; stage=$stage; hint=$hint; identity_part=$identityPart} |
         ConvertTo-Json -Compress |
@@ -80,6 +98,7 @@ try {
 } finally {
     if ($created -and $taskName) {
         try {
+            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
         } catch {
             # Runner-side driver will clean an owned fixture before user deletion.
@@ -88,6 +107,6 @@ try {
     }
 }
 
-@{status='PASS'; non_admin=$true; task_probe=$true} |
+@{status='PASS'; non_admin=$true; task_probe=$true; task_launch=$true} |
     ConvertTo-Json -Compress |
     Set-Content -LiteralPath $report -Encoding UTF8
