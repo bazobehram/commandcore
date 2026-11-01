@@ -15,6 +15,14 @@ try {
     }
     $stage = 'profile'
     if (!$env:LOCALAPPDATA) { throw 'User profile was not loaded.' }
+    # A credential-launched process must have a writable LOCALAPPDATA for its
+    # own standard user, never an inherited privileged runner profile.
+    $profileProbe = Join-Path $env:LOCALAPPDATA ('commandcore-ci-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        Set-Content -LiteralPath $profileProbe -Value 'profile-test' -ErrorAction Stop
+    } finally {
+        Remove-Item -LiteralPath $profileProbe -Force -ErrorAction SilentlyContinue
+    }
     $installer = Join-Path $FixtureRoot 'installers\windows.ps1'
     if (!(Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Packaged installer missing.' }
     $stage = 'installer'
@@ -71,7 +79,15 @@ try {
             $hint = 'powershell_parse'
         }
     }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint} |
+    $installerLine = 0
+    if ($stage -eq 'installer') {
+        $source = [IO.Path]::GetFileName([string]$_.InvocationInfo.ScriptName)
+        $number = [int]$_.InvocationInfo.ScriptLineNumber
+        if ($source -eq 'windows.ps1' -and $number -gt 0 -and $number -lt 1000) {
+            $installerLine = $number
+        }
+    }
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
