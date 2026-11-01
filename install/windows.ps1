@@ -69,7 +69,16 @@ if ($previous -and (!$Upgrade -or $NoTask -or !(Test-Path -LiteralPath (Join-Pat
 # Its description alone does not establish ownership.
 if ($oldTask -and !$previous) { throw 'Refusing an orphaned managed scheduled task.' }
 $oldTaskXml = $null
+$priorLauncherBytes = $null
+$priorLauncherPath = Join-Path $root 'run-agent.ps1'
 if ($previous) {
+    if (!(Test-Path -LiteralPath $priorLauncherPath -PathType Leaf)) {
+        throw 'Upgrade requires the existing managed Agent launcher.'
+    }
+    if ((Get-Item -LiteralPath $priorLauncherPath).Length -gt 1048576) {
+        throw 'Refusing unexpected managed Agent launcher size.'
+    }
+    $priorLauncherBytes = [IO.File]::ReadAllBytes($priorLauncherPath)
     if (!$oldTask) { throw 'Upgrade requires an existing managed interactive logon task.' }
     $allowedUsers = @($identity.Name, $identity.User.Value, $env:USERNAME,
         ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
@@ -199,6 +208,9 @@ exit $LASTEXITCODE
             }
             if ($activated) {
                 Set-Content -LiteralPath $activePath -Value $previous -NoNewline -ErrorAction Stop
+                # The task XML points at the same launcher path. Restore its
+                # original bytes too, before restarting the previous Agent.
+                [IO.File]::WriteAllBytes($priorLauncherPath, $priorLauncherBytes)
             }
             if ($oldTaskStopped) {
                 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
