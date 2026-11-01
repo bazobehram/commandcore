@@ -10,6 +10,8 @@ $exitCode = 0
 $backend = 'unknown'
 $sourceKind = 'other'
 $tlsHint = 'unknown'
+$tlsHresult = 'none'
+$noRevocationExit = 999
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -34,6 +36,9 @@ try {
         $exitCode = [int]$LASTEXITCODE
         if ($exitCode -ne 0 -and (Test-Path -LiteralPath $trace)) {
             $detail = Get-Content -LiteralPath $trace -Raw
+            if ($detail -match '(?i)0x[0-9a-f]{8}') {
+                $tlsHresult = $Matches[0].ToLowerInvariant()
+            }
             if ($detail -match '(?i)SEC_E_UNTRUSTED_ROOT|CERT_TRUST_IS_UNTRUSTED_ROOT') {
                 $tlsHint = 'untrusted_root'
             } elseif ($detail -match '(?i)SEC_E_REVOCATION_OFFLINE|CRYPT_E_REVOCATION_OFFLINE|revocation check') {
@@ -48,6 +53,13 @@ try {
                 $tlsHint = 'schannel_other'
             }
         }
+        # Diagnostic only: a second request changes *revocation checking* for
+        # this temporary local CA, not certificate/hostname verification.
+        # The production installer must not inherit this test-only option.
+        if ($exitCode -eq 35) {
+            & $curl.Source --disable --globoff --proto '=https' --tlsv1.2 --noproxy 'localhost,127.0.0.1' --ssl-no-revoke --connect-timeout 8 --max-time 12 --fail --silent --output $download --url ($Origin + '/test.txt')
+            $noRevocationExit = [int]$LASTEXITCODE
+        }
     } finally {
         Remove-Item -LiteralPath $trace -Force -ErrorAction SilentlyContinue
     }
@@ -55,10 +67,10 @@ try {
     if ((Get-Content -LiteralPath $download -Raw).Trim() -ne 'commandcore-ci-https-ok') {
         throw 'Unexpected HTTPS test response.'
     }
-    @{status='PASS'; non_admin=$true; task_probe=$true; curl_backend=$backend; curl_source=$sourceKind; tls_hint=$tlsHint} |
+    @{status='PASS'; non_admin=$true; task_probe=$true; curl_backend=$backend; curl_source=$sourceKind; tls_hint=$tlsHint; tls_hresult=$tlsHresult; no_revocation_exit=$noRevocationExit} |
         ConvertTo-Json -Compress | Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
-    @{status='FAIL'; non_admin=$false; task_probe=$false; stage='https_transport'; curl_exit=$exitCode; curl_backend=$backend; curl_source=$sourceKind; tls_hint=$tlsHint} |
+    @{status='FAIL'; non_admin=$false; task_probe=$false; stage='https_transport'; curl_exit=$exitCode; curl_backend=$backend; curl_source=$sourceKind; tls_hint=$tlsHint; tls_hresult=$tlsHresult; no_revocation_exit=$noRevocationExit} |
         ConvertTo-Json -Compress | Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
 }
