@@ -29,6 +29,12 @@ function Get-OwnedTask {
     if ([string]$task.Principal.LogonType -ne 'Interactive' -or [string]$task.Principal.RunLevel -ne 'Limited') {
         Deny 'unsafe_task_principal'
     }
+    $allowed = @([string]$identity.Name, [string]$identity.User.Value,
+        [string]$env:USERNAME, [string]($env:COMPUTERNAME + '\' + $env:USERNAME), [string]('.\' + $env:USERNAME))
+    if ($task.Triggers.Count -ne 1 -or $task.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
+        [string]$task.Triggers[0].UserId -notin $allowed) { Deny 'unexpected_task_trigger' }
+    if ($task.Actions.Count -ne 1 -or [string]$task.Actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$' -or
+        !([string]$task.Actions[0].Arguments).Contains($actionPath)) { Deny 'unexpected_task_action' }
     return $task
 }
 
