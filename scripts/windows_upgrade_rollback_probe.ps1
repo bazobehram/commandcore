@@ -33,6 +33,7 @@ $launcher = Join-Path $root 'run-agent.ps1'
 Set-Content -LiteralPath $launcher -Value '# disposable prior launcher bytes' -NoNewline -ErrorAction Stop
 $priorLauncherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash
 $oldXml = '<Task xmlns="urn:commandcore:ci" version="1"/>'
+$global:CommandCoreCiWindowsRollback = @{ lookup = $false; export = $false; stopped = $false; replaced = $false; restored = $false; restarted = $false }
 $script:sawTaskLookup = $false
 $script:sawTaskExport = $false
 $script:taskWasStopped = $false
@@ -44,6 +45,7 @@ $script:injectedMutation = $false
 function Get-ScheduledTask {
     [CmdletBinding()]
     param([string]$TaskName)
+    $global:CommandCoreCiWindowsRollback.lookup = $true
     $script:sawTaskLookup = $true
     return [pscustomobject]@{
         Description = 'Managed by CommandCore user installer'
@@ -61,17 +63,20 @@ function Get-ScheduledTask {
 function Export-ScheduledTask {
     [CmdletBinding()]
     param([string]$TaskName)
+    $global:CommandCoreCiWindowsRollback.export = $true
     $script:sawTaskExport = $true
     return $oldXml
 }
 function Stop-ScheduledTask {
     [CmdletBinding()]
     param([string]$TaskName)
+    $global:CommandCoreCiWindowsRollback.stopped = $true
     $script:taskWasStopped = $true
 }
 function Start-ScheduledTask {
     [CmdletBinding()]
     param([string]$TaskName)
+    $global:CommandCoreCiWindowsRollback.restarted = $true
     $script:taskRestarted = $true
 }
 function New-ScheduledTaskAction { param([string]$Execute,[string]$Argument) return [pscustomobject]@{ Execute=$Execute; Arguments=$Argument } }
@@ -83,9 +88,11 @@ function Register-ScheduledTask {
     param([string]$TaskName,[string]$Description,$Action,$Trigger,$Principal,$Settings,[switch]$Force,[string]$Xml)
     if ($PSBoundParameters.ContainsKey('Xml')) {
         if ($Xml -cne $oldXml) { throw 'Unexpected task restoration snapshot.' }
+        $global:CommandCoreCiWindowsRollback.restored = $true
         $script:taskRestoreObserved = $true
         return
     }
+    $global:CommandCoreCiWindowsRollback.replaced = $true
     $script:injectedMutation = $true
     throw 'CI injected task registration failure after attempted mutation'
 }
@@ -94,6 +101,7 @@ $phase = 'preconditions'
 $failureCategory = 'none'
 $failureId = 'none'
 $failureLine = 0
+$failureSource = 'none'
 try {
     # A harmless fake identity file permits preflight but is never an
     # enrolled device credential, token, or actual authentication fixture.
@@ -104,6 +112,12 @@ try {
     } catch {
         $failure = [string]$_.Exception.Message
         $injectedFailure = $failure -eq 'CI injected task registration failure after attempted mutation'
+        $sourceName = [IO.Path]::GetFileName([string]$_.InvocationInfo.ScriptName)
+        if ($sourceName -in @('windows.ps1','windows_upgrade_rollback_probe.ps1')) {
+            $failureSource = if ($sourceName -eq 'windows.ps1') { 'installer' } else { 'probe' }
+            $sourceLine = [int]$_.InvocationInfo.ScriptLineNumber
+            if ($sourceLine -gt 0 -and $sourceLine -lt 1000) { $failureLine = $sourceLine }
+        }
         $rawId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
         if ($rawId -match '^[A-Za-z0-9_]{1,80}$') { $failureId = $rawId }
         if ($failureId -eq 'none') {
@@ -120,12 +134,13 @@ try {
             elseif ($failure -match '(?i)rollback|restore|activation') { 'rollback' }
             elseif ($failure -match '(?i)property|strict mode|missing member') { 'missing_property' }
             elseif ($failure -match '(?i)parameter|binding|argument') { 'parameter_binding' }
+            elseif ($_.Exception.GetType().Name -eq 'PrivilegeNotHeldException') { 'privilege_not_held' }
             elseif ($failure -match '(?i)access|permission|denied') { 'access_denied' }
             else { 'unexpected_failure' }
     }
     $phase = 'restore'
-    if (!$injectedFailure -or !$script:injectedMutation -or !$script:taskWasStopped -or
-        !$script:taskRestoreObserved -or !$script:taskRestarted) {
+    if (!$injectedFailure -or !$global:CommandCoreCiWindowsRollback.replaced -or !$global:CommandCoreCiWindowsRollback.stopped -or
+        !$global:CommandCoreCiWindowsRollback.restored -or !$global:CommandCoreCiWindowsRollback.restarted) {
         throw 'Signed upgrade did not execute expected fail-and-restore transition.'
     }
     $phase = 'hashes'
@@ -142,9 +157,12 @@ try {
 } catch {
     # Emit bounded CI diagnostics only; never raw exception text or paths.
     @{status='FAIL'; phase=$phase; category=$failureCategory; error_id=$failureId; source_line=$failureLine;
-        looked_up=$script:sawTaskLookup; exported=$script:sawTaskExport;
-        injected=$script:injectedMutation; restored=$script:taskRestoreObserved;
-        restarted=$script:taskRestarted} | ConvertTo-Json -Compress
+        source=$failureSource; looked_up=$global:CommandCoreCiWindowsRollback.lookup;
+        exported=$global:CommandCoreCiWindowsRollback.export;
+        injected=$global:CommandCoreCiWindowsRollback.replaced;
+        restored=$global:CommandCoreCiWindowsRollback.restored;
+        restarted=$global:CommandCoreCiWindowsRollback.restarted} | ConvertTo-Json -Compress
 } finally {
     Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+    Remove-Variable -Scope Global -Name CommandCoreCiWindowsRollback -ErrorAction SilentlyContinue
 }
