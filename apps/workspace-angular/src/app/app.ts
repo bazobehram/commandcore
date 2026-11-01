@@ -1,4 +1,4 @@
-import { Component, computed, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, computed, effect, signal, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { request } from './api-client';
@@ -44,6 +44,7 @@ export class App implements OnInit, OnDestroy {
  private staleInspect=0; private staleActivity=0;
  private timer:any; private metricsTimer:any; private browserTimer:any; private fastTimer:any; private activityTimer:any; private browserSessionsTimer:any;
  private fastBusy=false; private jobsBusy=false; private jobsTimer:any; private destroyed=false;
+ private modalReturnFocus:HTMLElement|null=null;
  private readonly sessionEpoch=new SessionEpoch();
 
  selectedDevice=computed(()=>this.devices()[this.selected()] ?? null);
@@ -129,24 +130,64 @@ export class App implements OnInit, OnDestroy {
  constructor(){
   window.addEventListener('keydown',this.onKey);
   window.addEventListener('beforeinstallprompt',this.onInstall as any);
+  // Focus changes only after Angular has rendered the dialog.
+  effect(()=>{
+   const state=this.overlay();
+   queueMicrotask(()=>this.syncDialogFocus(state));
+  });
  }
  ngOnInit(){void this.init();}
- ngOnDestroy(){this.destroyed=true;this.sessionEpoch.end();clearInterval(this.timer);clearInterval(this.fastTimer);clearInterval(this.jobsTimer);clearInterval(this.activityTimer);clearInterval(this.browserSessionsTimer);clearInterval(this.metricsTimer);clearInterval(this.browserTimer);document.removeEventListener('visibilitychange',this.onResume);window.removeEventListener('focus',this.onResume);window.removeEventListener('online',this.onResume);window.removeEventListener('keydown',this.onKey);window.removeEventListener('beforeinstallprompt',this.onInstall as any);}
- private onKey=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();this.overlay.set('palette');}
-  if(event.key==='Escape'){this.overlay.set('none');this.accountMenu.set(false);return;}
-  if(this.overlay()!=='none'&&event.key==='Tab'){
-    const panel=document.querySelector('.sheet, .command-palette');
-    const focusable=Array.from(panel?.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex=\"-1\"])')||[]).filter(el=>el.getClientRects().length>0);
-    if(focusable.length){const at=focusable.indexOf(document.activeElement as HTMLElement);
-      if(at<0||(event.shiftKey&&at===0)||(!event.shiftKey&&at===focusable.length-1)){
-        event.preventDefault();(event.shiftKey?focusable[focusable.length-1]:focusable[0]).focus();
-      }
-    }
-    return;
+ ngOnDestroy(){this.destroyed=true;this.sessionEpoch.end();clearInterval(this.timer);clearInterval(this.fastTimer);clearInterval(this.jobsTimer);clearInterval(this.activityTimer);clearInterval(this.browserSessionsTimer);clearInterval(this.metricsTimer);clearInterval(this.browserTimer);document.removeEventListener('visibilitychange',this.onResume);window.removeEventListener('focus',this.onResume);window.removeEventListener('online',this.onResume);window.removeEventListener('keydown',this.onKey);window.removeEventListener('beforeinstallprompt',this.onInstall as any);this.modalReturnFocus=null;}
+ private syncDialogFocus(state:string){
+  if(this.destroyed||this.overlay()!==state)return;
+  if(state==='none'){
+   const previous=this.modalReturnFocus;this.modalReturnFocus=null;
+   if(previous?.isConnected)previous.focus();
+   return;
   }
-  if(this.accountMenu())this.accountMenu.set(false);
-  if(this.overlay()!=='none'||/INPUT|TEXTAREA|SELECT/.test((event.target as HTMLElement)?.tagName||''))return;
-  if(event.key==='ArrowRight')this.move(1);if(event.key==='ArrowLeft')this.move(-1);
+  const dialog=document.querySelector<HTMLElement>('.sheet[role="dialog"], .command-palette[role="dialog"]');
+  if(!dialog)return;
+  const active=document.activeElement;
+  if(!this.modalReturnFocus&&active instanceof HTMLElement&&active!==document.body&&!dialog.contains(active))this.modalReturnFocus=active;
+  if(!dialog.contains(document.activeElement)){
+   const first=state==='palette'?dialog.querySelector<HTMLElement>('input'):dialog.querySelector<HTMLElement>('.x-close');
+   (first||dialog).focus();
+  }
+ }
+ private trapDialogTab(event:KeyboardEvent){
+  const dialog=document.querySelector<HTMLElement>('.sheet[role="dialog"], .command-palette[role="dialog"]');
+  if(!dialog)return;
+  const selector='button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  const focusable=Array.from(dialog.querySelectorAll<HTMLElement>(selector)).filter(el=>
+   !el.closest('details:not([open]),[hidden],[inert]') &&
+   getComputedStyle(el).display!=='none' && getComputedStyle(el).visibility!=='hidden'
+  );
+  if(!focusable.length){event.preventDefault();dialog.focus();return;}
+  const at=focusable.indexOf(document.activeElement as HTMLElement);
+  if(at<0||(event.shiftKey&&at===0)||(!event.shiftKey&&at===focusable.length-1)){
+   event.preventDefault();(event.shiftKey?focusable[focusable.length-1]:focusable[0]).focus();
+  }
+ }
+ private onKey=(event:KeyboardEvent)=>{
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&this.loggedIn()&&this.overlay()==='none'){
+   event.preventDefault();this.accountMenu.set(false);this.overlay.set('palette');return;
+  }
+  if(event.key==='Escape'){
+   if(this.overlay()!=='none'){event.preventDefault();this.overlay.set('none');return;}
+   if(this.accountMenu()){event.preventDefault();this.accountMenu.set(false);}
+   return;
+  }
+  if(this.overlay()!=='none'){
+   if(event.key==='Tab')this.trapDialogTab(event);
+   return;
+  }
+  // Arrow keys should not change devices while users operate other controls.
+  const target=event.target as HTMLElement|null;
+  if(!event.altKey&&!event.ctrlKey&&!event.metaKey&&target?.closest('.device-rail .device-tile')){
+   if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
+    event.preventDefault();void this.move(event.key==='ArrowRight'?1:-1);
+   }
+  }
  };
  private onInstall=(event:Event)=>{event.preventDefault();this.installPrompt=event;};
  private onResume=()=>{if(!document.hidden&&this.loggedIn()){void this.refreshDeviceStates();void this.refresh(true);void this.loadSelectedJobs();if(this.view()==='activity'||this.view()==='workspace'||this.view()==='files')void this.loadActivity();if(this.view()==='browser')void this.loadBrowserSessions();}};
