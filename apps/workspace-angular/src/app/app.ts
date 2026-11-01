@@ -152,7 +152,7 @@ export class App implements OnInit, OnDestroy {
  private onResume=()=>{if(!document.hidden&&this.loggedIn()){void this.refreshDeviceStates();void this.refresh(true);void this.loadSelectedJobs();if(this.view()==='activity'||this.view()==='workspace'||this.view()==='files')void this.loadActivity();if(this.view()==='browser')void this.loadBrowserSessions();}};
  toggleAccount(){this.overlay.set('none');this.accountMenu.update(x=>!x);}
 
- mobileFocusWorkspace(){if(typeof window!=='undefined'&&window.matchMedia('(max-width:720px)').matches){requestAnimationFrame(()=>document.querySelector('.workspace-frame')?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'}));}}
+ mobileFocusWorkspace(){if(typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(max-width:720px)').matches){requestAnimationFrame(()=>document.querySelector('.workspace-frame')?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'}));}}
  async installApp(){if(this.installPrompt){await this.installPrompt.prompt();this.installPrompt=null;}else this.message('Use your browser menu to add CommandCore to your home screen.');}
  /** Clear user-specific cached data immediately when authentication ends. */
  private endSession(message=''){
