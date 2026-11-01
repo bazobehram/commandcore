@@ -162,7 +162,7 @@ try {
             $rollbackCategory = [string]$probeResult.category
         }
         if ($probeResult.source -in @('none', 'installer', 'probe')) { $rollbackSource = [string]$probeResult.source }
-        if ($probeResult.error_id -match '^[A-Za-z0-9_]{1,80}
+        if ($probeResult.error_id -match '^[A-Za-z0-9_]{1,80}$') {
             $rollbackErrorId = [string]$probeResult.error_id
         }
         if ($probeResult.source_line -is [int] -and $probeResult.source_line -gt 0 -and $probeResult.source_line -lt 500) {
@@ -241,89 +241,6 @@ try {
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
     @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
-        ConvertTo-Json -Compress |
-        Set-Content -LiteralPath $report -Encoding UTF8
-    exit 1
-}
-) {
-            $rollbackErrorId = [string]$probeResult.error_id
-        }
-        if ($probeResult.source_line -is [int] -and $probeResult.source_line -gt 0 -and $probeResult.source_line -lt 500) {
-            $rollbackSourceLine = [int]$probeResult.source_line
-        }
-        $rollbackFlags = [string]([int]($probeResult.looked_up -eq $true)) + [string]([int]($probeResult.exported -eq $true)) +
-            [string]([int]($probeResult.injected -eq $true)) + [string]([int]($probeResult.restored -eq $true)) +
-            [string]([int]($probeResult.restarted -eq $true))
-        throw 'Disposable signed upgrade rollback simulation failed.'
-    }
-    if ($probeResult.task_restored -ne $true -or $probeResult.activation_unchanged -ne $true -or
-        $probeResult.failed_release_removed -ne $true -or $probeResult.old_task_restarted -ne $true) {
-        throw 'Failed signed upgrade did not restore activation and task.'
-    }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true} |
-        ConvertTo-Json -Compress |
-        Set-Content -LiteralPath $report -Encoding UTF8
-} catch {
-    # Never serialize the exception, command arguments, token, URL, or path.
-    # Only allowlisted categories are returned to the privileged CI driver.
-    $hint = 'other'
-    if ($stage -eq 'installer') {
-        $message = [string]$_.Exception.Message
-        $errorId = [string]$_.FullyQualifiedErrorId
-        if ($message -match '(?i)Release download failed|curl_exit|HTTP|SSL|TLS|certificate') {
-            $hint = 'download_or_tls'
-        } elseif ($message -match '(?i)checksum|integrity|sha256|signature') {
-            $hint = 'release_integrity'
-        } elseif ($message -match '(?i)manifest|verify-release|artifact|release') {
-            $hint = 'release_metadata'
-        } elseif ($message -match '(?i)ACL|Set-Acl|Access to the path|access is denied|UnauthorizedAccess') {
-            $hint = 'filesystem_acl'
-        } elseif ($message -match '(?i)execution policy|not digitally signed|running scripts') {
-            $hint = 'powershell_policy'
-        } elseif ($message -match '(?i)already exists|existing directory|unrelated') {
-            $hint = 'preexisting_installation'
-        } elseif ($message -match '(?i)parameter cannot be found|ParameterBinding') {
-            $hint = 'parameter_binding'
-        } elseif ($message -match '(?i)not recognized|CommandNotFound') {
-            $hint = 'missing_command'
-        } elseif ($message -match '(?i)Property|strict mode') {
-            $hint = 'powershell_strictmode'
-        } elseif ($errorId -match 'ParserError') {
-            $hint = 'powershell_parse'
-        }
-    }
-    $curlCode = 0
-    if ($stage -eq 'installer' -and $message -match 'curl_exit=([0-9]{1,3})') {
-        $curlCode = [int]$Matches[1]
-    }
-    $installerLine = 0
-    if ($stage -eq 'installer') {
-        $source = [IO.Path]::GetFileName([string]$_.InvocationInfo.ScriptName)
-        $number = [int]$_.InvocationInfo.ScriptLineNumber
-        if ($source -eq 'windows.ps1' -and $number -gt 0 -and $number -lt 1000) {
-            $installerLine = $number
-        }
-    }
-    # Report only known command names, never raw exception text.
-    $missingCommand = 'unknown'
-    if ($_.Exception -is [System.Management.Automation.CommandNotFoundException]) {
-        $candidate = [string]$_.Exception.CommandName
-        if ($candidate -in @('Get-ScheduledTask', 'Get-Command', 'curl.exe', 'Get-FileHash', 'Get-ReleaseFile', 'Get-ItemProperty', 'Set-Acl', 'New-Item', 'ConvertFrom-Json', 'Get-Content', 'Remove-Item')) {
-            $missingCommand = $candidate.Replace('-', '_').Replace('.', '_')
-        }
-    }
-    $failureType = ([string]$_.Exception.GetType().Name)
-    if ($failureType -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureType = 'other' }
-    $failureId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
-    if ($failureId -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureId = 'other' }
-    $stack = [string]$_.ScriptStackTrace
-    if ($installerLine -eq 0 -and $stack -match '(?i)windows\.ps1:\s*line\s+([0-9]{1,3})') {
-        $installerLine = [int]$Matches[1]
-    }
-    $failureCommand = 'other'
-    if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
-    elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
