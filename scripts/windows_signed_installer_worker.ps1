@@ -106,6 +106,14 @@ try {
             $installerLine = $number
         }
     }
+    # Report only known command names, never raw exception text.
+    $missingCommand = 'unknown'
+    if ($_.Exception -is [System.Management.Automation.CommandNotFoundException]) {
+        $candidate = [string]$_.Exception.CommandName
+        if ($candidate -in @('Get-ScheduledTask', 'Get-Command', 'curl.exe', 'Get-FileHash', 'Get-ReleaseFile', 'Get-ItemProperty', 'Set-Acl', 'New-Item', 'ConvertFrom-Json', 'Get-Content', 'Remove-Item')) {
+            $missingCommand = $candidate.Replace('-', '_').Replace('.', '_')
+        }
+    }
     $failureType = ([string]$_.Exception.GetType().Name)
     if ($failureType -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureType = 'other' }
     $failureId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
@@ -117,7 +125,7 @@ try {
     $failureCommand = 'other'
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
