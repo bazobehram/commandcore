@@ -65,7 +65,7 @@ try {
         $workerProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Credential $credential -LoadUserProfile -PassThru -ErrorAction Stop
     }
     $stage = 'read_worker_report'
-    $deadlineSeconds = if ($OnlyTask -or $OnlyCredential) { 20 } else { 110 }
+    $deadlineSeconds = if ($OnlyTask) { 20 } elseif ($OnlyCredential) { 40 } else { 110 }
     $deadline = (Get-Date).AddSeconds($deadlineSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
@@ -73,11 +73,12 @@ try {
             $accepted = $report.status -eq 'PASS' -and $report.non_admin -eq $true
             if ($OnlyTask -or $OnlyCredential) {
                 $accepted = $accepted -and $report.task_probe -eq $true
+                if ($report.task_launch -ne $null) { $accepted = $accepted -and $report.task_launch -eq $true }
             } else {
                 $accepted = $accepted -and $report.signed_install -eq $true
             }
             if (!$accepted) {
-                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
+                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport', 'task_modules', 'task_register', 'task_verify', 'task_identity', 'task_launch', 'task_launch_verify')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
@@ -88,8 +89,8 @@ try {
                     'preexisting_installation', 'parameter_binding',
                     'missing_command', 'powershell_strictmode', 'powershell_parse'
                 )
-                if ($report.stage -in @('task_modules', 'task_register', 'task_verify', 'task_identity') -and
-                    $report.hint -in @('missing_command', 'access_denied', 'logon_policy', 'task_shape', 'invalid_argument', 'other')) {
+                if ($report.stage -in @('task_modules', 'task_register', 'task_verify', 'task_identity', 'task_launch', 'task_launch_verify') -and
+                    $report.hint -in @('missing_command', 'access_denied', 'logon_policy', 'task_shape', 'task_launch', 'invalid_argument', 'other')) {
                     Write-Output ('CI_TASK_FAILURE_HINT:' + $report.hint)
                     if ($report.identity_part -in @('both', 'principal', 'trigger')) {
                         Write-Output ('CI_TASK_IDENTITY_PART:' + $report.identity_part)
