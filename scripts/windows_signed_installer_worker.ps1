@@ -177,7 +177,17 @@ try {
         $probeResult.failed_release_removed -ne $true -or $probeResult.old_task_restarted -ne $true) {
         throw 'Failed signed upgrade did not restore activation and task.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true} |
+    $stage = 'task_ownership_matrix'
+    $ownerProbe = Join-Path $FixtureRoot 'installers\upgrade_task_ownership_probe.ps1'
+    if (!(Test-Path -LiteralPath $ownerProbe -PathType Leaf)) {
+        throw 'Missing disposable Windows task ownership fixture.'
+    }
+    $ownerReport = & $ownerProbe -Installer $installer -Origin $Origin | ConvertFrom-Json
+    if ($ownerReport.status -ne 'PASS' -or $ownerReport.scenarios -ne 7 -or
+        $ownerReport.task_ownership_denied -ne $true -or $ownerReport.unchanged -ne $true) {
+        throw 'Managed Windows task ownership negative matrix failed.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
