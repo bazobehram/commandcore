@@ -7,6 +7,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $report = Join-Path $FixtureRoot 'result\worker.result.json'
 $stage = 'identity'
+$rollbackPhase = 'none'
+$rollbackCategory = 'none'
+$rollbackErrorId = 'none'
+$rollbackSource = 'none'
+$rollbackSourceLine = 0
+$rollbackFlags = 'none'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -144,7 +150,34 @@ try {
         (Test-Path -LiteralPath $enrollmentState)) {
         throw 'Rejected repeat or upgrade modified the installed release.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true} |
+    $stage = 'upgrade_rollback_simulation'
+    $probe = Join-Path $FixtureRoot 'installers\upgrade_rollback_probe.ps1'
+    if (!(Test-Path -LiteralPath $probe -PathType Leaf)) { throw 'Missing isolated rollback probe.' }
+    $probeResult = & $probe -Installer $installer -Origin $Origin | ConvertFrom-Json
+    if ($probeResult.status -eq 'FAIL') {
+        if ($probeResult.phase -in @('preconditions', 'signed_upgrade', 'restore', 'hashes')) {
+            $rollbackPhase = [string]$probeResult.phase
+        }
+        if ($probeResult.category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'missing_property', 'parameter_binding', 'access_denied', 'privilege_not_held', 'unexpected_failure')) {
+            $rollbackCategory = [string]$probeResult.category
+        }
+        if ($probeResult.source -in @('none', 'installer', 'probe')) { $rollbackSource = [string]$probeResult.source }
+        if ($probeResult.error_id -match '^[A-Za-z0-9_]{1,80}$') {
+            $rollbackErrorId = [string]$probeResult.error_id
+        }
+        if ($probeResult.source_line -is [int] -and $probeResult.source_line -gt 0 -and $probeResult.source_line -lt 500) {
+            $rollbackSourceLine = [int]$probeResult.source_line
+        }
+        $rollbackFlags = [string]([int]($probeResult.looked_up -eq $true)) + [string]([int]($probeResult.exported -eq $true)) +
+            [string]([int]($probeResult.injected -eq $true)) + [string]([int]($probeResult.restored -eq $true)) +
+            [string]([int]($probeResult.restarted -eq $true))
+        throw 'Disposable signed upgrade rollback simulation failed.'
+    }
+    if ($probeResult.task_restored -ne $true -or $probeResult.activation_unchanged -ne $true -or
+        $probeResult.failed_release_removed -ne $true -or $probeResult.old_task_restarted -ne $true) {
+        throw 'Failed signed upgrade did not restore activation and task.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
@@ -207,7 +240,7 @@ try {
     $failureCommand = 'other'
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1

@@ -188,6 +188,18 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     tampered = {**manifest, "version": "0.9.0-rc2"}
     (dest / "manifest-tampered.json").write_text(json.dumps(tampered), encoding="utf-8")
     (feed / "tampered-verifier.exe").write_bytes(artifact.read_bytes() + b"\x00")
+    # A newer, genuinely signed feed version uses the same pinned native
+    # binary but a different Ed25519-signed release manifest. This exercises
+    # the real verifier without implying a distinct native Agent build.
+    upgrade = {**manifest, "version": "0.9.0-rc2"}
+    canonical_upgrade = json.dumps(
+        {k: v for k, v in upgrade.items() if k != "signature"},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode()
+    upgrade["signature"] = base64.b64encode(signer.sign(canonical_upgrade)).decode()
+    (dest / "manifest-upgrade.json").write_text(json.dumps(upgrade), encoding="utf-8")
     package(manifest_path, public, output, origin + "/releases/agent/manifest.json")
 
 
@@ -212,6 +224,39 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         stages = re.findall(r"(?m)^CI_INSTALL_STAGE:([a-z_]+)\s*$", process.stdout)
         safe_stage = stages[-1] if stages else "unknown"
         print("FAIL: windows_installer_stage=" + safe_stage)
+        for field, choices in (
+            (
+                "CI_ROLLBACK_PHASE",
+                {"none", "preconditions", "signed_upgrade", "restore", "hashes"},
+            ),
+            (
+                "CI_ROLLBACK_CATEGORY",
+                {
+                    "none",
+                    "expected_task_failure",
+                    "release_verification",
+                    "task_preflight",
+                    "rollback",
+                    "missing_property",
+                    "parameter_binding",
+                    "access_denied",
+                    "privilege_not_held",
+                    "unexpected_failure",
+                },
+            ),
+        ):
+            matches = re.findall(rf"(?m)^{field}:([a-z_]+)\s*$", process.stdout)
+            if matches and matches[-1] in choices:
+                print("FAIL: " + field.lower() + "=" + matches[-1])
+        for field, allowed in (
+            ("CI_ROLLBACK_SOURCE", r"(?:none|installer|probe)"),
+            ("CI_ROLLBACK_ERROR_ID", r"[A-Za-z0-9_]{1,80}"),
+            ("CI_ROLLBACK_SOURCE_LINE", r"[0-9]{1,3}"),
+            ("CI_ROLLBACK_FLAGS", r"[01]{5}"),
+        ):
+            matches = re.findall(rf"(?m)^{field}:({allowed})\s*$", process.stdout)
+            if matches:
+                print("FAIL: " + field.lower() + "=" + matches[-1])
         gate_failures = re.findall(
             r"(?m)^CI_SIGNED_INSTALL_MISSING_GATE:([a-z_]+)\s*$", process.stdout
         )
@@ -223,6 +268,7 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
                 "repeat_denied",
                 "upgrade_without_identity_denied",
                 "unchanged_after_denial",
+                "simulated_upgrade_rollback",
             }:
                 print("FAIL: windows_installer_missing_gate=" + gate)
         hints = re.findall(r"(?m)^CI_WORKER_FAILURE_HINT:([a-z_]+)\s*$", process.stdout)
@@ -349,6 +395,10 @@ def main() -> int:
                 ROOT / "scripts" / "windows_signed_installer_worker.ps1",
                 output / "worker.ps1",
             )
+            shutil.copyfile(
+                ROOT / "scripts" / "windows_upgrade_rollback_probe.ps1",
+                output / "upgrade_rollback_probe.ps1",
+            )
             add = subprocess.run(
                 ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
                 capture_output=True,
@@ -382,7 +432,8 @@ def main() -> int:
                         "repeat_install_denial": True,
                         "upgrade_without_identity_denial": True,
                         "installed_artifacts_unchanged": True,
-                        "scope": "no-enroll/no-task signed install and negative repeat/upgrade; genuine upgrade, reboot, task startup and enrollment remain gated",
+                        "simulated_signed_upgrade_rollback": True,
+                        "scope": "no-enroll signed install, integrity denials and simulated failed signed upgrade/task rollback; genuine successful upgrade, live task execution, reboot and enrollment remain gated",
                     }
                 )
             )

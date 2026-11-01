@@ -65,10 +65,47 @@ $previous = if (Test-Path -LiteralPath $activePath) { Get-Content -LiteralPath $
 if ($previous -and (!$Upgrade -or $NoTask -or !(Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json')))) {
     throw 'Use -Upgrade with the existing identity and interactive logon task.'
 }
+# Upgrade is safe only if the exact existing managed task can be restored.
+# Its description alone does not establish ownership.
+if ($oldTask -and !$previous) { throw 'Refusing an orphaned managed scheduled task.' }
+$oldTaskXml = $null
+$priorLauncherBytes = $null
+$priorLauncherPath = Join-Path $root 'run-agent.ps1'
+if ($previous) {
+    if (!(Test-Path -LiteralPath $priorLauncherPath -PathType Leaf)) {
+        throw 'Upgrade requires the existing managed Agent launcher.'
+    }
+    if ((Get-Item -LiteralPath $priorLauncherPath).Length -gt 1048576) {
+        throw 'Refusing unexpected managed Agent launcher size.'
+    }
+    $priorLauncherBytes = [IO.File]::ReadAllBytes($priorLauncherPath)
+    if (!$oldTask) { throw 'Upgrade requires an existing managed interactive logon task.' }
+    $allowedUsers = @($identity.Name, $identity.User.Value, $env:USERNAME,
+        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+    if ([string]$oldTask.Principal.UserId -notin $allowedUsers -or
+        [string]$oldTask.Principal.LogonType -ne 'Interactive' -or
+        [string]$oldTask.Principal.RunLevel -ne 'Limited' -or
+        $oldTask.Triggers.Count -ne 1 -or
+        $oldTask.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
+        [string]$oldTask.Triggers[0].UserId -notin $allowedUsers -or
+        $oldTask.Actions.Count -ne 1 -or
+        [string]$oldTask.Actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$' -or
+        !([string]$oldTask.Actions[0].Arguments).Contains((Join-Path $root 'run-agent.ps1'))) {
+        throw 'Refusing to upgrade an unowned or unexpected scheduled task.'
+    }
+    # Fail closed if task export is unavailable. This backup is never logged.
+    $oldTaskXml = Export-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace($oldTaskXml)) {
+        throw 'Managed task backup required before upgrade.'
+    }
+}
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('commandcore-install-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 $activated = $false
 $complete = $false
+$oldTaskStopped = $false
+$taskReplaceAttempted = $false
+$createdRelease = $null
 try {
     $verifier = Join-Path $temp 'release-verifier.exe'
     Get-ReleaseFile $VerifierUrl $verifier
@@ -94,22 +131,54 @@ try {
     & $verifier verify-release $manifest --public-key $ReleasePublicKey --platform windows --architecture $arch --artifact $artifact | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Artifact integrity verification failed.' }
     foreach ($path in @($root, $stateRoot)) {
-        New-Item -ItemType Directory -Path $path -Force | Out-Null
-        $acl = [Security.AccessControl.DirectorySecurity]::new()
-        $acl.SetAccessRuleProtection($true, $false)
-        $acl.SetOwner($identity.User)
-        foreach ($sid in @($identity.User.Value, 'S-1-5-18')) {
-            $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
-                'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-            $acl.AddAccessRule($rule)
+        if ($previous) {
+            # Existing, properly managed directories must keep their secured
+            # owner/DACL intact. Reapplying SetOwner/Set-Acl on an upgrade can
+            # require privileges unavailable to the normal user. Fail closed
+            # on any drift rather than elevating or silently weakening ACLs.
+            if (!(Test-Path -LiteralPath $path -PathType Container)) {
+                throw 'Upgrade requires existing protected Agent directories.'
+            }
+            $acl = Get-Acl -LiteralPath $path -ErrorAction Stop
+            if (!$acl.AreAccessRulesProtected -or
+                [string]$acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $identity.User.Value) {
+                throw 'Managed Agent directory ownership or inheritance changed.'
+            }
+            $allowedSids = @($identity.User.Value, 'S-1-5-18')
+            $fullControl = [Security.AccessControl.FileSystemRights]::FullControl
+            $verifiedSids = @{}
+            foreach ($rule in $acl.GetAccessRules($true, $false, [Security.Principal.SecurityIdentifier])) {
+                $sid = [string]$rule.IdentityReference.Value
+                if ($rule.IsInherited -or $sid -notin $allowedSids -or
+                    $rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+                    ($rule.FileSystemRights -band $fullControl) -ne $fullControl) {
+                    throw 'Unexpected managed Agent directory permissions.'
+                }
+                $verifiedSids[$sid] = $true
+            }
+            if (!$verifiedSids.ContainsKey($identity.User.Value) -or
+                !$verifiedSids.ContainsKey('S-1-5-18')) {
+                throw 'Managed Agent directory permissions are incomplete.'
+            }
+        } else {
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+            $acl = [Security.AccessControl.DirectorySecurity]::new()
+            $acl.SetAccessRuleProtection($true, $false)
+            $acl.SetOwner($identity.User)
+            foreach ($sid in @($identity.User.Value, 'S-1-5-18')) {
+                $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
+                    'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+                $acl.AddAccessRule($rule)
+            }
+            Set-Acl -LiteralPath $path -AclObject $acl
         }
-        Set-Acl -LiteralPath $path -AclObject $acl
     }
     Set-Content -LiteralPath $marker -Value 'commandcore-agent'
     $release = Join-Path $root ('releases\' + $metadata.version)
     $binary = Join-Path $release 'commandcore-agent.exe'
     if (Test-Path -LiteralPath $release) { throw 'Version already exists; refusing overwrite.' }
     New-Item -ItemType Directory -Path $release | Out-Null
+    $createdRelease = $release
     Copy-Item -LiteralPath $artifact -Destination $binary
     Copy-Item -LiteralPath $manifest -Destination (Join-Path $release 'manifest.json')
     if (!$NoEnroll -and !(Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json'))) {
@@ -118,7 +187,10 @@ try {
     }
     $next = Join-Path $root 'active.new.json'
     @{version=$metadata.version; binary=$binary; state=(Join-Path $stateRoot 'agent.json')} | ConvertTo-Json | Set-Content -LiteralPath $next
-    if ($oldTask) { Stop-ScheduledTask -TaskName $taskName }
+    if ($oldTask) {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        $oldTaskStopped = $true
+    }
     Move-Item -LiteralPath $next -Destination $activePath -Force
     $activated = $true
     if (!$NoTask) {
@@ -138,7 +210,8 @@ exit $LASTEXITCODE
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
         $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
         $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-        Register-ScheduledTask -TaskName $taskName -Description $taskDescription -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -Force | Out-Null
+        $taskReplaceAttempted = $true
+        Register-ScheduledTask -TaskName $taskName -Description $taskDescription -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -Force -ErrorAction Stop | Out-Null
         if (Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json')) {
             $activationTime = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
             Start-ScheduledTask -TaskName $taskName
@@ -157,11 +230,45 @@ exit $LASTEXITCODE
     $complete = $true
     Write-Output ('Installed signed user Agent ' + $metadata.version + '. FULL_CONTROL remains disabled.')
 } finally {
-    if ($activated -and !$complete -and $previous) {
-        if (!$NoTask) { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue }
-        Set-Content -LiteralPath $activePath -Value $previous
-        if ($oldTask) { Start-ScheduledTask -TaskName $taskName }
-        Write-Warning 'Installation failed; restored the previous Agent configuration.'
+    if (!$complete) {
+        if ($previous -and ($activated -or $oldTaskStopped -or $taskReplaceAttempted)) {
+            if ($taskReplaceAttempted) {
+                Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                # Restore the exact saved task, not only active.json.
+                Register-ScheduledTask -TaskName $taskName -Xml $oldTaskXml -Force -ErrorAction Stop | Out-Null
+            }
+            if ($activated) {
+                Set-Content -LiteralPath $activePath -Value $previous -NoNewline -ErrorAction Stop
+                # The task XML points at the same launcher path. Restore its
+                # original bytes too, before restarting the previous Agent.
+                [IO.File]::WriteAllBytes($priorLauncherPath, $priorLauncherBytes)
+            }
+            if ($oldTaskStopped) {
+                Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+            }
+            Write-Warning 'Upgrade failed; restored previous Agent activation and managed task.'
+        } elseif (!$previous -and $activated) {
+            if ($taskReplaceAttempted) {
+                $newTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                if ($newTask) {
+                    $owners = @($identity.Name, $identity.User.Value,
+                        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+                    if ($newTask.Description -ne $taskDescription -or
+                        [string]$newTask.Principal.UserId -notin $owners) {
+                        throw 'Refusing to remove an unowned scheduled task.'
+                    }
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                }
+            }
+            Remove-Item -LiteralPath $activePath -Force -ErrorAction Stop
+        }
+        if ($createdRelease -and (Test-Path -LiteralPath $createdRelease)) {
+            Remove-Item -LiteralPath $createdRelease -Recurse -Force -ErrorAction Stop
+        }
+        $nextPath = Join-Path $root 'active.new.json'
+        if (Test-Path -LiteralPath $nextPath) {
+            Remove-Item -LiteralPath $nextPath -Force -ErrorAction Stop
+        }
     }
     $resolvedTemp = [IO.Path]::GetFullPath($temp)
     $allowedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar

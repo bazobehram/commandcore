@@ -80,12 +80,14 @@ try {
                     $report.tampered_manifest_denied -eq $true -and $report.pinned_verifier_denied -eq $true -and
                     $report.clean_after_tamper_denial -eq $true -and
                     $report.repeat_denied -eq $true -and $report.upgrade_without_identity_denied -eq $true -and
-                    $report.unchanged_after_denial -eq $true
+                    $report.unchanged_after_denial -eq $true -and
+                    $report.simulated_upgrade_rollback -eq $true
             }
             if (!$accepted) {
                 if (!$OnlyTask -and !$OnlyCredential -and $report.status -eq 'PASS') {
                     foreach ($gate in @('tampered_manifest_denied', 'pinned_verifier_denied', 'clean_after_tamper_denial',
-                        'repeat_denied', 'upgrade_without_identity_denied', 'unchanged_after_denial')) {
+                        'repeat_denied', 'upgrade_without_identity_denied', 'unchanged_after_denial',
+                        'simulated_upgrade_rollback')) {
                         if ($report.PSObject.Properties.Name -notcontains $gate -or $report.$gate -ne $true) {
                             Write-Output ('CI_SIGNED_INSTALL_MISSING_GATE:' + $gate)
                         }
@@ -93,7 +95,8 @@ try {
                 }
                 if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport',
                     'tampered_manifest_denial', 'pinned_verifier_denial', 'clean_after_tamper_denial',
-                    'repeat_install_snapshot', 'repeat_install_denial', 'unauthorized_upgrade_denial', 'repeat_install_unchanged', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
+                    'repeat_install_snapshot', 'repeat_install_denial', 'unauthorized_upgrade_denial', 'repeat_install_unchanged',
+                    'upgrade_rollback_simulation', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
@@ -113,6 +116,26 @@ try {
                 }
                 if ($report.hint -in $allowedHints) {
                     Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
+                }
+                if ($report.stage -eq 'upgrade_rollback_simulation') {
+                    if ($report.rollback_phase -in @('none', 'preconditions', 'signed_upgrade', 'restore', 'hashes')) {
+                        Write-Output ('CI_ROLLBACK_PHASE:' + $report.rollback_phase)
+                    }
+                    if ($report.rollback_category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'missing_property', 'parameter_binding', 'access_denied', 'privilege_not_held', 'unexpected_failure')) {
+                        Write-Output ('CI_ROLLBACK_CATEGORY:' + $report.rollback_category)
+                    }
+                    if ($report.rollback_source -in @('none', 'installer', 'probe')) {
+                        Write-Output ('CI_ROLLBACK_SOURCE:' + $report.rollback_source)
+                    }
+                    if ($report.rollback_error_id -match '^[A-Za-z0-9_]{1,80}$') {
+                        Write-Output ('CI_ROLLBACK_ERROR_ID:' + $report.rollback_error_id)
+                    }
+                    if ($report.rollback_source_line -is [int] -and $report.rollback_source_line -gt 0 -and $report.rollback_source_line -lt 500) {
+                        Write-Output ('CI_ROLLBACK_SOURCE_LINE:' + $report.rollback_source_line)
+                    }
+                    if ($report.rollback_flags -match '^[01]{5}$') {
+                        Write-Output ('CI_ROLLBACK_FLAGS:' + $report.rollback_flags)
+                    }
                 }
                 if ($report.missing_command -in @('Get_ScheduledTask', 'Get_Command', 'curl_exe', 'Get_FileHash', 'Get_ReleaseFile', 'Get_ItemProperty', 'Set_Acl', 'New_Item', 'ConvertFrom_Json', 'Get_Content', 'Remove_Item')) {
                     Write-Output ('CI_INSTALLER_MISSING_COMMAND:' + $report.missing_command)
