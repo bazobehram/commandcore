@@ -219,7 +219,7 @@
                     <div class="scope-upgrade"><span class="scope-upgrade-symbol">↗</span><div><strong>Full Control is ready on this device</strong><p>The only detected blocker is your current {{levelName(oauthProfile())}} OAuth session. Reconnect with Full Control scope, then confirm the device permission here.</p></div><button (click)="beginFullOAuthReconnection()">Authorize Full Control</button></div>
                   } @else if(!localFullReady()){
                     <p class="local-setup-note">This device cannot currently enable Full Control. Local ceiling: <strong>{{levelName(localCeiling())}}</strong>. Helper: <strong>{{helperReady()?'available':'not ready'}}</strong>. Connection: <strong>{{d.connected?'Online':'Offline'}}</strong>.</p>
-                    <details><summary>Full Control requirements</summary><p>Full Control needs an online Linux agent with an approved local ceiling and healthy privileged helper. The web panel cannot silently raise these local limits. Existing agents should retain their identity.</p><button class="subtle-action" (click)="openAdd()">Linux setup guidance ↗</button></details>
+                    <details><summary>Full Control requirements</summary><p>Full Control needs an online Linux agent with an approved local ceiling and healthy privileged helper. The web panel cannot silently raise these local limits. Existing agents should retain their identity.</p><button class="subtle-action" (click)="openAdd('linux')">Linux setup guidance ↗</button></details>
                   }
                   @if(myGrantNeedsRestore()){<div class="restore-access"><strong>Grant missing for your account</strong><p>The device is still registered. Reconnect your account without reinstalling its agent.</p><button (click)="beginRestoreMyGrant()" [disabled]="permissionBusy()">Restore my access ↗</button></div>}
                 </div>
@@ -276,7 +276,7 @@
        <h2>Add a device<span class="headline-period">.</span></h2>
        <p>Choose the operating system of the device you want to connect. You can change this selection at any time.</p>
        <div class="platform-picker" role="group" aria-label="Device operating system">
-         <button type="button" [class.selected]="installPlatform()==='linux'" [attr.aria-pressed]="installPlatform()==='linux'" (click)="installPlatform.set('linux')">Linux <small>Available</small></button>
+         <button type="button" [class.selected]="installPlatform()==='linux'" [attr.aria-pressed]="installPlatform()==='linux'" (click)="installPlatform.set('linux');checkInstall()">Linux <small>Available</small></button>
          <button type="button" [class.selected]="installPlatform()==='windows'" [attr.aria-pressed]="installPlatform()==='windows'" (click)="installPlatform.set('windows')">Windows <small>Preview</small></button>
        </div>
        @if(installPlatform()==='linux'){
@@ -292,7 +292,7 @@
            <strong>Windows installation is in Preview</strong>
            <p>Windows signed-install tests have passed, but complete first-time enrollment, logon startup, reconnect, update, rollback and uninstall acceptance are not finished. A general-use Windows install command is not available yet.</p>
            <p>You can connect an available Linux device now, or check the published platform support documentation for Windows progress.</p>
-           <div class="platform-preview-actions"><button type="button" class="subtle-action" (click)="installPlatform.set('linux')">Show Linux instructions</button><a href="https://github.com/bazobehram/commandcore/blob/main/docs/PLATFORM_SUPPORT.md" target="_blank" rel="noopener noreferrer">Platform support ↗</a></div>
+           <div class="platform-preview-actions"><button type="button" class="subtle-action" (click)="installPlatform.set('linux');checkInstall()">Show Linux instructions</button><a href="https://github.com/bazobehram/commandcore/blob/main/docs/PLATFORM_SUPPORT.md" target="_blank" rel="noopener noreferrer">Platform support ↗</a></div>
          </div>
        }
        <p class="sheet-disclaimer">Only install software from a release you trust. Local permissions and device approval are enforced separately.</p>
