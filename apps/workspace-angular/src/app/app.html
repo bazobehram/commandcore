@@ -41,7 +41,7 @@
       </section>
       <div class="fleet-heading">
         <div class="fleet-title"><span>YOUR MACHINES</span><span class="fleet-count">{{devices().length}} devices <span class="soft-divider">·</span> {{onlineCount()}} online</span></div>
-        <div class="fleet-operations">@if(devices().length>1){<button type="button" (click)="move(-1)" class="round-nav" aria-label="Previous device">←</button><button type="button" (click)="move(1)" class="round-nav" aria-label="Next device">→</button>}<button type="button" (click)="openAdd()" class="add-link">＋ Add device</button></div>
+        <div class="fleet-operations">@if(devices().length>1){<button type="button" (click)="move(-1)" class="round-nav" aria-label="Previous device">←</button><button type="button" (click)="move(1)" class="round-nav" aria-label="Next device">→</button>}@if(devices().length>0){<button type="button" (click)="openAdd()" class="add-link">＋ Add device</button>}</div>
       </div>
       <section class="device-rail" aria-label="Connected devices">
         <div class="fleet-hub" [class.hub-working]="anyWorking()" [class.hub-connected]="onlineCount()>0" aria-hidden="true"><div class="hub-head"><img src="/brand/octopus-head.svg?v=octopus-v10" alt=""/></div><span>YOUR CORE</span><i></i></div>
