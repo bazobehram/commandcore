@@ -94,6 +94,9 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('commandcore-install-' + [Guid]::N
 New-Item -ItemType Directory -Path $temp | Out-Null
 $activated = $false
 $complete = $false
+$oldTaskStopped = $false
+$taskReplaceAttempted = $false
+$createdRelease = $null
 try {
     $verifier = Join-Path $temp 'release-verifier.exe'
     Get-ReleaseFile $VerifierUrl $verifier
@@ -135,6 +138,7 @@ try {
     $binary = Join-Path $release 'commandcore-agent.exe'
     if (Test-Path -LiteralPath $release) { throw 'Version already exists; refusing overwrite.' }
     New-Item -ItemType Directory -Path $release | Out-Null
+    $createdRelease = $release
     Copy-Item -LiteralPath $artifact -Destination $binary
     Copy-Item -LiteralPath $manifest -Destination (Join-Path $release 'manifest.json')
     if (!$NoEnroll -and !(Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json'))) {
@@ -143,7 +147,10 @@ try {
     }
     $next = Join-Path $root 'active.new.json'
     @{version=$metadata.version; binary=$binary; state=(Join-Path $stateRoot 'agent.json')} | ConvertTo-Json | Set-Content -LiteralPath $next
-    if ($oldTask) { Stop-ScheduledTask -TaskName $taskName }
+    if ($oldTask) {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        $oldTaskStopped = $true
+    }
     Move-Item -LiteralPath $next -Destination $activePath -Force
     $activated = $true
     if (!$NoTask) {
@@ -163,7 +170,8 @@ exit $LASTEXITCODE
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
         $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
         $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-        Register-ScheduledTask -TaskName $taskName -Description $taskDescription -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -Force | Out-Null
+        $taskReplaceAttempted = $true
+        Register-ScheduledTask -TaskName $taskName -Description $taskDescription -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -Force -ErrorAction Stop | Out-Null
         if (Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json')) {
             $activationTime = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
             Start-ScheduledTask -TaskName $taskName
@@ -182,11 +190,42 @@ exit $LASTEXITCODE
     $complete = $true
     Write-Output ('Installed signed user Agent ' + $metadata.version + '. FULL_CONTROL remains disabled.')
 } finally {
-    if ($activated -and !$complete -and $previous) {
-        if (!$NoTask) { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue }
-        Set-Content -LiteralPath $activePath -Value $previous
-        if ($oldTask) { Start-ScheduledTask -TaskName $taskName }
-        Write-Warning 'Installation failed; restored the previous Agent configuration.'
+    if (!$complete) {
+        if ($previous -and ($activated -or $oldTaskStopped -or $taskReplaceAttempted)) {
+            if ($taskReplaceAttempted) {
+                Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                # Restore the exact saved task, not only active.json.
+                Register-ScheduledTask -TaskName $taskName -Xml $oldTaskXml -Force -ErrorAction Stop | Out-Null
+            }
+            if ($activated) {
+                Set-Content -LiteralPath $activePath -Value $previous -ErrorAction Stop
+            }
+            if ($oldTaskStopped) {
+                Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+            }
+            Write-Warning 'Upgrade failed; restored previous Agent activation and managed task.'
+        } elseif (!$previous -and $activated) {
+            if ($taskReplaceAttempted) {
+                $newTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                if ($newTask) {
+                    $owners = @($identity.Name, $identity.User.Value,
+                        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+                    if ($newTask.Description -ne $taskDescription -or
+                        [string]$newTask.Principal.UserId -notin $owners) {
+                        throw 'Refusing to remove an unowned scheduled task.'
+                    }
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                }
+            }
+            Remove-Item -LiteralPath $activePath -Force -ErrorAction Stop
+        }
+        if ($createdRelease -and (Test-Path -LiteralPath $createdRelease)) {
+            Remove-Item -LiteralPath $createdRelease -Recurse -Force -ErrorAction Stop
+        }
+        $nextPath = Join-Path $root 'active.new.json'
+        if (Test-Path -LiteralPath $nextPath) {
+            Remove-Item -LiteralPath $nextPath -Force -ErrorAction Stop
+        }
     }
     $resolvedTemp = [IO.Path]::GetFullPath($temp)
     $allowedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
