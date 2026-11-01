@@ -110,6 +110,9 @@ try {
                     if ($report.curl_source -in @('system32', 'git', 'other')) {
                         Write-Output ('CI_HTTPS_CURL_SOURCE:' + $report.curl_source)
                     }
+                    if ($report.tls_hint -in @('unknown', 'untrusted_root', 'revocation', 'hostname', 'algorithm', 'handshake_alert', 'schannel_other')) {
+                        Write-Output ('CI_HTTPS_TLS_HINT:' + $report.tls_hint)
+                    }
                 }
                 if ($report.failure_type -match '^[A-Za-z0-9_]{1,64}$') {
                     Write-Output ('CI_INSTALLER_FAILURE_TYPE:' + $report.failure_type)
