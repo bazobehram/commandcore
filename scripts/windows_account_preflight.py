@@ -74,6 +74,8 @@ def run_driver(
         "CI_USER_CREATE_ERROR_ID",
         "CI_USER_CREATE_EXCEPTION_TYPE",
         "CI_USER_CREATE_MESSAGE_HINT",
+        "CI_TASK_IDENTITY_PART",
+        "CI_TASK_FAILURE_HINT",
         "CI_TASK_LAST_RESULT",
         "CI_TASK_STATE",
         "CI_TASK_DIAGNOSTIC",
@@ -112,6 +114,21 @@ def main() -> int:
         if not run_driver(driver, fixture, "-OnlyCredential", timeout=40):
             return 1
     print("PASS: disposable Windows standard-user credential process/cleanup")
+    # Validate at-logon registration under the same real non-admin token.
+    # This intentionally does not claim an interactive login or startup run.
+    with tempfile.TemporaryDirectory(
+        prefix="commandcore-task-registration-", dir=root
+    ) as tmp:
+        fixture = Path(tmp)
+        (fixture / "installers").mkdir()
+        (fixture / "result").mkdir()
+        shutil.copyfile(
+            Path(__file__).resolve().with_name("windows_logon_registration_worker.ps1"),
+            fixture / "installers" / "worker.ps1",
+        )
+        if not run_driver(driver, fixture, "-OnlyCredential", timeout=60):
+            return 1
+    print("PASS: standard-user at-logon task registration and cleanup (not startup)")
     # A real localhost HTTPS server isolates Schannel/curl failures from the
     # signed installer and avoids rebuilding the native Rust Agent to diagnose.
     with (

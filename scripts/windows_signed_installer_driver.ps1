@@ -77,7 +77,7 @@ try {
                 $accepted = $accepted -and $report.signed_install -eq $true
             }
             if (!$accepted) {
-                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport')) {
+                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
@@ -88,6 +88,13 @@ try {
                     'preexisting_installation', 'parameter_binding',
                     'missing_command', 'powershell_strictmode', 'powershell_parse'
                 )
+                if ($report.stage -in @('task_modules', 'task_register', 'task_verify', 'task_identity') -and
+                    $report.hint -in @('missing_command', 'access_denied', 'logon_policy', 'task_shape', 'invalid_argument', 'other')) {
+                    Write-Output ('CI_TASK_FAILURE_HINT:' + $report.hint)
+                    if ($report.identity_part -in @('both', 'principal', 'trigger')) {
+                        Write-Output ('CI_TASK_IDENTITY_PART:' + $report.identity_part)
+                    }
+                }
                 if ($report.hint -in $allowedHints) {
                     Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
                 }
@@ -213,6 +220,19 @@ try {
     if ($createdTask) {
         try { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue } catch {}
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    if ($OnlyCredential -and !$createdTask) {
+        # An interrupted standard-user registration probe may leave an owned
+        # task behind. Never touch unrelated tasks with the same name.
+        try {
+            $fixtureTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            if ($fixtureTask -and $fixtureTask.Description -eq 'Disposable CommandCore CI logon task probe') {
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+            }
+        } catch {
+            Write-Output 'CI_TASK_DIAGNOSTIC:cleanup_failed'
+            throw 'Disposable task cleanup failed (redacted).'
+        }
     }
     if ($createdUser) {
         Remove-LocalUser -Name $UserName -ErrorAction SilentlyContinue
