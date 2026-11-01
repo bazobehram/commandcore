@@ -94,6 +94,10 @@ try {
             $hint = 'powershell_parse'
         }
     }
+    $curlCode = 0
+    if ($stage -eq 'installer' -and $message -match 'curl_exit=([0-9]{1,3})') {
+        $curlCode = [int]$Matches[1]
+    }
     $installerLine = 0
     if ($stage -eq 'installer') {
         $source = [IO.Path]::GetFileName([string]$_.InvocationInfo.ScriptName)
@@ -102,7 +106,7 @@ try {
             $installerLine = $number
         }
     }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; installer_line=$installerLine; curl_exit=$curlCode} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
