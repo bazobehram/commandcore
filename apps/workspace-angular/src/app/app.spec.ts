@@ -213,14 +213,15 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
-  it('shows one prominent first-device card and no redundant add tile when empty', async () => {
+  it('offers exactly one Add Device action when the workspace is empty', async () => {
     stubApi(loggedInApi);
     const fixture = await mountWorkspace();
     const host: HTMLElement = fixture.nativeElement;
 
     expect(host.querySelectorAll('.machine-empty')).toHaveLength(1);
     expect(host.querySelectorAll('.add-tile')).toHaveLength(0);
-    expect(host.querySelectorAll('.add-link')).toHaveLength(1);
+    expect(host.querySelectorAll('.add-link')).toHaveLength(0);
+    expect(host.querySelectorAll('.machine-empty, .add-tile, .add-link')).toHaveLength(1);
     expect(host.querySelectorAll('.round-nav')).toHaveLength(0);
     (host.querySelector('.machine-empty') as HTMLButtonElement).click();
     fixture.detectChanges();
