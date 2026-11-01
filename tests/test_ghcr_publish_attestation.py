@@ -43,6 +43,7 @@ def test_ghcr_publish_generates_and_verifies_signed_digest_provenance():
         "subject-name": "ghcr.io/${{ github.repository }}",
         "subject-digest": "${{ steps.build.outputs.digest }}",
         "push-to-registry": "true",
+        "create-storage-record": "false",
     }
 
     verification = steps[verify_index]
