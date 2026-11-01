@@ -203,6 +203,16 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         stages = re.findall(r"(?m)^CI_INSTALL_STAGE:([a-z_]+)\s*$", process.stdout)
         safe_stage = stages[-1] if stages else "unknown"
         print("FAIL: windows_installer_stage=" + safe_stage)
+        gate_failures = re.findall(
+            r"(?m)^CI_SIGNED_INSTALL_MISSING_GATE:([a-z_]+)\s*$", process.stdout
+        )
+        for gate in gate_failures:
+            if gate in {
+                "repeat_denied",
+                "upgrade_without_identity_denied",
+                "unchanged_after_denial",
+            }:
+                print("FAIL: windows_installer_missing_gate=" + gate)
         hints = re.findall(r"(?m)^CI_WORKER_FAILURE_HINT:([a-z_]+)\s*$", process.stdout)
         allowed_hints = {
             "other",
