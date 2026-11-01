@@ -31,6 +31,15 @@ that the attempted release directory is removed. This is **simulated task
 failure with a real signature and installer**, not positive Task Scheduler,
 authenticated reconnect or a production-ready Windows upgrade claim.
 
+The Windows signed-installer disposable CI fixture also runs seven **unowned
+Scheduled Task rejection** scenarios: missing task, unrelated description,
+different principal, elevated run level, password logon type, different
+at-logon trigger identity, and unrelated action. The actual packaged upgrade
+entrypoint must deny each **before task export or mutation**, while preserving
+Agent activation, executable, manifest, launcher, marker, and identity state.
+Task APIs are mocked inside the disposable test process; a real interactive
+Windows desktop is still required for positive end-user lifecycle acceptance.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |
