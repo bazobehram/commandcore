@@ -82,6 +82,15 @@ try {
                 } else {
                     $stage = 'worker_unknown'
                 }
+                $allowedHints = @(
+                    'other', 'download_or_tls', 'release_integrity',
+                    'release_metadata', 'filesystem_acl', 'powershell_policy',
+                    'preexisting_installation', 'parameter_binding',
+                    'missing_command', 'powershell_strictmode', 'powershell_parse'
+                )
+                if ($report.hint -in $allowedHints) {
+                    Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
+                }
                 throw 'Standard-user signed installer failed its assertions.'
             }
             if ($OnlyTask) {
