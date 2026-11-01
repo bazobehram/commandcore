@@ -97,6 +97,15 @@ try {
                 if ($report.curl_exit -is [int] -and $report.curl_exit -gt 0 -and $report.curl_exit -lt 256) {
                     Write-Output ('CI_INSTALLER_CURL_EXIT:' + $report.curl_exit)
                 }
+                if ($report.failure_type -match '^[A-Za-z0-9_]{1,64}$') {
+                    Write-Output ('CI_INSTALLER_FAILURE_TYPE:' + $report.failure_type)
+                }
+                if ($report.failure_id -match '^[A-Za-z0-9_]{1,64}$') {
+                    Write-Output ('CI_INSTALLER_FAILURE_ID:' + $report.failure_id)
+                }
+                if ($report.failure_command -in @('GetReleaseFile', 'SetAcl', 'other')) {
+                    Write-Output ('CI_INSTALLER_FAILURE_COMMAND:' + $report.failure_command)
+                }
                 throw 'Standard-user signed installer failed its assertions.'
             }
             if ($OnlyTask) {
