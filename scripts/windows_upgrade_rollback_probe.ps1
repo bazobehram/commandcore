@@ -86,19 +86,30 @@ function Register-ScheduledTask {
     throw 'CI injected task registration failure after attempted mutation'
 }
 $injectedFailure = $false
+$phase = 'preconditions'
+$failureCategory = 'none'
 try {
     # A harmless fake identity file permits preflight but is never an
     # enrolled device credential, token, or actual authentication fixture.
     Set-Content -LiteralPath $statePath -Value '{"ci_fixture":true}' -NoNewline -ErrorAction Stop
+    $phase = 'signed_upgrade'
     try {
         & $Installer -Server $Origin -ManifestUrl ($Origin + '/releases/agent/manifest-upgrade.json') -NoEnroll -Upgrade | Out-Null
     } catch {
-        $injectedFailure = [string]$_.Exception.Message -eq 'CI injected task registration failure after attempted mutation'
+        $failure = [string]$_.Exception.Message
+        $injectedFailure = $failure -eq 'CI injected task registration failure after attempted mutation'
+        $failureCategory = if ($injectedFailure) { 'expected_task_failure' }
+            elseif ($failure -match '(?i)manifest|signature|release|newer|verifier') { 'release_verification' }
+            elseif ($failure -match '(?i)task|scheduler|interactive|principal') { 'task_preflight' }
+            elseif ($failure -match '(?i)rollback|restore|activation') { 'rollback' }
+            else { 'unexpected_failure' }
     }
+    $phase = 'restore'
     if (!$injectedFailure -or !$script:injectedMutation -or !$script:taskWasStopped -or
         !$script:taskRestoreObserved -or !$script:taskRestarted) {
         throw 'Signed upgrade did not execute expected fail-and-restore transition.'
     }
+    $phase = 'hashes'
     if ((Get-FileHash -LiteralPath $active -Algorithm SHA256).Hash -cne $previousHash -or
         (Get-FileHash -LiteralPath $previous.binary -Algorithm SHA256).Hash -cne $oldBinaryHash -or
         (Get-FileHash -LiteralPath (Join-Path $oldRelease 'manifest.json') -Algorithm SHA256).Hash -cne $oldManifestHash -or
@@ -107,8 +118,13 @@ try {
         (Test-Path -LiteralPath (Join-Path $root 'active.new.json'))) {
         throw 'Failed signed upgrade did not preserve the old activated release.'
     }
-    @{task_restored=$true; activation_unchanged=$true; failed_release_removed=$true; old_task_restarted=$true} |
+    @{status='PASS'; task_restored=$true; activation_unchanged=$true; failed_release_removed=$true; old_task_restarted=$true} |
         ConvertTo-Json -Compress
+} catch {
+    # Emit bounded CI diagnostics only; never raw exception text or paths.
+    @{status='FAIL'; phase=$phase; category=$failureCategory;
+        injected=$script:injectedMutation; restored=$script:taskRestoreObserved;
+        restarted=$script:taskRestarted} | ConvertTo-Json -Compress
 } finally {
     Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
 }
