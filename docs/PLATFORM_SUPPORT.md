@@ -2,6 +2,12 @@
 
 Support claims require runtime acceptance, not compilation alone.
 
+Windows at-logon task **registration** is covered by disposable CI. Actual
+interactive login/reboot acceptance requires the separately gated
+[disposable Windows desktop VM harness](WINDOWS_INTERACTIVE_VM_ACCEPTANCE.md).
+The offline harness tests only a harmless task action, **not** real Agent
+startup, enrollment, reconnect or upgrade. Windows remains Preview.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |
