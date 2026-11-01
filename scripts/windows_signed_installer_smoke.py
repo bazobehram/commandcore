@@ -359,6 +359,10 @@ def main() -> int:
                 ROOT / "scripts" / "windows_signed_installer_worker.ps1",
                 output / "worker.ps1",
             )
+            shutil.copyfile(
+                ROOT / "scripts" / "windows_upgrade_rollback_probe.ps1",
+                output / "upgrade_rollback_probe.ps1",
+            )
             add = subprocess.run(
                 ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
                 capture_output=True,
@@ -392,7 +396,8 @@ def main() -> int:
                         "repeat_install_denial": True,
                         "upgrade_without_identity_denial": True,
                         "installed_artifacts_unchanged": True,
-                        "scope": "no-enroll/no-task signed install and negative repeat/upgrade; genuine upgrade, reboot, task startup and enrollment remain gated",
+                        "simulated_signed_upgrade_rollback": True,
+                        "scope": "no-enroll signed install, integrity denials and simulated failed signed upgrade/task rollback; genuine successful upgrade, live task execution, reboot and enrollment remain gated",
                     }
                 )
             )
