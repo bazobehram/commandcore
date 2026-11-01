@@ -17,6 +17,28 @@ try {
     }
     $session = [Diagnostics.Process]::GetCurrentProcess().SessionId
     if ($session -le 0) { throw 'Task did not run in an interactive desktop session' }
+    $logonSids = @($identity.Groups | ForEach-Object { $_.Value } | Where-Object { $_ -match '^S-1-5-5-\d+-\d+    $proof = @{
+        schema = 1
+        nonce = [string]$state.nonce
+        user_sid = [string]$identity.User.Value
+        logon_sid = [string]$logonSids[0]
+        started_utc = [DateTimeOffset]::UtcNow.ToString('o')
+        session_id = $session
+        non_admin = $true
+    }
+    $tmp = Join-Path $FixtureRoot ('proof.' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $proof | ConvertTo-Json -Compress | Set-Content -LiteralPath $tmp -Encoding UTF8
+    Move-Item -LiteralPath $tmp -Destination $proofFile -ErrorAction Stop
+    exit 0
+} catch {
+    # No raw errors, usernames, tokens, environment variables, or paths in output.
+    exit 1
+}
+ })
+    if ($logonSids.Count -ne 1) { throw 'Cannot establish unique logon token identity' }
+    if ([string]$state.logon_sid -eq [string]$logonSids[0]) {
+        throw 'Action executed without a new interactive logon'
+    }
     $proof = @{
         schema = 1
         nonce = [string]$state.nonce
