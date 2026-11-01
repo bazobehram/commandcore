@@ -179,6 +179,15 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     dest.mkdir(parents=True)
     manifest_path = dest / "manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    # Both are served only by the local ephemeral TLS fixture.
+    # The tampered manifest retains the original signature; it must fail
+    # Ed25519 validation. The modified verifier must fail its pinned SHA-256
+    # before PowerShell ever attempts to execute it.
+    tampered = {**manifest, "version": "0.9.0-rc2"}
+    (dest / "manifest-tampered.json").write_text(
+        json.dumps(tampered), encoding="utf-8"
+    )
+    (feed / "tampered-verifier.exe").write_bytes(artifact.read_bytes() + b"\\x00")
     package(manifest_path, public, output, origin + "/releases/agent/manifest.json")
 
 
@@ -364,6 +373,9 @@ def main() -> int:
                         "non_admin_install_user": True,
                         "no_enroll": True,
                         "no_task": True,
+                        "tampered_manifest_denial": True,
+                        "pinned_verifier_tamper_denial": True,
+                        "clean_after_tamper_denial": True,
                         "repeat_install_denial": True,
                         "upgrade_without_identity_denial": True,
                         "installed_artifacts_unchanged": True,
