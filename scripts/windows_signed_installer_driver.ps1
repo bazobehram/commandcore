@@ -113,6 +113,14 @@ try {
                     if ($report.tls_hint -in @('unknown', 'untrusted_root', 'revocation', 'hostname', 'algorithm', 'handshake_alert', 'schannel_other')) {
                         Write-Output ('CI_HTTPS_TLS_HINT:' + $report.tls_hint)
                     }
+                    $tlsHex = [string]$report.tls_hresult
+                    if ($tlsHex -match '^0x[0-9a-f]{8}$') {
+                        Write-Output ('CI_HTTPS_TLS_HRESULT:' + $tlsHex)
+                    }
+                    $noRevoke = [string]$report.no_revocation_exit
+                    if ($noRevoke -match '^[0-9]{1,3}$' -and [int]$noRevoke -le 255) {
+                        Write-Output ('CI_HTTPS_NO_REVOCATION_EXIT:' + $noRevoke)
+                    }
                 }
                 if ($report.failure_type -match '^[A-Za-z0-9_]{1,64}$') {
                     Write-Output ('CI_INSTALLER_FAILURE_TYPE:' + $report.failure_type)
