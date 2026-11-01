@@ -160,6 +160,27 @@ jobs:
         run: python -m pip install 'cryptography>=45,<48'
       - name: Disposable standard-user account and HTTPS transport preflight
         run: python scripts/windows_account_preflight.py
+      - name: Interactive VM harness parses and cannot run in CI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          foreach ($file in @('scripts/windows_interactive_vm_logon_acceptance.ps1', 'scripts/windows_interactive_logon_action.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -ne 0) { throw 'Interactive VM harness PowerShell syntax invalid' }
+          }
+          $name = 'CommandCore CI Interactive Logon Acceptance'
+          if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { throw 'Unexpected existing test task' }
+          foreach ($mode in @('Prepare', 'Verify', 'Cleanup')) {
+            $output = & powershell.exe -NoProfile -NonInteractive -File scripts/windows_interactive_vm_logon_acceptance.ps1 -Mode $mode -ConfirmDisposableVM
+            if ($LASTEXITCODE -ne 2 -or ($output -join '') -notmatch 'BLOCKED: not_interactive_ci') {
+              throw 'Interactive VM harness failed closed-CI assertion'
+            }
+            if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { throw 'CI created an interactive test task' }
+          }
+          Write-Output 'PASS: PowerShell parsed, all interactive VM modes denied in CI without task registration'
 
   windows-core-candidate:
     runs-on: windows-latest
