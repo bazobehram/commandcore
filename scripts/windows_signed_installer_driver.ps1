@@ -69,7 +69,9 @@ try {
     $deadline = (Get-Date).AddSeconds($deadlineSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
+            $stage = 'parse_worker_report'
             $report = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
+            $stage = 'evaluate_worker_report'
             $accepted = $report.status -eq 'PASS' -and $report.non_admin -eq $true
             if ($OnlyTask -or $OnlyCredential) {
                 $accepted = $accepted -and $report.task_probe -eq $true
@@ -79,6 +81,13 @@ try {
                     $report.unchanged_after_denial -eq $true
             }
             if (!$accepted) {
+                if (!$OnlyTask -and !$OnlyCredential -and $report.status -eq 'PASS') {
+                    foreach ($gate in @('repeat_denied', 'upgrade_without_identity_denied', 'unchanged_after_denial')) {
+                        if ($report.PSObject.Properties.Name -notcontains $gate -or $report.$gate -ne $true) {
+                            Write-Output ('CI_SIGNED_INSTALL_MISSING_GATE:' + $gate)
+                        }
+                    }
+                }
                 if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport',
                     'repeat_install_snapshot', 'repeat_install_denial', 'unauthorized_upgrade_denial', 'repeat_install_unchanged', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
                     $stage = 'worker_' + $report.stage
