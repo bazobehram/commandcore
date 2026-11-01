@@ -136,9 +136,7 @@ def main() -> int:
         crl_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         crl_thread = threading.Thread(target=crl_server.serve_forever, daemon=True)
         crl_url = f"http://127.0.0.1:{crl_server.server_port}/ci.crl"
-        ca_path, cert_path, key_path = create_tls_files(
-            Path(tls_name), crl_url=crl_url
-        )
+        ca_path, cert_path, key_path = create_tls_files(Path(tls_name), crl_url=crl_url)
         shutil.copyfile(Path(tls_name) / "ci.crl", feed / "ci.crl")
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
