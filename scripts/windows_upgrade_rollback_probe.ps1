@@ -33,6 +33,8 @@ $launcher = Join-Path $root 'run-agent.ps1'
 Set-Content -LiteralPath $launcher -Value '# disposable prior launcher bytes' -NoNewline -ErrorAction Stop
 $priorLauncherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash
 $oldXml = '<Task xmlns="urn:commandcore:ci" version="1"/>'
+$script:sawTaskLookup = $false
+$script:sawTaskExport = $false
 $script:taskWasStopped = $false
 $script:taskRestoreObserved = $false
 $script:taskRestarted = $false
@@ -42,6 +44,7 @@ $script:injectedMutation = $false
 function Get-ScheduledTask {
     [CmdletBinding()]
     param([string]$TaskName)
+    $script:sawTaskLookup = $true
     return [pscustomobject]@{
         Description = 'Managed by CommandCore user installer'
         Principal = [pscustomobject]@{ UserId = $identity.Name; LogonType = 'Interactive'; RunLevel = 'Limited' }
@@ -58,6 +61,7 @@ function Get-ScheduledTask {
 function Export-ScheduledTask {
     [CmdletBinding()]
     param([string]$TaskName)
+    $script:sawTaskExport = $true
     return $oldXml
 }
 function Stop-ScheduledTask {
@@ -102,6 +106,10 @@ try {
         $injectedFailure = $failure -eq 'CI injected task registration failure after attempted mutation'
         $rawId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
         if ($rawId -match '^[A-Za-z0-9_]{1,80}$') { $failureId = $rawId }
+        if ($failureId -eq 'none') {
+            $typeName = [string]$_.Exception.GetType().Name
+            if ($typeName -match '^[A-Za-z0-9_]{1,80}$') { $failureId = $typeName }
+        }
         $stack = [string]$_.ScriptStackTrace
         if ($stack -match '(?i)windows\.ps1:\s*line\s*([0-9]{1,3})') {
             $failureLine = [int]$Matches[1]
@@ -134,6 +142,7 @@ try {
 } catch {
     # Emit bounded CI diagnostics only; never raw exception text or paths.
     @{status='FAIL'; phase=$phase; category=$failureCategory; error_id=$failureId; source_line=$failureLine;
+        looked_up=$script:sawTaskLookup; exported=$script:sawTaskExport;
         injected=$script:injectedMutation; restored=$script:taskRestoreObserved;
         restarted=$script:taskRestarted} | ConvertTo-Json -Compress
 } finally {
