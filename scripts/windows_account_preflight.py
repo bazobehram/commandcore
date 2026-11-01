@@ -6,14 +6,21 @@ The same PowerShell driver is used by the signed installer acceptance job.
 
 from __future__ import annotations
 
+import http.server
 import os
 import re
 import secrets
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from windows_signed_installer_smoke import create_tls_files
 
 
 def fixture_env() -> dict[str, str]:
@@ -24,7 +31,14 @@ def fixture_env() -> dict[str, str]:
     return env
 
 
-def run_driver(driver: Path, root: Path, mode: str, *, timeout: int) -> bool:
+def run_driver(
+    driver: Path,
+    root: Path,
+    mode: str,
+    *,
+    timeout: int,
+    origin: str = "https://localhost",
+) -> bool:
     env = fixture_env()
     name = "cc" + secrets.token_hex(5)
     result = subprocess.run(
@@ -39,7 +53,7 @@ def run_driver(driver: Path, root: Path, mode: str, *, timeout: int) -> bool:
             "-FixtureRoot",
             str(root),
             "-Origin",
-            "https://localhost",
+            origin,
             mode,
         ],
         env=env,
@@ -63,6 +77,7 @@ def run_driver(driver: Path, root: Path, mode: str, *, timeout: int) -> bool:
         "CI_TASK_LAST_RESULT",
         "CI_TASK_STATE",
         "CI_TASK_DIAGNOSTIC",
+        "CI_HTTPS_PREFLIGHT_CURL_EXIT",
     ):
         found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\s*$", result.stdout)
         if found:
@@ -92,7 +107,74 @@ def main() -> int:
         if not run_driver(driver, fixture, "-OnlyCredential", timeout=40):
             return 1
     print("PASS: disposable Windows standard-user credential process/cleanup")
+    # A real localhost HTTPS server isolates Schannel/curl failures from the
+    # signed installer and avoids rebuilding the native Rust Agent to diagnose.
+    with (
+        tempfile.TemporaryDirectory(prefix="commandcore-https-preflight-", dir=root)
+        as fixture_name,
+        tempfile.TemporaryDirectory(prefix="commandcore-https-private-") as tls_name,
+    ):
+        fixture = Path(fixture_name)
+        feed = fixture / "feed"
+        feed.mkdir()
+        (fixture / "installers").mkdir()
+        (fixture / "result").mkdir()
+        (feed / "test.txt").write_text("commandcore-ci-https-ok", encoding="utf-8")
+        shutil.copyfile(
+            Path(__file__).resolve().with_name("windows_https_preflight_worker.ps1"),
+            fixture / "installers" / "worker.ps1",
+        )
+        ca_path, cert_path, key_path = create_tls_files(Path(tls_name))
+        handler = lambda *args, **kwargs: SilentHandler(
+            *args, directory=str(feed), **kwargs
+        )
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(str(cert_path), str(key_path))
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thumbprint = (
+            x509.load_pem_x509_certificate(ca_path.read_bytes())
+            .fingerprint(hashes.SHA1())
+            .hex()
+        )
+        trusted = False
+        thread.start()
+        try:
+            add = subprocess.run(
+                ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            if add.returncode != 0:
+                print("FAIL: localhost_tls_trust_setup")
+                return 1
+            trusted = True
+            origin = f"https://localhost:{server.server_port}"
+            if not run_driver(
+                driver, fixture, "-OnlyCredential", timeout=40, origin=origin
+            ):
+                return 1
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+            if trusted:
+                subprocess.run(
+                    ["certutil.exe", "-delstore", "Root", thumbprint],
+                    capture_output=True,
+                    timeout=15,
+                    check=False,
+                )
+    print("PASS: standard-user localhost HTTPS curl transport")
     return 0
+
+
+class SilentHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *_args) -> None:
+        pass
 
 
 if __name__ == "__main__":
