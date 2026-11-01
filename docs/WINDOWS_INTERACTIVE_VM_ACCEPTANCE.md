@@ -49,10 +49,13 @@ After the desktop appears:
 pwsh -NoProfile -File ./scripts/windows_interactive_vm_logon_acceptance.ps1 -Mode Verify -ConfirmDisposableVM
 ~~~
 
-The verifier requires a matching unique nonce, exact user SID, non-admin
-process and non-zero GUI session, a proof created after registration, and a
-successful Task Scheduler last execution. This verifies that a harmless
-task **executed after the actual login**; it does not test real Agent startup.
+The verifier requires a matching unique nonce, exact user SID, a **different
+Windows logon SID from the Prepare token** that also matches the newly signed-in
+user, non-admin process and non-zero GUI session, a proof created after
+registration, and successful Task Scheduler last execution. Manually starting
+the task in the original session therefore cannot pass the logon identity gate.
+This verifies that a harmless task executed after a real new login; it does not
+test real Agent startup or eliminate the need to follow the no-manual-start rule.
 
 ### 3. Optional reboot path
 
