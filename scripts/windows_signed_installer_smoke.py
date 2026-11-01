@@ -164,7 +164,9 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         }
         if hints and hints[-1] in allowed_hints:
             print("FAIL: windows_installer_failure_hint=" + hints[-1])
-        numbers = re.findall(r"(?m)^CI_INSTALLER_SOURCE_LINE:([0-9]{1,3})\s*$", process.stdout)
+        numbers = re.findall(
+            r"(?m)^CI_INSTALLER_SOURCE_LINE:([0-9]{1,3})\s*$", process.stdout
+        )
         if numbers and 0 < int(numbers[-1]) < 1000:
             print("FAIL: windows_installer_source_line=" + numbers[-1])
         if safe_stage == "create_user":
