@@ -91,6 +91,9 @@ try {
                 if ($report.hint -in $allowedHints) {
                     Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
                 }
+                if ($report.installer_line -is [int] -and $report.installer_line -gt 0 -and $report.installer_line -lt 1000) {
+                    Write-Output ('CI_INSTALLER_SOURCE_LINE:' + $report.installer_line)
+                }
                 throw 'Standard-user signed installer failed its assertions.'
             }
             if ($OnlyTask) {
