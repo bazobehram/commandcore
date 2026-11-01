@@ -117,6 +117,14 @@ try {
                 if ($report.hint -in $allowedHints) {
                     Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
                 }
+                if ($report.stage -eq 'upgrade_rollback_simulation') {
+                    if ($report.rollback_phase -in @('none', 'preconditions', 'signed_upgrade', 'restore', 'hashes')) {
+                        Write-Output ('CI_ROLLBACK_PHASE:' + $report.rollback_phase)
+                    }
+                    if ($report.rollback_category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'unexpected_failure')) {
+                        Write-Output ('CI_ROLLBACK_CATEGORY:' + $report.rollback_category)
+                    }
+                }
                 if ($report.missing_command -in @('Get_ScheduledTask', 'Get_Command', 'curl_exe', 'Get_FileHash', 'Get_ReleaseFile', 'Get_ItemProperty', 'Set_Acl', 'New_Item', 'ConvertFrom_Json', 'Get_Content', 'Remove_Item')) {
                     Write-Output ('CI_INSTALLER_MISSING_COMMAND:' + $report.missing_command)
                 }
