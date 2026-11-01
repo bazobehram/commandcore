@@ -166,7 +166,9 @@ try {
         if ($probeResult.source_line -is [int] -and $probeResult.source_line -gt 0 -and $probeResult.source_line -lt 500) {
             $rollbackSourceLine = [int]$probeResult.source_line
         }
-        $rollbackFlags = [string]([int]($probeResult.injected -eq $true)) + [string]([int]($probeResult.restored -eq $true)) + [string]([int]($probeResult.restarted -eq $true))
+        $rollbackFlags = [string]([int]($probeResult.looked_up -eq $true)) + [string]([int]($probeResult.exported -eq $true)) +
+            [string]([int]($probeResult.injected -eq $true)) + [string]([int]($probeResult.restored -eq $true)) +
+            [string]([int]($probeResult.restarted -eq $true))
         throw 'Disposable signed upgrade rollback simulation failed.'
     }
     if ($probeResult.task_restored -ne $true -or $probeResult.activation_unchanged -ne $true -or
