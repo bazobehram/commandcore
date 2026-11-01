@@ -186,9 +186,7 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     # Ed25519 validation. The modified verifier must fail its pinned SHA-256
     # before PowerShell ever attempts to execute it.
     tampered = {**manifest, "version": "0.9.0-rc2"}
-    (dest / "manifest-tampered.json").write_text(
-        json.dumps(tampered), encoding="utf-8"
-    )
+    (dest / "manifest-tampered.json").write_text(json.dumps(tampered), encoding="utf-8")
     (feed / "tampered-verifier.exe").write_bytes(artifact.read_bytes() + b"\x00")
     package(manifest_path, public, output, origin + "/releases/agent/manifest.json")
 
