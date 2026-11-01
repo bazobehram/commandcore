@@ -130,7 +130,7 @@ try {
                     if ($report.rollback_source_line -is [int] -and $report.rollback_source_line -gt 0 -and $report.rollback_source_line -lt 500) {
                         Write-Output ('CI_ROLLBACK_SOURCE_LINE:' + $report.rollback_source_line)
                     }
-                    if ($report.rollback_flags -match '^[01]{3}$') {
+                    if ($report.rollback_flags -match '^[01]{5}$') {
                         Write-Output ('CI_ROLLBACK_FLAGS:' + $report.rollback_flags)
                     }
                 }
