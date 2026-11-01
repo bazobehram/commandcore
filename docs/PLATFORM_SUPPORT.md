@@ -8,6 +8,13 @@ interactive login/reboot acceptance requires the separately gated
 The offline harness tests only a harmless task action, **not** real Agent
 startup, enrollment, reconnect or upgrade. Windows remains Preview.
 
+Disposable Windows signed-installer CI additionally verifies negative safety paths:
+normal-user repeat installation and attempted `-Upgrade` without the existing
+identity/interactive task are rejected, with the signed release binary,
+manifest, activation metadata and install marker unchanged. This is **not** an
+upgrade success/rollback test; those remain unverified until an isolated
+end-to-end Windows installation and interactive Task Scheduler lifecycle pass.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |

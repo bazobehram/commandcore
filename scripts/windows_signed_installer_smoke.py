@@ -2,8 +2,10 @@
 
 Creates a temporary local HTTPS CA, signed native feed, and disposable
 non-administrator Windows user. Never points at a production control plane.
-The only installer switches are -NoEnroll -NoTask; interactive Scheduled Task,
-enrollment and upgrade lifecycle remain separate release gates.
+The installer runs with -NoEnroll -NoTask. We also assert that a repeat
+installation and a forced upgrade without identity/task fail without changing
+any installed binaries or metadata. Genuine interactive Scheduled Task,
+enrollment and authenticated upgrade lifecycle remain separate release gates.
 """
 
 from __future__ import annotations
@@ -201,6 +203,16 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         stages = re.findall(r"(?m)^CI_INSTALL_STAGE:([a-z_]+)\s*$", process.stdout)
         safe_stage = stages[-1] if stages else "unknown"
         print("FAIL: windows_installer_stage=" + safe_stage)
+        gate_failures = re.findall(
+            r"(?m)^CI_SIGNED_INSTALL_MISSING_GATE:([a-z_]+)\s*$", process.stdout
+        )
+        for gate in gate_failures:
+            if gate in {
+                "repeat_denied",
+                "upgrade_without_identity_denied",
+                "unchanged_after_denial",
+            }:
+                print("FAIL: windows_installer_missing_gate=" + gate)
         hints = re.findall(r"(?m)^CI_WORKER_FAILURE_HINT:([a-z_]+)\s*$", process.stdout)
         allowed_hints = {
             "other",
@@ -352,7 +364,10 @@ def main() -> int:
                         "non_admin_install_user": True,
                         "no_enroll": True,
                         "no_task": True,
-                        "scope": "installation only; reboot/task/enrollment remain gated",
+                        "repeat_install_denial": True,
+                        "upgrade_without_identity_denial": True,
+                        "installed_artifacts_unchanged": True,
+                        "scope": "no-enroll/no-task signed install and negative repeat/upgrade; genuine upgrade, reboot, task startup and enrollment remain gated",
                     }
                 )
             )
