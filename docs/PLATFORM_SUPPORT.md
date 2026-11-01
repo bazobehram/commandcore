@@ -15,6 +15,13 @@ manifest, activation metadata and install marker unchanged. This is **not** an
 upgrade success/rollback test; those remain unverified until an isolated
 end-to-end Windows installation and interactive Task Scheduler lifecycle pass.
 
+The same disposable Windows native-installer CI fixture also fetches a locally
+served manifest whose Ed25519 signature no longer matches its contents and a
+modified verifier binary whose SHA-256 no longer matches the packaged pin.
+Both must be rejected before creating any Agent installation or identity state;
+these tests cover **integrity fail-closed behavior**, not a successful version
+upgrade or post-activation rollback.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |
