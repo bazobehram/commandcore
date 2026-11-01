@@ -51,8 +51,16 @@ $taskDescription = 'Managed by CommandCore user installer'
 if ((Test-Path -LiteralPath $root) -and !(Test-Path -LiteralPath $marker -PathType Leaf)) {
     throw 'Refusing an unrelated installation directory.'
 }
-$oldTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if ($oldTask -and $oldTask.Description -ne $taskDescription) { throw 'Refusing an unrelated scheduled task.' }
+# A no-task installation never reads or modifies Scheduled Tasks. This
+# permits a standard-user signed-install smoke without requiring that optional
+# Windows module; normal interactive installations still enforce task ownership.
+$oldTask = $null
+if (!$NoTask) {
+    $oldTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($oldTask -and $oldTask.Description -ne $taskDescription) {
+        throw 'Refusing an unrelated scheduled task.'
+    }
+}
 $previous = if (Test-Path -LiteralPath $activePath) { Get-Content -LiteralPath $activePath -Raw } else { $null }
 if ($previous -and (!$Upgrade -or $NoTask -or !(Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json')))) {
     throw 'Use -Upgrade with the existing identity and interactive logon task.'
