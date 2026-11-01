@@ -131,16 +131,47 @@ try {
     & $verifier verify-release $manifest --public-key $ReleasePublicKey --platform windows --architecture $arch --artifact $artifact | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Artifact integrity verification failed.' }
     foreach ($path in @($root, $stateRoot)) {
-        New-Item -ItemType Directory -Path $path -Force | Out-Null
-        $acl = [Security.AccessControl.DirectorySecurity]::new()
-        $acl.SetAccessRuleProtection($true, $false)
-        $acl.SetOwner($identity.User)
-        foreach ($sid in @($identity.User.Value, 'S-1-5-18')) {
-            $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
-                'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-            $acl.AddAccessRule($rule)
+        if ($previous) {
+            # Existing, properly managed directories must keep their secured
+            # owner/DACL intact. Reapplying SetOwner/Set-Acl on an upgrade can
+            # require privileges unavailable to the normal user. Fail closed
+            # on any drift rather than elevating or silently weakening ACLs.
+            if (!(Test-Path -LiteralPath $path -PathType Container)) {
+                throw 'Upgrade requires existing protected Agent directories.'
+            }
+            $acl = Get-Acl -LiteralPath $path -ErrorAction Stop
+            if (!$acl.AreAccessRulesProtected -or
+                [string]$acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $identity.User.Value) {
+                throw 'Managed Agent directory ownership or inheritance changed.'
+            }
+            $allowedSids = @($identity.User.Value, 'S-1-5-18')
+            $fullControl = [Security.AccessControl.FileSystemRights]::FullControl
+            $verifiedSids = @{}
+            foreach ($rule in $acl.GetAccessRules($true, $false, [Security.Principal.SecurityIdentifier])) {
+                $sid = [string]$rule.IdentityReference.Value
+                if ($rule.IsInherited -or $sid -notin $allowedSids -or
+                    $rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+                    ($rule.FileSystemRights -band $fullControl) -ne $fullControl) {
+                    throw 'Unexpected managed Agent directory permissions.'
+                }
+                $verifiedSids[$sid] = $true
+            }
+            if (!$verifiedSids.ContainsKey($identity.User.Value) -or
+                !$verifiedSids.ContainsKey('S-1-5-18')) {
+                throw 'Managed Agent directory permissions are incomplete.'
+            }
+        } else {
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+            $acl = [Security.AccessControl.DirectorySecurity]::new()
+            $acl.SetAccessRuleProtection($true, $false)
+            $acl.SetOwner($identity.User)
+            foreach ($sid in @($identity.User.Value, 'S-1-5-18')) {
+                $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
+                    'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+                $acl.AddAccessRule($rule)
+            }
+            Set-Acl -LiteralPath $path -AclObject $acl
         }
-        Set-Acl -LiteralPath $path -AclObject $acl
     }
     Set-Content -LiteralPath $marker -Value 'commandcore-agent'
     $release = Join-Path $root ('releases\' + $metadata.version)
