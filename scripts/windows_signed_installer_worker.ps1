@@ -28,6 +28,20 @@ try {
     $env:APPDATA = Join-Path $profile 'AppData\Roaming'
     $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'
     $env:TMP = $env:TEMP
+    # A credential-launched CI process can inherit the runner's PSModulePath.
+    # Resolve built-in PowerShell modules from trusted machine locations only,
+    # rather than the runner account's (potentially inaccessible) user modules.
+    $systemModules = Join-Path $PSHOME 'Modules'
+    $machineModules = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
+    $env:PSModulePath = $systemModules + ';' + $machineModules
+    Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+    Import-Module Microsoft.PowerShell.Management -ErrorAction Stop
+    Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+    foreach ($cmd in @('Get-FileHash', 'ConvertFrom-Json', 'Get-Content', 'Set-Acl')) {
+        if (!(Get-Command $cmd -ErrorAction SilentlyContinue)) {
+            throw 'CI standard-user PowerShell module initialization failed.'
+        }
+    }
     if (!(Test-Path -LiteralPath $env:LOCALAPPDATA -PathType Container)) {
         throw 'Disposable standard-user LOCALAPPDATA is missing.'
     }
