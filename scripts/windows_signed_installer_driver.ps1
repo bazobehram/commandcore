@@ -77,7 +77,7 @@ try {
                 $accepted = $accepted -and $report.signed_install -eq $true
             }
             if (!$accepted) {
-                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll')) {
+                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
@@ -96,6 +96,9 @@ try {
                 }
                 if ($report.curl_exit -is [int] -and $report.curl_exit -gt 0 -and $report.curl_exit -lt 256) {
                     Write-Output ('CI_INSTALLER_CURL_EXIT:' + $report.curl_exit)
+                }
+                if ($report.stage -eq 'https_transport' -and $report.curl_exit -is [int] -and $report.curl_exit -ge 0 -and $report.curl_exit -lt 256) {
+                    Write-Output ('CI_HTTPS_PREFLIGHT_CURL_EXIT:' + $report.curl_exit)
                 }
                 if ($report.failure_type -match '^[A-Za-z0-9_]{1,64}$') {
                     Write-Output ('CI_INSTALLER_FAILURE_TYPE:' + $report.failure_type)
