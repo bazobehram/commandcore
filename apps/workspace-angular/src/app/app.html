@@ -46,7 +46,7 @@
       <section class="device-rail" aria-label="Connected devices">
         <div class="fleet-hub" [class.hub-working]="anyWorking()" [class.hub-connected]="onlineCount()>0" aria-hidden="true"><div class="hub-head"><img src="/brand/octopus-head.svg?v=octopus-v10" alt=""/></div><span>YOUR CORE</span><i></i></div>
         @if(!devices().length){
-          <button class="machine-empty" (click)="openAdd()"><span class="empty-plus">＋</span><strong>Connect your first device</strong><span>Linux agent · 3 steps</span></button>
+          <button class="machine-empty" (click)="openAdd()"><span class="empty-plus">＋</span><strong>Connect your first device</strong><span>Choose your operating system to get started</span></button>
         }
         @for(d of devices();track d.id;let i=$index){
           <button class="device-tile" [class.active]="selected()===i" (click)="select(i)" [attr.aria-pressed]="selected()===i">
@@ -68,7 +68,6 @@
             <div class="tile-corner">↗</div>
           </button>
         }
-        <button class="device-tile add-tile" (click)="openAdd()"><span class="giant-plus">＋</span><strong>Add a device</strong><small>Expand your workspace</small></button>
       </section>
       @if(selectedDevice();as d){
       <section class="workspace-frame">
@@ -77,7 +76,7 @@
           <div class="frame-controls"><button class="permission-tag permission-shortcut" (click)="show('access')" title="Manage device permissions">Access: {{levelName(effectivePermission())}} ↗</button></div>
         </div>
         <nav class="workspace-tabs" aria-label="Device workspace sections">
-          @for(tab of tabs;track tab.key){<button [class.current]="view()===tab.key" (click)="show(tab.key)"><span class="tab-icon">{{tab.icon}}</span>{{tab.label}}</button>}
+          @for(tab of tabs;track tab.key){<button [class.current]="view()===tab.key" [attr.aria-current]="view()===tab.key?'page':null" (click)="show(tab.key)"><span class="tab-icon">{{tab.icon}}</span>{{tab.label}}</button>}
         </nav>
         <div class="frame-body">
           @if(view()==='workspace'){
@@ -271,7 +270,7 @@
       @for(item of ['Workspace','Hardware','Browser','Activity','Access','Files','Add device'];track item){@if(!commandQuery()||item.toLowerCase().includes(commandQuery().toLowerCase())){<button (click)="runPalette(item)"><span class="palette-glyph">↗</span>{{item}} <span>↵</span></button>}}
       <div class="palette-footer">COMMANDCORE / NAVIGATE</div></div>
    } @else if(overlay()==='add'){
-    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
+    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" (click)="overlay.set('none')" aria-label="Close Add Device dialog">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
       <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>Run this in the new Linux machine's terminal as your regular user.</p><div class="command-copy"><code>{{cmd('full')}}</code><button [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
         <p class="installer-note">{{!installChecked()?'Checking signed installer…':helperAvailable()?'Signed Full Control installer is available.':'Signed helper is not published. Full Control installation is unavailable; use the Standard-only option below.'}}</p>
         <details><summary>Standard agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button (click)="copy(cmd('standard'))">Copy</button></div></details>
