@@ -74,10 +74,13 @@ try {
             if ($OnlyTask -or $OnlyCredential) {
                 $accepted = $accepted -and $report.task_probe -eq $true
             } else {
-                $accepted = $accepted -and $report.signed_install -eq $true
+                $accepted = $accepted -and $report.signed_install -eq $true -and
+                    $report.repeat_denied -eq $true -and $report.upgrade_without_identity_denied -eq $true -and
+                    $report.unchanged_after_denial -eq $true
             }
             if (!$accepted) {
-                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
+                if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport',
+                    'repeat_install_snapshot', 'repeat_install_denial', 'unauthorized_upgrade_denial', 'repeat_install_unchanged', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
