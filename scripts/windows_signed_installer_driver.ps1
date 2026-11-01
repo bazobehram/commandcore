@@ -91,6 +91,9 @@ try {
                 if ($report.hint -in $allowedHints) {
                     Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
                 }
+                if ($report.missing_command -in @('Get_ScheduledTask', 'Get_Command', 'curl_exe', 'Get_FileHash', 'Get_ReleaseFile', 'Get_ItemProperty', 'Set_Acl', 'New_Item', 'ConvertFrom_Json', 'Get_Content', 'Remove_Item')) {
+                    Write-Output ('CI_INSTALLER_MISSING_COMMAND:' + $report.missing_command)
+                }
                 if ($report.installer_line -is [int] -and $report.installer_line -gt 0 -and $report.installer_line -lt 1000) {
                     Write-Output ('CI_INSTALLER_SOURCE_LINE:' + $report.installer_line)
                 }
