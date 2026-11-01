@@ -65,6 +65,133 @@ $previous = if (Test-Path -LiteralPath $activePath) { Get-Content -LiteralPath $
 if ($previous -and (!$Upgrade -or $NoTask -or !(Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json')))) {
     throw 'Use -Upgrade with the existing identity and interactive logon task.'
 }
+# A failed upgrade must be able to restore the *exact* managed task; a
+# description string alone is never sufficient proof of task ownership.
+if ($oldTask -and !$previous) { throw 'Refusing an orphaned managed scheduled task.' }
+$oldTaskXml = $null
+if ($previous) {
+    if (!$oldTask) { throw 'Upgrade requires an existing managed interactive logon task.' }
+    $allowedUsers = @($identity.Name, $identity.User.Value, $env:USERNAME,
+        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+    if ([string]$oldTask.Principal.UserId -notin $allowedUsers -or
+        [string]$oldTask.Principal.LogonType -ne 'Interactive' -or
+        [string]$oldTask.Principal.RunLevel -ne 'Limited' -or
+        $oldTask.Triggers.Count -ne 1 -or
+        $oldTask.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
+        [string]$oldTask.Triggers[0].UserId -notin $allowedUsers -or
+        $oldTask.Actions.Count -ne 1 -or
+        [string]$oldTask.Actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$temp = Join-Path ([IO.Path]::GetTempPath()) ('commandcore-install-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $temp | Out-Null
+$activated = $false
+$complete = $false
+try {
+    $verifier = Join-Path $temp 'release-verifier.exe'
+    Get-ReleaseFile $VerifierUrl $verifier
+    if ((Get-FileHash -LiteralPath $verifier -Algorithm SHA256).Hash.ToLowerInvariant() -cne $VerifierSha256) {
+        throw 'Native verifier checksum mismatch; nothing was executed.'
+    }
+    $manifest = Join-Path $temp 'manifest.json'
+    Get-ReleaseFile $ManifestUrl $manifest
+    $metadataText = & $verifier verify-release $manifest --public-key $ReleasePublicKey --platform windows --architecture $arch
+    if ($LASTEXITCODE -ne 0) { throw 'Manifest signature/metadata verification failed.' }
+    $metadata = $metadataText | ConvertFrom-Json
+    if ($previous) {
+        $oldVersion = ($previous | ConvertFrom-Json).version
+        & $verifier verify-release $manifest --public-key $ReleasePublicKey --platform windows --architecture $arch --newer-than $oldVersion | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Upgrade must be newer than the installed release.' }
+    }
+    # The native verifier is this release's Agent executable. Bind selection to
+    # the packaged pin, preventing a replayed older signed manifest from choosing
+    # a different Agent on a clean machine. Download a newer packaged installer
+    # for a newer release; existing identity remains untouched during upgrade.
+    if ($metadata.sha256 -cne $VerifierSha256) { throw 'Manifest differs from this packaged release. Download the current installer.' }
+    $artifact = $verifier
+    & $verifier verify-release $manifest --public-key $ReleasePublicKey --platform windows --architecture $arch --artifact $artifact | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Artifact integrity verification failed.' }
+    foreach ($path in @($root, $stateRoot)) {
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+        $acl = [Security.AccessControl.DirectorySecurity]::new()
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.SetOwner($identity.User)
+        foreach ($sid in @($identity.User.Value, 'S-1-5-18')) {
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),
+                'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+            $acl.AddAccessRule($rule)
+        }
+        Set-Acl -LiteralPath $path -AclObject $acl
+    }
+    Set-Content -LiteralPath $marker -Value 'commandcore-agent'
+    $release = Join-Path $root ('releases\' + $metadata.version)
+    $binary = Join-Path $release 'commandcore-agent.exe'
+    if (Test-Path -LiteralPath $release) { throw 'Version already exists; refusing overwrite.' }
+    New-Item -ItemType Directory -Path $release | Out-Null
+    Copy-Item -LiteralPath $artifact -Destination $binary
+    Copy-Item -LiteralPath $manifest -Destination (Join-Path $release 'manifest.json')
+    if (!$NoEnroll -and !(Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json'))) {
+        & $binary enroll $Server --state (Join-Path $stateRoot 'agent.json') --no-connect
+        if ($LASTEXITCODE -ne 0) { throw 'Enrollment did not complete.' }
+    }
+    $next = Join-Path $root 'active.new.json'
+    @{version=$metadata.version; binary=$binary; state=(Join-Path $stateRoot 'agent.json')} | ConvertTo-Json | Set-Content -LiteralPath $next
+    if ($oldTask) { Stop-ScheduledTask -TaskName $taskName }
+    Move-Item -LiteralPath $next -Destination $activePath -Force
+    $activated = $true
+    if (!$NoTask) {
+        $launcher = Join-Path $root 'run-agent.ps1'
+        @'
+$ErrorActionPreference = 'Stop'
+$config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'active.json') -Raw | ConvertFrom-Json
+$resolved = [IO.Path]::GetFullPath($config.binary)
+$allowed = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'releases')) + [IO.Path]::DirectorySeparatorChar
+if (!$resolved.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid installed executable path.' }
+& $resolved run --state $config.state
+exit $LASTEXITCODE
+'@ | Set-Content -LiteralPath $launcher
+        # This applies only to the child PowerShell process executing our owned
+        # launcher. Machine/user execution policy is never changed.
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher + '"')
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
+        $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $taskName -Description $taskDescription -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -Force | Out-Null
+        if (Test-Path -LiteralPath (Join-Path $stateRoot 'agent.json')) {
+            $activationTime = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            Start-ScheduledTask -TaskName $taskName
+            $deadline = (Get-Date).AddSeconds(45)
+            $healthy = $false
+            while ((Get-Date) -lt $deadline) {
+                try {
+                    $health = Get-Content -LiteralPath (Join-Path $stateRoot 'health.json') -Raw | ConvertFrom-Json
+                    if ($health.connected -eq $true -and $health.version -eq $metadata.version -and $health.observed_at_unix -gt $activationTime) { $healthy = $true; break }
+                } catch { }
+                Start-Sleep -Milliseconds 500
+            }
+            if (!$healthy) { throw 'No fresh authenticated connection health.' }
+        }
+    }
+    $complete = $true
+    Write-Output ('Installed signed user Agent ' + $metadata.version + '. FULL_CONTROL remains disabled.')
+} finally {
+    if ($activated -and !$complete -and $previous) {
+        if (!$NoTask) { Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue }
+        Set-Content -LiteralPath $activePath -Value $previous
+        if ($oldTask) { Start-ScheduledTask -TaskName $taskName }
+        Write-Warning 'Installation failed; restored the previous Agent configuration.'
+    }
+    $resolvedTemp = [IO.Path]::GetFullPath($temp)
+    $allowedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (!$resolvedTemp.StartsWith($allowedTemp, [StringComparison]::OrdinalIgnoreCase) -or !(Split-Path $resolvedTemp -Leaf).StartsWith('commandcore-install-')) { throw 'Unsafe temporary cleanup path.' }
+    Remove-Item -LiteralPath $resolvedTemp -Recurse -Force
+}
+ -or
+        !([string]$oldTask.Actions[0].Arguments).Contains((Join-Path $root 'run-agent.ps1'))) {
+        throw 'Refusing to upgrade an unowned or unexpected scheduled task.'
+    }
+    $oldTaskXml = Export-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace($oldTaskXml)) {
+        throw 'Managed task backup required before upgrade.'
+    }
+}
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('commandcore-install-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 $activated = $false
