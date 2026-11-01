@@ -73,10 +73,49 @@ try {
     & $config.binary --version | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Installed native Agent is not runnable.' }
     $stage = 'no_enroll'
-    if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'CommandCore\State\agent.json')) {
+    $enrollmentState = Join-Path $env:LOCALAPPDATA 'CommandCore\State\agent.json'
+    if (Test-Path -LiteralPath $enrollmentState) {
         throw 'Unexpected enrollment during no-enroll test.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true} |
+    # Negative safety acceptance on the exact installed signed release, on the
+    # same disposable standard-user profile. An unattended rerun or an upgrade
+    # without the required identity/task must fail before any mutation.
+    $stage = 'repeat_install_snapshot'
+    $releaseDir = Split-Path -Parent $config.binary
+    $installedManifest = Join-Path $releaseDir 'manifest.json'
+    $markerPath = Join-Path $root '.commandcore-install'
+    $activeBefore = (Get-FileHash -LiteralPath $active -Algorithm SHA256).Hash
+    $binaryBefore = (Get-FileHash -LiteralPath $config.binary -Algorithm SHA256).Hash
+    $manifestBefore = (Get-FileHash -LiteralPath $installedManifest -Algorithm SHA256).Hash
+    $markerBefore = (Get-FileHash -LiteralPath $markerPath -Algorithm SHA256).Hash
+    $releaseCountBefore = @(Get-ChildItem -LiteralPath (Join-Path $root 'releases') -Directory).Count
+    $stage = 'repeat_install_denial'
+    $repeatDenied = $false
+    try {
+        & $installer -Server $Origin -NoEnroll -NoTask | Out-Null
+    } catch {
+        $repeatDenied = ([string]$_.Exception.Message -eq 'Use -Upgrade with the existing identity and interactive logon task.')
+    }
+    if (!$repeatDenied) { throw 'Repeated signed installation was not safely rejected.' }
+    $stage = 'unauthorized_upgrade_denial'
+    $upgradeDenied = $false
+    try {
+        & $installer -Server $Origin -NoEnroll -NoTask -Upgrade | Out-Null
+    } catch {
+        $upgradeDenied = ([string]$_.Exception.Message -eq 'Use -Upgrade with the existing identity and interactive logon task.')
+    }
+    if (!$upgradeDenied) { throw 'Upgrade without installed identity and task was not safely rejected.' }
+    $stage = 'repeat_install_unchanged'
+    if ((Get-FileHash -LiteralPath $active -Algorithm SHA256).Hash -cne $activeBefore -or
+        (Get-FileHash -LiteralPath $config.binary -Algorithm SHA256).Hash -cne $binaryBefore -or
+        (Get-FileHash -LiteralPath $installedManifest -Algorithm SHA256).Hash -cne $manifestBefore -or
+        (Get-FileHash -LiteralPath $markerPath -Algorithm SHA256).Hash -cne $markerBefore -or
+        @(Get-ChildItem -LiteralPath (Join-Path $root 'releases') -Directory).Count -ne $releaseCountBefore -or
+        (Test-Path -LiteralPath (Join-Path $root 'active.new.json')) -or
+        (Test-Path -LiteralPath $enrollmentState)) {
+        throw 'Rejected repeat or upgrade modified the installed release.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
