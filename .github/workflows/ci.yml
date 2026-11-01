@@ -181,6 +181,7 @@ jobs:
             if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { throw 'CI created an interactive test task' }
           }
           Write-Output 'PASS: PowerShell parsed, all interactive VM modes denied in CI without task registration'
+          exit 0
 
   windows-core-candidate:
     runs-on: windows-latest
