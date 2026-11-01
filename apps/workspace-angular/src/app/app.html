@@ -219,7 +219,7 @@
                     <div class="scope-upgrade"><span class="scope-upgrade-symbol">↗</span><div><strong>Full Control is ready on this device</strong><p>The only detected blocker is your current {{levelName(oauthProfile())}} OAuth session. Reconnect with Full Control scope, then confirm the device permission here.</p></div><button (click)="beginFullOAuthReconnection()">Authorize Full Control</button></div>
                   } @else if(!localFullReady()){
                     <p class="local-setup-note">This device cannot currently enable Full Control. Local ceiling: <strong>{{levelName(localCeiling())}}</strong>. Helper: <strong>{{helperReady()?'available':'not ready'}}</strong>. Connection: <strong>{{d.connected?'Online':'Offline'}}</strong>.</p>
-                    <details><summary>Full Control requirements</summary><p>Full Control needs an online Linux agent with an approved local ceiling and healthy privileged helper. The web panel cannot silently raise these local limits. Existing agents should retain their identity.</p><button class="subtle-action" (click)="openAdd()">Linux setup guidance ↗</button></details>
+                    <details><summary>Full Control requirements</summary><p>Full Control needs an online Linux agent with an approved local ceiling and healthy privileged helper. The web panel cannot silently raise these local limits. Existing agents should retain their identity.</p><button class="subtle-action" (click)="openAdd('linux')">Linux setup guidance ↗</button></details>
                   }
                   @if(myGrantNeedsRestore()){<div class="restore-access"><strong>Grant missing for your account</strong><p>The device is still registered. Reconnect your account without reinstalling its agent.</p><button (click)="beginRestoreMyGrant()" [disabled]="permissionBusy()">Restore my access ↗</button></div>}
                 </div>
@@ -271,15 +271,32 @@
       @for(item of ['Workspace','Hardware','Browser','Activity','Access','Files','Add device'];track item){@if(!commandQuery()||item.toLowerCase().includes(commandQuery().toLowerCase())){<button (click)="runPalette(item)"><span class="palette-glyph">↗</span>{{item}} <span>↵</span></button>}}
       <div class="palette-footer">COMMANDCORE / NAVIGATE</div></div>
    } @else if(overlay()==='add'){
-    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
-      <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>Run this in the new Linux machine's terminal as your regular user.</p><div class="command-copy"><code>{{cmd('full')}}</code><button [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
-        <p class="installer-note">{{!installChecked()?'Checking signed installer…':helperAvailable()?'Signed Full Control installer is available.':'Signed helper is not published. Full Control installation is unavailable; use the Standard-only option below.'}}</p>
-        <details><summary>Standard agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button (click)="copy(cmd('standard'))">Copy</button></div></details>
-      </div></div>
-      <div class="setup-step"><span class="step-index">02</span><div><strong>Approve enrollment</strong><p>Open the enrollment link printed on the device, compare the verification code and approve the device.</p><button class="subtle-action" (click)="overlay.set('none');openPending()">Review pending requests ({{pending().length}}) ↗</button></div></div>
-      <div class="setup-step"><span class="step-index">03</span><div><strong>Confirm connection</strong><p>When the device shows Online here, its Agent is connected. Approval alone is not proof of connectivity.</p></div></div>
-      <p class="sheet-disclaimer">Current installation flow supports Linux. Windows installation is not production-ready.</p>
-    </div>
+     <div class="sheet" role="dialog" aria-modal="true" aria-label="Add device">
+       <div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button type="button" class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div>
+       <h2>Add a device<span class="headline-period">.</span></h2>
+       <p>Choose the operating system of the device you want to connect. You can change this selection at any time.</p>
+       <div class="platform-picker" role="group" aria-label="Device operating system">
+         <button type="button" [class.selected]="installPlatform()==='linux'" [attr.aria-pressed]="installPlatform()==='linux'" (click)="installPlatform.set('linux');checkInstall()">Linux <small>Available</small></button>
+         <button type="button" [class.selected]="installPlatform()==='windows'" [attr.aria-pressed]="installPlatform()==='windows'" (click)="installPlatform.set('windows')">Windows <small>Preview</small></button>
+       </div>
+       @if(installPlatform()==='linux'){
+         <p class="platform-intro">Install the signed CommandCore Agent on your Linux device as a regular user. Enrollment requires your explicit approval.</p>
+         <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>Run this on the new Linux machine in its terminal as your regular user.</p><div class="command-copy"><code>{{cmd('full')}}</code><button type="button" [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
+           <p class="installer-note">{{!installChecked()?'Checking signed installer…':helperAvailable()?'Signed Full Control installer is available.':'Signed helper is not published. Full Control installation is unavailable; use the Standard-only option below.'}}</p>
+           <details><summary>Standard agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button type="button" (click)="copy(cmd('standard'))">Copy</button></div></details>
+         </div></div>
+         <div class="setup-step"><span class="step-index">02</span><div><strong>Approve enrollment</strong><p>Open the enrollment link printed on the device, compare the verification code and approve the device.</p><button type="button" class="subtle-action" (click)="overlay.set('none');openPending()">Review pending requests ({{pending().length}}) ↗</button></div></div>
+         <div class="setup-step"><span class="step-index">03</span><div><strong>Confirm connection</strong><p>When the device shows Online here, its Agent is connected. Approval alone is not proof of connectivity.</p></div></div>
+       } @else {
+         <div class="platform-preview" role="status">
+           <strong>Windows installation is in Preview</strong>
+           <p>Windows signed-install tests have passed, but complete first-time enrollment, logon startup, reconnect, update, rollback and uninstall acceptance are not finished. A general-use Windows install command is not available yet.</p>
+           <p>You can connect an available Linux device now, or check the published platform support documentation for Windows progress.</p>
+           <div class="platform-preview-actions"><button type="button" class="subtle-action" (click)="installPlatform.set('linux');checkInstall()">Show Linux instructions</button><a href="https://github.com/bazobehram/commandcore/blob/main/docs/PLATFORM_SUPPORT.md" target="_blank" rel="noopener noreferrer">Platform support ↗</a></div>
+         </div>
+       }
+       <p class="sheet-disclaimer">Only install software from a release you trust. Local permissions and device approval are enforced separately.</p>
+     </div>
    } @else if(overlay()==='pending'){
      <div class="sheet" role="dialog" aria-label="Pending enrollments"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE ENROLLMENT</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Pending approvals<span class="headline-period">.</span></h2>
        @for(item of pending();track item.id){<div class="pending-item"><strong>{{item.metadata?.['display_name']||item.id}}</strong><p>{{item.metadata?.['hostname']||'Unknown hostname'}} · {{item.metadata?.['platform']||'Unknown platform'}} · {{item.metadata?.['architecture']||'Architecture not reported'}}</p><label>Verification code <input [(ngModel)]="typedCode" placeholder="Code from the new device" maxlength="9"/></label><label class="check-label"><input type="checkbox" [(ngModel)]="grantMyself"/> Give my account access</label><label>Initial device permission<select [(ngModel)]="initialPermission"><option value="STANDARD">Standard</option><option value="FULL_CONTROL" [disabled]="!oauthFullReady()">Full Control (requires full OAuth and healthy local helper)</option></select></label><p class="note">Full Control only becomes effective after all backend and locally approved agent checks succeed. Approval alone does not bypass a local ceiling.</p><div class="pending-actions"><button (click)="decide(item,false)">Reject</button><button class="primary-small" (click)="decide(item,true)">Approve device</button></div></div>}

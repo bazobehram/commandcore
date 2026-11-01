@@ -34,7 +34,7 @@ export class App implements OnInit, OnDestroy {
  browserSequence=-1; browserEpoch=0; browserPaused=signal(false); browserPrivateLink=signal(''); 
  overlay=signal<'none'|'add'|'palette'|'confirm'|'pending'|'settings'|'permission-confirm'|'permission-reauthorize'|'grant-confirm'|'restore-confirm'|'audit'>('none');
  commandQuery=signal(''); typedCode=''; grantMyself=true; confirmName=''; confirmation: (()=>Promise<void>)|null=null;
- search=signal(''); helperAvailable=signal(false); installChecked=signal(false);
+ search=signal(''); helperAvailable=signal(false); installChecked=signal(false); installPlatform=signal<'linux'|'windows'>('linux');
  permissionChoice='STANDARD'; userIntent=''; installPrompt:any=null;
  managerError=signal(false); permissionBusy=signal(false); permissionError=signal(''); pendingPermission:{deviceId:string;level:string;expected_profile:string|null;expected_grant:string|null}|null=null; renameValue=''; grantSubject=''; grantLevel='STANDARD'; initialPermission='FULL_CONTROL';
  selectedGrantSubject=''; grantToRemove=''; awaitingGrantRemoval=false;
@@ -284,7 +284,7 @@ export class App implements OnInit, OnDestroy {
   this.message('Private control is ready. Open it to sign in or approve, then resume AI control there.');
  }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)&&this.browserClient()===id&&this.browserEpoch===epoch){this.browserState.set('unavailable');this.browserBusy.set(false);void this.loadBrowserSessions();}if(this.sessionEpoch.isCurrent(sessionVersion))this.message(this.err(e));}}
  async checkInstall(){this.installChecked.set(false);try{const res=await fetch('/install/linux-ready',{method:'HEAD',credentials:'same-origin',cache:'no-store'});this.helperAvailable.set(res.ok);}catch{this.helperAvailable.set(false);}this.installChecked.set(true);}
- openAdd(){this.overlay.set('add');void this.checkInstall();}
+ openAdd(platform?:'linux'|'windows'){const visitor=typeof navigator!=='undefined'&&/Windows/i.test(navigator.userAgent)?'windows':'linux';this.installPlatform.set(platform||visitor);this.overlay.set('add');if(this.installPlatform()==='linux')void this.checkInstall();}
  openPending(){this.initialPermission=this.oauthFullReady()?'FULL_CONTROL':'STANDARD';this.overlay.set('pending');void this.refresh(true);}
  cmd(kind:'full'|'standard'='full'):string{return kind==='full'?'bash -o pipefail -c \x27curl -fsSL '+location.origin+'/install/linux-ready | bash\x27':'curl -fsSL '+location.origin+'/install/linux | sh';}
  async copy(value:string){try{await navigator.clipboard.writeText(value);this.message('Copied to clipboard');}catch{this.message('Copy unavailable. Select the command and copy manually.');}}

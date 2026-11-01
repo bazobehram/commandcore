@@ -247,6 +247,26 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
+  it('keeps Windows Preview instructions separate from Linux install commands', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+
+    component.openAdd('windows');
+    fixture.detectChanges();
+    expect(component.installPlatform()).toBe('windows');
+    expect(fixture.nativeElement.querySelector('.platform-preview')?.textContent).toContain('Preview');
+    expect(fixture.nativeElement.querySelectorAll('.command-copy')).toHaveLength(0);
+
+    const linux: HTMLButtonElement = fixture.nativeElement.querySelector('.platform-picker button:first-child');
+    linux.click();
+    fixture.detectChanges();
+    expect(component.installPlatform()).toBe('linux');
+    expect(fixture.nativeElement.querySelectorAll('.command-copy').length).toBeGreaterThan(0);
+    expect(linux.getAttribute('aria-pressed')).toBe('true');
+    fixture.destroy();
+  });
+
   it('closes the account menu with Escape without signing out', async () => {
     const { requests } = stubApi(loggedInApi);
     const fixture = await mountWorkspace();
