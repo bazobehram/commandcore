@@ -103,6 +103,14 @@ try {
                         Write-Output ('CI_HTTPS_PREFLIGHT_CURL_EXIT:' + $numeric)
                     }
                 }
+                if ($report.stage -eq 'https_transport') {
+                    if ($report.curl_backend -in @('schannel', 'openssl', 'unknown')) {
+                        Write-Output ('CI_HTTPS_CURL_BACKEND:' + $report.curl_backend)
+                    }
+                    if ($report.curl_source -in @('system32', 'git', 'other')) {
+                        Write-Output ('CI_HTTPS_CURL_SOURCE:' + $report.curl_source)
+                    }
+                }
                 if ($report.failure_type -match '^[A-Za-z0-9_]{1,64}$') {
                     Write-Output ('CI_INSTALLER_FAILURE_TYPE:' + $report.failure_type)
                 }
