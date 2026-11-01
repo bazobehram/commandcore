@@ -97,7 +97,7 @@ try {
                 if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport',
                     'tampered_manifest_denial', 'pinned_verifier_denial', 'clean_after_tamper_denial',
                     'repeat_install_snapshot', 'repeat_install_denial', 'unauthorized_upgrade_denial', 'repeat_install_unchanged',
-                    'upgrade_rollback_simulation', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
+                    'upgrade_rollback_simulation', 'task_ownership_matrix', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
