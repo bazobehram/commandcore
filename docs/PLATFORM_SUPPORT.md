@@ -22,6 +22,15 @@ Both must be rejected before creating any Agent installation or identity state;
 these tests cover **integrity fail-closed behavior**, not a successful version
 upgrade or post-activation rollback.
 
+A separate disposable Windows CI transaction test signs a **newer** release
+manifest and runs the actual packaged upgrade under a normal user, but replaces
+only Task Scheduler API calls with scoped test doubles that deliberately fail
+registration. It asserts that the old activation bytes, old executable and
+manifest, original launcher bytes and saved task definition are restored and
+that the attempted release directory is removed. This is **simulated task
+failure with a real signature and installer**, not positive Task Scheduler,
+authenticated reconnect or a production-ready Windows upgrade claim.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |
