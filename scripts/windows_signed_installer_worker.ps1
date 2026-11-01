@@ -43,7 +43,35 @@ try {
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage} |
+    # Never serialize the exception, command arguments, token, URL, or path.
+    # Only allowlisted categories are returned to the privileged CI driver.
+    $hint = 'other'
+    if ($stage -eq 'installer') {
+        $message = [string]$_.Exception.Message
+        $errorId = [string]$_.FullyQualifiedErrorId
+        if ($message -match '(?i)Release download failed|curl_exit|HTTP|SSL|TLS|certificate') {
+            $hint = 'download_or_tls'
+        } elseif ($message -match '(?i)checksum|integrity|sha256|signature') {
+            $hint = 'release_integrity'
+        } elseif ($message -match '(?i)manifest|verify-release|artifact|release') {
+            $hint = 'release_metadata'
+        } elseif ($message -match '(?i)ACL|Set-Acl|Access to the path|access is denied|UnauthorizedAccess') {
+            $hint = 'filesystem_acl'
+        } elseif ($message -match '(?i)execution policy|not digitally signed|running scripts') {
+            $hint = 'powershell_policy'
+        } elseif ($message -match '(?i)already exists|existing directory|unrelated') {
+            $hint = 'preexisting_installation'
+        } elseif ($message -match '(?i)parameter cannot be found|ParameterBinding') {
+            $hint = 'parameter_binding'
+        } elseif ($message -match '(?i)not recognized|CommandNotFound') {
+            $hint = 'missing_command'
+        } elseif ($message -match '(?i)Property|strict mode') {
+            $hint = 'powershell_strictmode'
+        } elseif ($errorId -match 'ParserError') {
+            $hint = 'powershell_parse'
+        }
+    }
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
