@@ -252,9 +252,7 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
             ("CI_ROLLBACK_SOURCE_LINE", r"[0-9]{1,3}"),
             ("CI_ROLLBACK_FLAGS", r"[01]{3}"),
         ):
-            matches = re.findall(
-                rf"(?m)^{field}:({allowed})\s*$", process.stdout
-            )
+            matches = re.findall(rf"(?m)^{field}:({allowed})\s*$", process.stdout)
             if matches:
                 print("FAIL: " + field.lower() + "=" + matches[-1])
         gate_failures = re.findall(
