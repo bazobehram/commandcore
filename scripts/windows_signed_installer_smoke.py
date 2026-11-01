@@ -433,6 +433,7 @@ def main() -> int:
                         "upgrade_without_identity_denial": True,
                         "installed_artifacts_unchanged": True,
                         "simulated_signed_upgrade_rollback": True,
+                        "task_ownership_denial_matrix": True,
                         "scope": "no-enroll signed install, integrity denials and simulated failed signed upgrade/task rollback; genuine successful upgrade, live task execution, reboot and enrollment remain gated",
                     }
                 )
