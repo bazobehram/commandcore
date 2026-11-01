@@ -198,7 +198,7 @@ exit $LASTEXITCODE
                 Register-ScheduledTask -TaskName $taskName -Xml $oldTaskXml -Force -ErrorAction Stop | Out-Null
             }
             if ($activated) {
-                Set-Content -LiteralPath $activePath -Value $previous -ErrorAction Stop
+                Set-Content -LiteralPath $activePath -Value $previous -NoNewline -ErrorAction Stop
             }
             if ($oldTaskStopped) {
                 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
