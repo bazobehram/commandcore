@@ -34,7 +34,9 @@ from package_installers import package
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def create_tls_files(directory: Path) -> tuple[Path, Path, Path]:
+def create_tls_files(
+    directory: Path, *, crl_url: str | None = None
+) -> tuple[Path, Path, Path]:
     now = datetime.now(timezone.utc)
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     ca_name = x509.Name(
@@ -49,11 +51,29 @@ def create_tls_files(directory: Path) -> tuple[Path, Path, Path]:
         .not_valid_before(now - timedelta(minutes=5))
         .not_valid_after(now + timedelta(days=1))
         .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=False,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()),
+            critical=False,
+        )
         .sign(ca_key, hashes.SHA256())
     )
     leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     leaf_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
-    leaf = (
+    leaf_builder = (
         x509.CertificateBuilder()
         .subject_name(leaf_name)
         .issuer_name(ca.subject)
@@ -74,8 +94,41 @@ def create_tls_files(directory: Path) -> tuple[Path, Path, Path]:
             x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),
             critical=False,
         )
-        .sign(ca_key, hashes.SHA256())
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+            critical=False,
+        )
     )
+    if crl_url is not None:
+        # Windows Schannel requires a reachable CRL for this ephemeral CA.
+        # A signed CRL may be transported over local HTTP without weakening TLS.
+        leaf_builder = leaf_builder.add_extension(
+            x509.CRLDistributionPoints(
+                [
+                    x509.DistributionPoint(
+                        full_name=[x509.UniformResourceIdentifier(crl_url)],
+                        relative_name=None,
+                        reasons=None,
+                        crl_issuer=None,
+                    )
+                ]
+            ),
+            critical=False,
+        )
+        crl = (
+            x509.CertificateRevocationListBuilder()
+            .issuer_name(ca.subject)
+            .last_update(now - timedelta(minutes=5))
+            .next_update(now + timedelta(days=1))
+            .add_extension(
+                x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+                critical=False,
+            )
+            .sign(ca_key, hashes.SHA256())
+        )
+        (directory / "ci.crl").write_bytes(crl.public_bytes(serialization.Encoding.DER))
+    leaf = leaf_builder.sign(ca_key, hashes.SHA256())
     ca_path = directory / "ci-ca.cer"
     cert_path = directory / "ci-server.pem"
     key_path = directory / "ci-server.key"
