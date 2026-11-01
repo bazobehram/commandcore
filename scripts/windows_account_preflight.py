@@ -126,9 +126,13 @@ def main() -> int:
             Path(__file__).resolve().with_name("windows_logon_registration_worker.ps1"),
             fixture / "installers" / "worker.ps1",
         )
-        if not run_driver(driver, fixture, "-OnlyCredential", timeout=60):
+        shutil.copyfile(
+            Path(__file__).resolve().with_name("windows_logon_action_probe.ps1"),
+            fixture / "installers" / "task-action.ps1",
+        )
+        if not run_driver(driver, fixture, "-OnlyCredential", timeout=80):
             return 1
-    print("PASS: standard-user at-logon task registration and cleanup (not startup)")
+    print("PASS: standard-user at-logon task registration, manual action launch and cleanup (not logon/reboot)")
     # A real localhost HTTPS server isolates Schannel/curl failures from the
     # signed installer and avoids rebuilding the native Rust Agent to diagnose.
     with (
