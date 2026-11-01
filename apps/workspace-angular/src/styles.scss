@@ -325,3 +325,18 @@ button.brand{border:0;background:transparent;text-align:left;padding:0;appearanc
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+
+/* Explicit platform choice: never imply Windows Preview can be installed as a stable Agent. */
+.platform-picker{display:flex;gap:10px;margin:22px 0}
+.platform-picker button{flex:1;min-height:58px;display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;border:1px solid #dce5f1;background:#fff;border-radius:12px;padding:12px 15px;color:#526b8c;font-size:13px;font-weight:700}
+.platform-picker button small{font-size:10px;font-weight:600;color:#8196af}
+.platform-picker button.selected{border-color:#7296c8;background:#eef4fc;box-shadow:0 0 0 1px #7296c8}
+.platform-picker button:focus-visible{outline:3px solid #517fb9;outline-offset:3px}
+.platform-intro{margin:0 0 10px}
+.platform-preview{border:1px solid #e2e8f2;background:#f8faff;border-radius:13px;padding:23px;margin:18px 0 30px}
+.platform-preview strong{font-size:15px;color:#3f5d83}
+.platform-preview p{font-size:12px;line-height:1.7;color:#8192a8}
+.platform-preview-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.platform-preview-actions a{font-size:12px;color:#476e9f}
+@media(max-width:390px){.platform-picker{flex-direction:column}.platform-picker button{min-height:48px}}
