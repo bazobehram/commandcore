@@ -188,6 +188,16 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     tampered = {**manifest, "version": "0.9.0-rc2"}
     (dest / "manifest-tampered.json").write_text(json.dumps(tampered), encoding="utf-8")
     (feed / "tampered-verifier.exe").write_bytes(artifact.read_bytes() + b"\x00")
+    # A newer, genuinely signed feed version uses the same pinned native
+    # binary but a different Ed25519-signed release manifest. This exercises
+    # the real verifier without implying a distinct native Agent build.
+    upgrade = {**manifest, "version": "0.9.0-rc2"}
+    canonical_upgrade = json.dumps(
+        {k: v for k, v in upgrade.items() if k != "signature"},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode()
+    upgrade["signature"] = base64.b64encode(signer.sign(canonical_upgrade)).decode()
+    (dest / "manifest-upgrade.json").write_text(json.dumps(upgrade), encoding="utf-8")
     package(manifest_path, public, output, origin + "/releases/agent/manifest.json")
 
 
