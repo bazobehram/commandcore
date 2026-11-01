@@ -14,9 +14,24 @@ try {
         throw 'Must run as a standard user.'
     }
     $stage = 'profile'
-    if (!$env:LOCALAPPDATA) { throw 'User profile was not loaded.' }
-    # A credential-launched process must have a writable LOCALAPPDATA for its
-    # own standard user, never an inherited privileged runner profile.
+    # Start-Process -Credential can inherit the privileged runner's environment.
+    # Derive this disposable account's actual profile from its authenticated SID,
+    # not from inherited USERPROFILE/LOCALAPPDATA/TEMP variables.
+    $profileKey = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\' + $identity.User.Value
+    $profile = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath -ErrorAction Stop).ProfileImagePath
+    $profile = [Environment]::ExpandEnvironmentVariables([string]$profile)
+    if (!(Test-Path -LiteralPath $profile -PathType Container)) {
+        throw 'Disposable standard-user profile was not initialized.'
+    }
+    $env:USERPROFILE = $profile
+    $env:LOCALAPPDATA = Join-Path $profile 'AppData\Local'
+    $env:APPDATA = Join-Path $profile 'AppData\Roaming'
+    $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'
+    $env:TMP = $env:TEMP
+    if (!(Test-Path -LiteralPath $env:LOCALAPPDATA -PathType Container)) {
+        throw 'Disposable standard-user LOCALAPPDATA is missing.'
+    }
+    New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
     $profileProbe = Join-Path $env:LOCALAPPDATA ('commandcore-ci-' + [Guid]::NewGuid().ToString('N'))
     try {
         Set-Content -LiteralPath $profileProbe -Value 'profile-test' -ErrorAction Stop
