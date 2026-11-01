@@ -194,7 +194,9 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     upgrade = {**manifest, "version": "0.9.0-rc2"}
     canonical_upgrade = json.dumps(
         {k: v for k, v in upgrade.items() if k != "signature"},
-        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     ).encode()
     upgrade["signature"] = base64.b64encode(signer.sign(canonical_upgrade)).decode()
     (dest / "manifest-upgrade.json").write_text(json.dumps(upgrade), encoding="utf-8")
