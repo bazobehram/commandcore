@@ -67,6 +67,7 @@ jobs:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+          create-storage-record: false # Personal repo; linked records require org ownership
       - name: Verify signed provenance for exact image digest
         shell: bash
         env:
