@@ -9,6 +9,9 @@ $report = Join-Path $FixtureRoot 'result\worker.result.json'
 $stage = 'identity'
 $rollbackPhase = 'none'
 $rollbackCategory = 'none'
+$rollbackErrorId = 'none'
+$rollbackSourceLine = 0
+$rollbackFlags = 'none'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -157,6 +160,13 @@ try {
         if ($probeResult.category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'unexpected_failure')) {
             $rollbackCategory = [string]$probeResult.category
         }
+        if ($probeResult.error_id -match '^[A-Za-z0-9_]{1,80}$') {
+            $rollbackErrorId = [string]$probeResult.error_id
+        }
+        if ($probeResult.source_line -is [int] -and $probeResult.source_line -gt 0 -and $probeResult.source_line -lt 500) {
+            $rollbackSourceLine = [int]$probeResult.source_line
+        }
+        $rollbackFlags = [string]([int]($probeResult.injected -eq $true)) + [string]([int]($probeResult.restored -eq $true)) + [string]([int]($probeResult.restarted -eq $true))
         throw 'Disposable signed upgrade rollback simulation failed.'
     }
     if ($probeResult.task_restored -ne $true -or $probeResult.activation_unchanged -ne $true -or
@@ -226,7 +236,7 @@ try {
     $failureCommand = 'other'
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
