@@ -16,9 +16,10 @@ const fixtureDevice = {
   is_owner: true, managed_by_me: true, permission_profile: 'READ_ONLY',
   access_max_permission_profile: 'READ_ONLY', capabilities: { desktop: true, services: false },
 };
+let includeDevice = true;
 function apiPayload(pathname) {
   if (pathname === '/api/session') return { subject: 'fixture-owner', auth_kind: 'oauth2-panel', scopes: ['commandcore:read'] };
-  if (pathname === '/api/devices' || pathname === '/api/managed-devices') return { devices: [fixtureDevice] };
+  if (pathname === '/api/devices' || pathname === '/api/managed-devices') return { devices: includeDevice ? [fixtureDevice] : [] };
   if (pathname === '/api/enrollment/pending') return { enrollments: [] };
   if (pathname.startsWith('/api/devices/')) return { device: fixtureDevice, events: [] };
   return { devices: [], events: [], activity: [], sessions: [] };
@@ -59,7 +60,7 @@ async function main() {
           scrollWidth: document.documentElement.scrollWidth,
           accountLeft: rect.left,
           accountRight: rect.right,
-          brandVisible: !!document.querySelector('.brand[role="button"]'),
+          brandVisible: !!document.querySelector('button.brand[aria-label="Go to workspace"]'),
         };
       });
       assert.ok(layout.brandVisible, `Missing keyboard navigable workspace brand at ${width}`);
@@ -75,6 +76,22 @@ async function main() {
       console.log(`PASS width=${width}px, accessible account control + no page overflow + Space navigation`);
       await page.close();
     }
+    // Empty onboarding is a distinct route state, not a screenshot-only check.
+    includeDevice = false;
+    const emptyPage = await browser.newPage({ viewport: { width: 390, height: 780 } });
+    await emptyPage.goto(url, { waitUntil: 'domcontentloaded' });
+    await emptyPage.locator('.machine-empty').waitFor({ timeout: 15000 });
+    assert.equal(await emptyPage.locator('.machine-empty').count(), 1, 'Expected one prominent onboarding card');
+    assert.equal(await emptyPage.locator('.add-link').count(), 1, 'Expected toolbar Add device action');
+    assert.equal(await emptyPage.locator('.add-tile').count(), 0, 'Unexpected redundant Add Device tile');
+    assert.equal(await emptyPage.locator('.round-nav').count(), 0, 'No device arrows should appear without devices');
+    await emptyPage.locator('.machine-empty').click();
+    await emptyPage.getByRole('dialog', { name: 'Add device' }).waitFor();
+    assert.equal(await emptyPage.getByRole('button', { name: 'Close dialog' }).count(), 1);
+    const faviconPath = await emptyPage.locator('link[rel="icon"][type="image/svg+xml"]').getAttribute('href');
+    assert.equal(faviconPath, '/brand/octopus-head.svg', 'Missing octopus SVG favicon');
+    await emptyPage.close();
+    console.log('PASS empty workspace: single onboarding card, active modal, favicon');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

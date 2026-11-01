@@ -199,25 +199,51 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
-  it('supports Enter and Space on the keyboard-accessible workspace brand', async () => {
+  it('uses a native, keyboard-activatable button for workspace navigation', async () => {
     stubApi(loggedInApi);
     const fixture = await mountWorkspace();
     const component = fixture.componentInstance;
-    // jsdom has no matchMedia; keep this fixture in the desktop branch.
-    vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    const brand: HTMLElement = fixture.nativeElement.querySelector('.brand[role="button"]');
+    const brand: HTMLButtonElement = fixture.nativeElement.querySelector('button.brand');
     expect(brand).not.toBeNull();
-    expect(brand.getAttribute('tabindex')).toBe('0');
+    expect(brand.getAttribute('aria-label')).toBe('Go to workspace');
 
     component.view.set('browser');
-    brand.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    brand.click();
     expect(component.view()).toBe('workspace');
+    fixture.destroy();
+  });
 
-    component.view.set('browser');
-    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
-    brand.dispatchEvent(space);
-    expect(space.defaultPrevented).toBe(true);
-    expect(component.view()).toBe('workspace');
+  it('shows one prominent first-device card and no redundant add tile when empty', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.querySelectorAll('.machine-empty')).toHaveLength(1);
+    expect(host.querySelectorAll('.add-tile')).toHaveLength(0);
+    expect(host.querySelectorAll('.add-link')).toHaveLength(1);
+    expect(host.querySelectorAll('.round-nav')).toHaveLength(0);
+    (host.querySelector('.machine-empty') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(host.querySelector('.sheet[aria-label="Add device"]')).not.toBeNull();
+    expect(host.querySelector('.sheet .x-close')?.getAttribute('aria-label')).toBe('Close dialog');
+    fixture.destroy();
+  });
+
+  it('shows each connected device and one compact add tile without empty onboarding', async () => {
+    stubApi(loggedInApi);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    component.devices.set([{ id: 'fixture-device', display_name: 'Fixture Linux', platform: 'Linux', permission_profile: 'STANDARD', status: 'online' }]);
+    fixture.detectChanges();
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelectorAll('.machine-empty')).toHaveLength(0);
+    expect(host.querySelectorAll('.device-tile:not(.add-tile)')).toHaveLength(1);
+    expect(host.querySelectorAll('.add-tile')).toHaveLength(1);
+    expect(host.querySelectorAll('.round-nav')).toHaveLength(0);
+
+    component.devices.set([...component.devices(), { id: 'fixture-2', display_name: 'Fixture Windows' }]);
+    fixture.detectChanges();
+    expect(host.querySelectorAll('.round-nav')).toHaveLength(2);
     fixture.destroy();
   });
 

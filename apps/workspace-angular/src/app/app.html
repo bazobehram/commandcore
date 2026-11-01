@@ -1,10 +1,10 @@
 <div class="app-shell">
   <div class="aurora" aria-hidden="true"><div class="aurora-a"></div><div class="aurora-b"></div><div class="aurora-c"></div></div>
   <header class="topbar">
-    <div class="brand" (click)="show('workspace')" role="button" tabindex="0" (keydown.enter)="show('workspace')" (keydown.space)="show('workspace'); $event.preventDefault()">
+    <button type="button" class="brand" (click)="show('workspace')" aria-label="Go to workspace">
       <img class="brand-octopus" [src]="logoFor(onlineCount()>0?'online':'idle')" alt="" aria-hidden="true"/>
       <span class="brand-wordmark">Command<span>Core</span></span><span class="brand-slash">/</span><span class="brand-context">workspace</span>
-    </div>
+    </button>
     <div class="top-actions">
       @if(loggedIn()){
         <span class="top-tag connection-count"><span class="status-dot" [class.is-offline]="onlineCount()===0"></span>{{onlineCount()}} / {{devices().length}} ONLINE</span>
@@ -41,12 +41,12 @@
       </section>
       <div class="fleet-heading">
         <div class="fleet-title"><span>YOUR MACHINES</span><span class="fleet-count">{{devices().length}} devices <span class="soft-divider">·</span> {{onlineCount()}} online</span></div>
-        <div class="fleet-operations"><button (click)="move(-1)" class="round-nav" aria-label="Previous device">←</button><button (click)="move(1)" class="round-nav" aria-label="Next device">→</button><button (click)="openAdd()" class="add-link">＋ Add device</button></div>
+        <div class="fleet-operations">@if(devices().length>1){<button type="button" (click)="move(-1)" class="round-nav" aria-label="Previous device">←</button><button type="button" (click)="move(1)" class="round-nav" aria-label="Next device">→</button>}<button type="button" (click)="openAdd()" class="add-link">＋ Add device</button></div>
       </div>
       <section class="device-rail" aria-label="Connected devices">
         <div class="fleet-hub" [class.hub-working]="anyWorking()" [class.hub-connected]="onlineCount()>0" aria-hidden="true"><div class="hub-head"><img src="/brand/octopus-head.svg?v=octopus-v10" alt=""/></div><span>YOUR CORE</span><i></i></div>
         @if(!devices().length){
-          <button class="machine-empty" (click)="openAdd()"><span class="empty-plus">＋</span><strong>Connect your first device</strong><span>Linux agent · 3 steps</span></button>
+          <button class="machine-empty" (click)="openAdd()"><span class="empty-plus">＋</span><strong>Connect your first device</strong><span>Install · approve · connect</span></button>
         }
         @for(d of devices();track d.id;let i=$index){
           <button class="device-tile" [class.active]="selected()===i" (click)="select(i)" [attr.aria-pressed]="selected()===i">
@@ -68,7 +68,7 @@
             <div class="tile-corner">↗</div>
           </button>
         }
-        <button class="device-tile add-tile" (click)="openAdd()"><span class="giant-plus">＋</span><strong>Add a device</strong><small>Expand your workspace</small></button>
+        @if(devices().length>0){<button type="button" class="device-tile add-tile" (click)="openAdd()"><span class="giant-plus">＋</span><strong>Add a device</strong><small>Expand your workspace</small></button>}
       </section>
       @if(selectedDevice();as d){
       <section class="workspace-frame">
@@ -271,7 +271,7 @@
       @for(item of ['Workspace','Hardware','Browser','Activity','Access','Files','Add device'];track item){@if(!commandQuery()||item.toLowerCase().includes(commandQuery().toLowerCase())){<button (click)="runPalette(item)"><span class="palette-glyph">↗</span>{{item}} <span>↵</span></button>}}
       <div class="palette-footer">COMMANDCORE / NAVIGATE</div></div>
    } @else if(overlay()==='add'){
-    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
+    <div class="sheet" role="dialog" aria-label="Add device"><div class="sheet-heading"><span class="mini-eyebrow">CONNECT A NEW MACHINE</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Add a device<span class="headline-period">.</span></h2><p>Install the signed CommandCore agent on a Linux machine, approve enrollment, and it will appear here automatically.</p>
       <div class="setup-step"><span class="step-index">01</span><div><strong>Install the Agent</strong><p>Run this in the new Linux machine's terminal as your regular user.</p><div class="command-copy"><code>{{cmd('full')}}</code><button [disabled]="!installChecked()||!helperAvailable()" (click)="copy(cmd('full'))">Copy</button></div>
         <p class="installer-note">{{!installChecked()?'Checking signed installer…':helperAvailable()?'Signed Full Control installer is available.':'Signed helper is not published. Full Control installation is unavailable; use the Standard-only option below.'}}</p>
         <details><summary>Standard agent without privileged helper</summary><div class="command-copy"><code>{{cmd('standard')}}</code><button (click)="copy(cmd('standard'))">Copy</button></div></details>
@@ -281,34 +281,34 @@
       <p class="sheet-disclaimer">Current installation flow supports Linux. Windows installation is not production-ready.</p>
     </div>
    } @else if(overlay()==='pending'){
-     <div class="sheet" role="dialog" aria-label="Pending enrollments"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE ENROLLMENT</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Pending approvals<span class="headline-period">.</span></h2>
+     <div class="sheet" role="dialog" aria-label="Pending enrollments"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE ENROLLMENT</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Pending approvals<span class="headline-period">.</span></h2>
        @for(item of pending();track item.id){<div class="pending-item"><strong>{{item.metadata?.['display_name']||item.id}}</strong><p>{{item.metadata?.['hostname']||'Unknown hostname'}} · {{item.metadata?.['platform']||'Unknown platform'}} · {{item.metadata?.['architecture']||'Architecture not reported'}}</p><label>Verification code <input [(ngModel)]="typedCode" placeholder="Code from the new device" maxlength="9"/></label><label class="check-label"><input type="checkbox" [(ngModel)]="grantMyself"/> Give my account access</label><label>Initial device permission<select [(ngModel)]="initialPermission"><option value="STANDARD">Standard</option><option value="FULL_CONTROL" [disabled]="!oauthFullReady()">Full Control (requires full OAuth and healthy local helper)</option></select></label><p class="note">Full Control only becomes effective after all backend and locally approved agent checks succeed. Approval alone does not bypass a local ceiling.</p><div class="pending-actions"><button (click)="decide(item,false)">Reject</button><button class="primary-small" (click)="decide(item,true)">Approve device</button></div></div>}
        @empty{<div class="empty-state"><strong>No pending enrollment requests</strong><p>When a new device starts enrollment, it will appear here.</p></div>}
      </div>
    } @else if(overlay()==='permission-reauthorize'){
      <div class="sheet compact-sheet" role="dialog" aria-label="Authorize Full Control">
-       <div class="sheet-heading"><span class="mini-eyebrow">FULL CONTROL AUTHORIZATION</span><button class="x-close" (click)="overlay.set('none')">×</button></div>
+       <div class="sheet-heading"><span class="mini-eyebrow">FULL CONTROL AUTHORIZATION</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div>
        <h2>One more authorization<span class="headline-period">.</span></h2>
        <p>You selected <strong>{{levelName(permissionChoice)}}</strong> for <strong>{{selectedDevice()?.display_name}}</strong>. Your current session has <strong>{{levelName(oauthProfile())}}</strong> OAuth scope, which is insufficient for this change.</p>
        <p>Reconnect with {{permissionChoice==='FULL_CONTROL'?'Full Control':'Standard'}} OAuth scope. The workspace will return to this device afterward. <strong>No device permission will change until you approve it.</strong></p>
        <div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" (click)="beginPermissionOAuthReconnection()">Continue to authorization ↗</button></div>
      </div>
    } @else if(overlay()==='permission-confirm'){
-     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm permission change"><div class="sheet-heading"><span class="mini-eyebrow">REVIEW PERMISSION CHANGE</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Apply {{levelName(pendingPermission?.level)}}?</h2><p><strong>{{selectedDevice()?.display_name}}</strong> will receive {{levelName(pendingPermission?.level)}} for both server policy and your account grant. This may also limit other accounts on this device.</p><div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" [disabled]="permissionBusy()" (click)="applyPermission()">Confirm and apply</button></div></div>
+     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm permission change"><div class="sheet-heading"><span class="mini-eyebrow">REVIEW PERMISSION CHANGE</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Apply {{levelName(pendingPermission?.level)}}?</h2><p><strong>{{selectedDevice()?.display_name}}</strong> will receive {{levelName(pendingPermission?.level)}} for both server policy and your account grant. This may also limit other accounts on this device.</p><div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" [disabled]="permissionBusy()" (click)="applyPermission()">Confirm and apply</button></div></div>
    } @else if(overlay()==='restore-confirm'){
-     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm access restoration"><div class="sheet-heading"><span class="mini-eyebrow">CONFIRM ACCESS RESTORATION</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Restore account grant?</h2><p>Grant <strong>{{session()?.subject}}</strong> access to <strong>{{selectedDevice()?.display_name}}</strong> within the existing server policy and local ceiling. Agent identity and registration will remain unchanged.</p><div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" (click)="restoreMyGrant()" [disabled]="permissionBusy()">Restore access</button></div></div>
+     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm access restoration"><div class="sheet-heading"><span class="mini-eyebrow">CONFIRM ACCESS RESTORATION</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Restore account grant?</h2><p>Grant <strong>{{session()?.subject}}</strong> access to <strong>{{selectedDevice()?.display_name}}</strong> within the existing server policy and local ceiling. Agent identity and registration will remain unchanged.</p><div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button class="primary-small" (click)="restoreMyGrant()" [disabled]="permissionBusy()">Restore access</button></div></div>
    } @else if(overlay()==='grant-confirm'){
-     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm account grant"><div class="sheet-heading"><span class="mini-eyebrow">REVIEW ACCOUNT ACCESS</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>{{awaitingGrantRemoval?'Remove grant?':'Save account grant?'}}</h2><p>Device: <strong>{{selectedDevice()?.display_name}}</strong></p><p>{{awaitingGrantRemoval?'Remove access for '+grantToRemove+'?':'Give '+grantSubject+' '+levelName(grantLevel)+' access?'}} Existing sessions may lose access immediately when a grant is removed.</p>
+     <div class="sheet compact-sheet" role="dialog" aria-label="Confirm account grant"><div class="sheet-heading"><span class="mini-eyebrow">REVIEW ACCOUNT ACCESS</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>{{awaitingGrantRemoval?'Remove grant?':'Save account grant?'}}</h2><p>Device: <strong>{{selectedDevice()?.display_name}}</strong></p><p>{{awaitingGrantRemoval?'Remove access for '+grantToRemove+'?':'Give '+grantSubject+' '+levelName(grantLevel)+' access?'}} Existing sessions may lose access immediately when a grant is removed.</p>
        @if(awaitingGrantRemoval&&grantToRemove===session()?.subject){<label>Type the device name to remove your own access <input [(ngModel)]="confirmName" class="confirm-input" [placeholder]="selectedDevice()?.display_name||'Device'"/></label>}
        <div class="confirmation-actions"><button (click)="overlay.set('none')">Cancel</button><button [class.danger-action]="awaitingGrantRemoval" [class.primary-small]="!awaitingGrantRemoval" [disabled]="permissionBusy()||(awaitingGrantRemoval&&grantToRemove===session()?.subject&&confirmName!==selectedDevice()?.display_name)" (click)="applyGrant()">Confirm</button></div>
      </div>
    } @else if(overlay()==='audit'){
-     <div class="sheet" role="dialog" aria-label="Device audit history"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE AUDIT / {{selectedDevice()?.display_name}}</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Audit trail<span class="headline-period">.</span></h2><p>Recent server-recorded events for this device, newest first.</p>
+     <div class="sheet" role="dialog" aria-label="Device audit history"><div class="sheet-heading"><span class="mini-eyebrow">DEVICE AUDIT / {{selectedDevice()?.display_name}}</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Audit trail<span class="headline-period">.</span></h2><p>Recent server-recorded events for this device, newest first.</p>
        @for(event of audit();track $index){<div class="audit-event"><strong>{{event.tool||'Event'}}</strong><small>{{event.timestamp||'—'}} · {{event.status||'recorded'}} · {{event.duration_ms??'—'}} ms</small></div>}
        @empty{<div class="empty-state"><strong>{{auditBusy()?'Loading records…':'No audit events recorded'}}</strong></div>}
      </div>
    } @else if(overlay()==='confirm'){
-     <div class="sheet compact-sheet" role="alertdialog"><div class="sheet-heading"><span class="mini-eyebrow">CONFIRM HIGH-RISK ACTION</span><button class="x-close" (click)="overlay.set('none')">×</button></div><h2>Revoke device?</h2><p>This will invalidate the device registration. Type <strong>{{selectedDevice()?.display_name}}</strong> to confirm.</p><input class="confirm-input" [(ngModel)]="confirmName" [placeholder]="selectedDevice()?.display_name||'Device name'"/><button class="danger-action full-width" [disabled]="confirmName!==selectedDevice()?.display_name" (click)="confirmAction()">Revoke this device</button></div>
+     <div class="sheet compact-sheet" role="alertdialog"><div class="sheet-heading"><span class="mini-eyebrow">CONFIRM HIGH-RISK ACTION</span><button class="x-close" aria-label="Close dialog" (click)="overlay.set('none')">×</button></div><h2>Revoke device?</h2><p>This will invalidate the device registration. Type <strong>{{selectedDevice()?.display_name}}</strong> to confirm.</p><input class="confirm-input" [(ngModel)]="confirmName" [placeholder]="selectedDevice()?.display_name||'Device name'"/><button class="danger-action full-width" [disabled]="confirmName!==selectedDevice()?.display_name" (click)="confirmAction()">Revoke this device</button></div>
 
    }
   }
