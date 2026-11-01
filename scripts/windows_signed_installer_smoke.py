@@ -233,6 +233,7 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
                 "repeat_denied",
                 "upgrade_without_identity_denied",
                 "unchanged_after_denial",
+                "simulated_upgrade_rollback",
             }:
                 print("FAIL: windows_installer_missing_gate=" + gate)
         hints = re.findall(r"(?m)^CI_WORKER_FAILURE_HINT:([a-z_]+)\s*$", process.stdout)
