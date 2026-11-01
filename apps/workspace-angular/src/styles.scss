@@ -314,3 +314,12 @@ body:has(.modal-backdrop){overflow:hidden;overscroll-behavior:none}
 .fleet-hub.hub-connected>i{animation:cc-status-pulse 4s ease-in-out infinite}
 .fleet-hub.hub-working>i{background:#dd9d70;box-shadow:0 0 0 6px #dd9d7025;animation:cc-status-pulse 1.25s ease-in-out infinite}
 @media(prefers-reduced-motion:reduce){.fleet-hub>i{animation:none!important}}
+
+/* Shared interaction affordances: real actions only, never decorative wrappers. */
+a[href],button:not(:disabled),[role="button"]:not([aria-disabled="true"]),[role="link"],summary,select:not(:disabled),label[for]{cursor:pointer}
+button:disabled,[aria-disabled="true"],select:disabled{cursor:not-allowed}
+.device-tile:not(:disabled),.add-tile:not(:disabled),.toolbar-button:not(:disabled),.subtle-action:not(:disabled),.account-trigger:not(:disabled){cursor:pointer}
+button,[role="button"],a[href],select{touch-action:manipulation}
+button:focus-visible,[role="button"]:focus-visible,a[href]:focus-visible,summary:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #648cbe;outline-offset:3px}
+@media(hover:hover){a[href]:hover{text-decoration-thickness:2px;text-underline-offset:3px}}
+@media(prefers-reduced-motion:reduce){.device-tile,.round-nav,.subtle-action{transition:none!important}.device-tile:hover,.subtle-action:hover,.round-nav:hover{transform:none!important}}
