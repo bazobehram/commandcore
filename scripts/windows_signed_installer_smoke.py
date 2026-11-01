@@ -174,6 +174,16 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
         )
         if curl_exits and 0 < int(curl_exits[-1]) < 256:
             print("FAIL: windows_installer_curl_exit=" + curl_exits[-1])
+        for key in (
+            "CI_INSTALLER_FAILURE_TYPE",
+            "CI_INSTALLER_FAILURE_ID",
+            "CI_INSTALLER_FAILURE_COMMAND",
+        ):
+            safe_values = re.findall(
+                rf"(?m)^{key}:([A-Za-z0-9_]{{1,64}})\s*$", process.stdout
+            )
+            if safe_values:
+                print("FAIL: " + key + "=" + safe_values[-1])
         if safe_stage == "create_user":
             categories = re.findall(
                 r"(?m)^CI_USER_CREATE_CATEGORY:([a-z_]+)\s*$", process.stdout
