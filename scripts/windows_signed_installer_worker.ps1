@@ -157,7 +157,7 @@ try {
         if ($probeResult.phase -in @('preconditions', 'signed_upgrade', 'restore', 'hashes')) {
             $rollbackPhase = [string]$probeResult.phase
         }
-        if ($probeResult.category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'unexpected_failure')) {
+        if ($probeResult.category -in @('none', 'expected_task_failure', 'release_verification', 'task_preflight', 'rollback', 'missing_property', 'parameter_binding', 'access_denied', 'unexpected_failure')) {
             $rollbackCategory = [string]$probeResult.category
         }
         if ($probeResult.error_id -match '^[A-Za-z0-9_]{1,80}$') {
