@@ -88,6 +88,8 @@ function Register-ScheduledTask {
 $injectedFailure = $false
 $phase = 'preconditions'
 $failureCategory = 'none'
+$failureId = 'none'
+$failureLine = 0
 try {
     # A harmless fake identity file permits preflight but is never an
     # enrolled device credential, token, or actual authentication fixture.
@@ -98,10 +100,19 @@ try {
     } catch {
         $failure = [string]$_.Exception.Message
         $injectedFailure = $failure -eq 'CI injected task registration failure after attempted mutation'
+        $rawId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
+        if ($rawId -match '^[A-Za-z0-9_]{1,80}$') { $failureId = $rawId }
+        $stack = [string]$_.ScriptStackTrace
+        if ($stack -match '(?i)windows\.ps1:\s*line\s*([0-9]{1,3})') {
+            $failureLine = [int]$Matches[1]
+        }
         $failureCategory = if ($injectedFailure) { 'expected_task_failure' }
             elseif ($failure -match '(?i)manifest|signature|release|newer|verifier') { 'release_verification' }
             elseif ($failure -match '(?i)task|scheduler|interactive|principal') { 'task_preflight' }
             elseif ($failure -match '(?i)rollback|restore|activation') { 'rollback' }
+            elseif ($failure -match '(?i)property|strict mode|missing member') { 'missing_property' }
+            elseif ($failure -match '(?i)parameter|binding|argument') { 'parameter_binding' }
+            elseif ($failure -match '(?i)access|permission|denied') { 'access_denied' }
             else { 'unexpected_failure' }
     }
     $phase = 'restore'
@@ -122,7 +133,7 @@ try {
         ConvertTo-Json -Compress
 } catch {
     # Emit bounded CI diagnostics only; never raw exception text or paths.
-    @{status='FAIL'; phase=$phase; category=$failureCategory;
+    @{status='FAIL'; phase=$phase; category=$failureCategory; error_id=$failureId; source_line=$failureLine;
         injected=$script:injectedMutation; restored=$script:taskRestoreObserved;
         restarted=$script:taskRestarted} | ConvertTo-Json -Compress
 } finally {
