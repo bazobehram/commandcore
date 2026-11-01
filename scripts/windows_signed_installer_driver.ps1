@@ -94,6 +94,9 @@ try {
                 if ($report.installer_line -is [int] -and $report.installer_line -gt 0 -and $report.installer_line -lt 1000) {
                     Write-Output ('CI_INSTALLER_SOURCE_LINE:' + $report.installer_line)
                 }
+                if ($report.curl_exit -is [int] -and $report.curl_exit -gt 0 -and $report.curl_exit -lt 256) {
+                    Write-Output ('CI_INSTALLER_CURL_EXIT:' + $report.curl_exit)
+                }
                 throw 'Standard-user signed installer failed its assertions.'
             }
             if ($OnlyTask) {
