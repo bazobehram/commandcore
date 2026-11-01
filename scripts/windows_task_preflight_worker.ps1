@@ -12,6 +12,17 @@ try {
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Task is not running as a standard user.'
     }
+    $systemModules = Join-Path $PSHOME 'Modules'
+    $machineModules = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
+    $env:PSModulePath = $systemModules + ';' + $machineModules
+    Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+    Import-Module Microsoft.PowerShell.Management -ErrorAction Stop
+    Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+    foreach ($cmd in @('Get-FileHash', 'ConvertFrom-Json', 'Get-Content', 'Set-Acl')) {
+        if (!(Get-Command $cmd -ErrorAction SilentlyContinue)) {
+            throw 'CI standard-user built-in module unavailable.'
+        }
+    }
     @{status='PASS'; non_admin=$true; task_probe=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
