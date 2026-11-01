@@ -97,8 +97,11 @@ try {
                 if ($report.curl_exit -is [int] -and $report.curl_exit -gt 0 -and $report.curl_exit -lt 256) {
                     Write-Output ('CI_INSTALLER_CURL_EXIT:' + $report.curl_exit)
                 }
-                if ($report.stage -eq 'https_transport' -and $report.curl_exit -is [int] -and $report.curl_exit -ge 0 -and $report.curl_exit -lt 256) {
-                    Write-Output ('CI_HTTPS_PREFLIGHT_CURL_EXIT:' + $report.curl_exit)
+                if ($report.stage -eq 'https_transport') {
+                    $numeric = [string]$report.curl_exit
+                    if ($numeric -match '^[0-9]{1,3}$' -and [int]$numeric -le 255) {
+                        Write-Output ('CI_HTTPS_PREFLIGHT_CURL_EXIT:' + $numeric)
+                    }
                 }
                 if ($report.failure_type -match '^[A-Za-z0-9_]{1,64}$') {
                     Write-Output ('CI_INSTALLER_FAILURE_TYPE:' + $report.failure_type)
