@@ -28,6 +28,10 @@ $oldRelease = Join-Path $root ('releases\' + $previous.version)
 $oldBinaryHash = (Get-FileHash -LiteralPath $previous.binary -Algorithm SHA256).Hash
 $oldManifestHash = (Get-FileHash -LiteralPath (Join-Path $oldRelease 'manifest.json') -Algorithm SHA256).Hash
 $launcher = Join-Path $root 'run-agent.ps1'
+# Fresh CI install uses -NoTask; create an isolated, distinct prior launcher
+# to prove the upgrade restores its original bytes, not only the task XML.
+Set-Content -LiteralPath $launcher -Value '# disposable prior launcher bytes' -NoNewline -ErrorAction Stop
+$priorLauncherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash
 $oldXml = '<Task xmlns="urn:commandcore:ci" version="1"/>'
 $script:taskWasStopped = $false
 $script:taskRestoreObserved = $false
@@ -98,6 +102,7 @@ try {
     if ((Get-FileHash -LiteralPath $active -Algorithm SHA256).Hash -cne $previousHash -or
         (Get-FileHash -LiteralPath $previous.binary -Algorithm SHA256).Hash -cne $oldBinaryHash -or
         (Get-FileHash -LiteralPath (Join-Path $oldRelease 'manifest.json') -Algorithm SHA256).Hash -cne $oldManifestHash -or
+        (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -cne $priorLauncherHash -or
         (Test-Path -LiteralPath (Join-Path $root 'releases\0.9.0-rc2')) -or
         (Test-Path -LiteralPath (Join-Path $root 'active.new.json'))) {
         throw 'Failed signed upgrade did not preserve the old activated release.'
