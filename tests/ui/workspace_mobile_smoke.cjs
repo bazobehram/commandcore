@@ -82,7 +82,8 @@ async function main() {
     await emptyPage.goto(url, { waitUntil: 'domcontentloaded' });
     await emptyPage.locator('.machine-empty').waitFor({ timeout: 15000 });
     assert.equal(await emptyPage.locator('.machine-empty').count(), 1, 'Expected one prominent onboarding card');
-    assert.equal(await emptyPage.locator('.add-link').count(), 1, 'Expected toolbar Add device action');
+    assert.equal(await emptyPage.locator('.add-link').count(), 0, 'Empty workspace must not duplicate the onboarding action in the toolbar');
+    assert.equal(await emptyPage.locator('.machine-empty, .add-link, .add-tile').count(), 1, 'Exactly one Add Device action must be visible');
     assert.equal(await emptyPage.locator('.add-tile').count(), 0, 'Unexpected redundant Add Device tile');
     assert.equal(await emptyPage.locator('.round-nav').count(), 0, 'No device arrows should appear without devices');
     await emptyPage.locator('.machine-empty').click();
@@ -102,7 +103,7 @@ async function main() {
     const faviconPath = await emptyPage.locator('link[rel="icon"][type="image/svg+xml"]').getAttribute('href');
     assert.equal(faviconPath, '/brand/octopus-head.svg', 'Missing octopus SVG favicon');
     await emptyPage.close();
-    console.log('PASS empty workspace: single onboarding card, active modal, favicon');
+    console.log('PASS empty workspace: exactly one Add Device CTA, active modal, favicon');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));
