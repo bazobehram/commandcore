@@ -229,7 +229,7 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
-  it('shows each connected device and one compact add tile without empty onboarding', async () => {
+  it('shows each connected device and the single toolbar Add Device action', async () => {
     stubApi(loggedInApi);
     const fixture = await mountWorkspace();
     const component = fixture.componentInstance;
@@ -238,7 +238,8 @@ describe('Workspace component: authenticated session lifecycle', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelectorAll('.machine-empty')).toHaveLength(0);
     expect(host.querySelectorAll('.device-tile:not(.add-tile)')).toHaveLength(1);
-    expect(host.querySelectorAll('.add-tile')).toHaveLength(1);
+    expect(host.querySelectorAll('.add-tile')).toHaveLength(0);
+    expect(host.querySelectorAll('.fleet-operations .add-link')).toHaveLength(1);
     expect(host.querySelectorAll('.round-nav')).toHaveLength(0);
 
     component.devices.set([...component.devices(), { id: 'fixture-2', display_name: 'Fixture Windows' }]);
