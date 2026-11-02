@@ -18,7 +18,6 @@ if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) 
     $user -notmatch '^cc[a-f0-9]{10}$') {
     throw 'Disposable non-administrator Windows account required.'
 }
-Import-Module ScheduledTasks -ErrorAction Stop
 $name = 'CommandCore Agent'
 $description = 'Managed by CommandCore user installer'
 $root = Join-Path $env:LOCALAPPDATA 'CommandCore\Agent'
@@ -53,6 +52,8 @@ function Test-OwnedFixtureTask($task) {
     )
 }
 try {
+    # Module load must also be covered by bounded CI phase diagnostics.
+    Import-Module ScheduledTasks -ErrorAction Stop
     $phase = 'signed_reinstall'
     $installStarted = $true
     & $Installer -Server $Origin -NoEnroll -NoTask | Out-Null
@@ -92,9 +93,9 @@ try {
       signed_files_removed=$true; disposable_identity_preserved=$true;
       gui_logon_tested=$false} | ConvertTo-Json -Compress
 } catch {
-    # Preserve the originating error/stack for the parent worker's bounded
-    # exception-type and source-line diagnostics; never print raw details.
-    throw
+    # The worker publishes only this allowlisted phase; never print a raw
+    # PowerShell exception, local path, test credential, or release details.
+    throw ('CI_REAL_TASK_PHASE_' + $phase)
 } finally {
     # On failure, clean only the exact fixture we just attempted to register.
     if ($registerAttempted) {
