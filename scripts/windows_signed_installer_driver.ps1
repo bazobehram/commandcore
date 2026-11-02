@@ -82,7 +82,9 @@ try {
                     $report.repeat_denied -eq $true -and $report.upgrade_without_identity_denied -eq $true -and
                     $report.unchanged_after_denial -eq $true -and
                     $report.simulated_upgrade_rollback -eq $true -and
-                    $report.task_ownership_denial_matrix -eq $true
+                    $report.task_ownership_denial_matrix -eq $true -and
+                    $report.uninstall_ownership_denial_matrix -eq $true -and
+                    $report.signed_install_uninstall_cleanup -eq $true
             }
             if (!$accepted) {
                 if (!$OnlyTask -and !$OnlyCredential -and $report.status -eq 'PASS') {
