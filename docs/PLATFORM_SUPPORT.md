@@ -45,8 +45,14 @@ The disposable normal-user Windows signed-install fixture also exercises
 must be rejected before any task/filesystem mutation; the matching owned task
 is **mocked**, while real signed installation files are removed. Identity state
 is intentionally preserved for explicit panel revocation (verified with a
-harmless local test sentinel, not an enrolled device secret). Real Task Scheduler
-cleanup, revocation and reboot still require external interactive VM acceptance.
+harmless local test sentinel, not an enrolled device secret). A further disposable Windows standard-user CI gate registers a **real**
+`Interactive` / `Limited` at-logon Scheduled Task for the freshly signed
+no-enroll Agent installation, then invokes the real uninstaller. It requires
+actual Scheduler removal, managed-file deletion and preservation of a
+harmless identity sentinel. The task is never run, and no GUI login or reboot
+occurs; those remain separate external interactive-VM acceptance gates.
+Real Task Scheduler logon/startup, live revocation and reboot still require
+external interactive VM acceptance.
 
 Disposable Windows CI also tests the **positive signed version-selection upgrade**
 on the actual packaged installer and a freshly signed newer manifest. The existing

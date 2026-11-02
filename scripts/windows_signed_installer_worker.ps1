@@ -13,6 +13,7 @@ $rollbackErrorId = 'none'
 $rollbackSource = 'none'
 $rollbackSourceLine = 0
 $rollbackFlags = 'none'
+$realTaskPhase = 'none'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -215,7 +216,31 @@ try {
         $uninstallReport.managed_task_cleanup_simulated -ne $true) {
         throw 'Windows signed-install uninstall acceptance failed.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; simulated_signed_upgrade_success=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true} |
+    $stage = 'real_task_uninstall'
+    $realProbe = Join-Path $FixtureRoot 'installers\real_task_uninstall_probe.ps1'
+    if (!(Test-Path -LiteralPath $realProbe -PathType Leaf)) {
+        throw 'Real disposable Windows Task Scheduler uninstall probe missing.'
+    }
+    try {
+        $realReport = & $realProbe -Installer $installer -Uninstaller $uninstaller -Origin $Origin | ConvertFrom-Json
+    } catch {
+        $reason = [string]$_.Exception.Message
+        foreach ($phase in @('preconditions', 'signed_reinstall', 'task_register', 'task_verify', 'uninstall', 'verify_cleanup')) {
+            if ($reason -ceq ('CI_REAL_TASK_PHASE_' + $phase)) {
+                $realTaskPhase = $phase
+            }
+        }
+        throw
+    }
+    if ($realReport.status -ne 'PASS' -or
+        $realReport.real_task_registered -ne $true -or
+        $realReport.real_task_removed -ne $true -or
+        $realReport.signed_files_removed -ne $true -or
+        $realReport.disposable_identity_preserved -ne $true -or
+        $realReport.gui_logon_tested -ne $false) {
+        throw 'Real owned Windows Scheduled Task uninstall acceptance failed.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; simulated_signed_upgrade_success=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true; real_scheduler_uninstall=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
@@ -275,10 +300,13 @@ try {
     if ($installerLine -eq 0 -and $stack -match '(?i)windows\.ps1:\s*line\s+([0-9]{1,3})') {
         $installerLine = [int]$Matches[1]
     }
+    if ($stage -eq 'real_task_uninstall' -and $stack -match '(?i)uninstall-windows\.ps1:\s*line\s+([0-9]{1,3})') {
+        $installerLine = [int]$Matches[1]
+    }
     $failureCommand = 'other'
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; real_task_phase=$realTaskPhase; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1

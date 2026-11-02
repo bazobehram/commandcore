@@ -48,6 +48,7 @@ function Get-ScheduledTask {
     param([string]$TaskName)
     $global:CommandCoreCiUninstall.task_checked = $true
     $task = [pscustomobject]@{
+        State = 'Running'
         Description = 'Managed by CommandCore user installer'
         Principal = [pscustomobject]@{
             UserId = $user

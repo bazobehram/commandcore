@@ -16,8 +16,11 @@ if ($task) {
     # description match. The existing task must be the current user's exact
     # limited, interactive CommandCore at-logon launcher.
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $allowedUsers = @($identity.Name, $identity.User.Value, $env:USERNAME,
-        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+    # Start-Process -Credential can inherit USERNAME from the caller, so
+    # derive all task ownership aliases from the authenticated Windows token.
+    $actualUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
+    $allowedUsers = @($identity.Name, $identity.User.Value, $actualUser,
+        ($env:COMPUTERNAME + '\' + $actualUser), ('.\' + $actualUser))
     $launcher = Join-Path $root 'run-agent.ps1'
     $actions = @($task.Actions)
     $triggers = @($task.Triggers)
@@ -33,7 +36,12 @@ if ($task) {
         !([string]$actions[0].Arguments).Contains('"' + $launcher + '"')) {
         throw 'Refusing an unowned or unexpected scheduled task.'
     }
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    # An at-logon task registered during a credential-launched CI process
+    # is Ready, not Running. Stopping a Ready task is unnecessary and some
+    # Windows versions reject it; owned tasks must still be unregistered.
+    if ([string]$task.State -eq 'Running') {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    }
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
 }
 Remove-Item -LiteralPath $root -Recurse -Force

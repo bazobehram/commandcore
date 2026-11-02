@@ -85,7 +85,8 @@ try {
                     $report.task_ownership_denial_matrix -eq $true -and
                     $report.simulated_signed_upgrade_success -eq $true -and
                     $report.uninstall_ownership_denial_matrix -eq $true -and
-                    $report.signed_install_uninstall_cleanup -eq $true
+                    $report.signed_install_uninstall_cleanup -eq $true -and
+                    $report.real_scheduler_uninstall -eq $true
             }
             if (!$accepted) {
                 if (!$OnlyTask -and !$OnlyCredential -and $report.status -eq 'PASS') {
@@ -100,7 +101,7 @@ try {
                 if ($report.stage -in @('identity', 'profile', 'installer', 'activation', 'native', 'no_enroll', 'https_transport',
                     'tampered_manifest_denial', 'pinned_verifier_denial', 'clean_after_tamper_denial',
                     'repeat_install_snapshot', 'repeat_install_denial', 'unauthorized_upgrade_denial', 'repeat_install_unchanged',
-                    'upgrade_rollback_simulation', 'task_ownership_matrix', 'simulated_signed_upgrade_success', 'uninstall_ownership_matrix', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
+                    'upgrade_rollback_simulation', 'task_ownership_matrix', 'simulated_signed_upgrade_success', 'uninstall_ownership_matrix', 'real_task_uninstall', 'task_modules', 'task_register', 'task_verify', 'task_identity')) {
                     $stage = 'worker_' + $report.stage
                 } else {
                     $stage = 'worker_unknown'
@@ -120,6 +121,10 @@ try {
                 }
                 if ($report.hint -in $allowedHints) {
                     Write-Output ('CI_WORKER_FAILURE_HINT:' + $report.hint)
+                }
+                if ($report.stage -eq 'real_task_uninstall' -and
+                    $report.real_task_phase -in @('preconditions', 'signed_reinstall', 'task_register', 'task_verify', 'uninstall', 'verify_cleanup')) {
+                    Write-Output ('CI_REAL_TASK_PHASE:' + $report.real_task_phase)
                 }
                 if ($report.stage -eq 'upgrade_rollback_simulation') {
                     if ($report.rollback_phase -in @('none', 'preconditions', 'signed_upgrade', 'restore', 'hashes')) {
