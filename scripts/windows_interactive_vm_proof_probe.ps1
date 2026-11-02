@@ -41,6 +41,7 @@ $s=New-State; $s.user_sid='S-1-5-32-544'; Assert-Proof $s (New-Proof) (New-TaskI
 $p=New-Proof; $p.user_sid='S-1-5-32-544'; Assert-Proof (New-State) $p (New-TaskInfo) 'proof_invalid'
 $p=New-Proof; $p.non_admin=$false; Assert-Proof (New-State) $p (New-TaskInfo) 'proof_invalid'
 $p=New-Proof; $p.session_id=0; Assert-Proof (New-State) $p (New-TaskInfo) 'proof_invalid'
+$p=New-Proof; $p.session_id='not-an-integer'; Assert-Proof (New-State) $p (New-TaskInfo) 'proof_invalid'
 $p=New-Proof; $p.logon_sid=$previousLogon; Assert-Proof (New-State) $p (New-TaskInfo) 'logon_identity_invalid'
 $p=New-Proof; $p.logon_sid='S-1-5-5-90-91'; Assert-Proof (New-State) $p (New-TaskInfo) 'logon_identity_invalid'
 $p=New-Proof; $p.started_utc='not-a-date'; Assert-Proof (New-State) $p (New-TaskInfo) 'timestamp_invalid'
