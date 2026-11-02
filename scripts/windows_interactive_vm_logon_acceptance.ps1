@@ -23,31 +23,21 @@ function Deny([string]$code) {
     exit 2
 }
 function Get-OwnedTask {
-    # Only touch the task in the root Scheduler folder where Prepare created it.
+    # Never operate on a task from another Scheduler folder.
     $tasks = @(Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue)
     if ($tasks.Count -eq 0) { return $null }
     if ($tasks.Count -ne 1) { Deny 'ambiguous_task_name' }
     $task = $tasks[0]
-    if ($task.Description -ne $description) { Deny 'unrelated_task_name' }
 
-    # A credential-launched process may inherit USERNAME from another account.
-    # Derive all permitted aliases from the actual authenticated Windows token.
+    # A credential-launched process can inherit another account's USERNAME.
+    # Bind to the authenticated Windows token and machine identity instead.
     $actualUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
     $allowed = @([string]$identity.Name, [string]$identity.User.Value,
         [string]$actualUser, [string]([Environment]::MachineName + '\' + $actualUser),
         [string]('.\' + $actualUser))
-    if ([string]$task.Principal.UserId -notin $allowed) {
-        Deny 'task_principal_mismatch'
-    }
-    if ([string]$task.Principal.LogonType -ne 'Interactive' -or [string]$task.Principal.RunLevel -ne 'Limited') {
-        Deny 'unsafe_task_principal'
-    }
-    $triggers = @($task.Triggers)
-    $actions = @($task.Actions)
-    if ($triggers.Count -ne 1 -or $triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
-        [string]$triggers[0].UserId -notin $allowed) { Deny 'unexpected_task_trigger' }
-    if ($actions.Count -ne 1 -or [string]$actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$' -or
-        [string]$actions[0].Arguments -cne $expectedArgs) { Deny 'unexpected_task_action' }
+    $result = Test-CommandCoreVmTaskShape -Task $task -AllowedUsers $allowed `
+        -ExpectedDescription $description -ExpectedArguments $expectedArgs
+    if ($result -ne 'owned') { Deny $result }
     return $task
 }
 
@@ -72,6 +62,8 @@ if ($model -notmatch '(?i)virtual.machine|vmware|virtualbox|qemu|kvm|parallels|h
     Deny 'virtual_machine_not_detected'
 }
 Import-Module ScheduledTasks -ErrorAction Stop
+# Only pure task-shape code is imported; no Scheduler mutations here.
+. (Join-Path $PSScriptRoot 'windows_interactive_vm_task_shape.ps1')
 
 if ($Mode -eq 'Prepare') {
     if (Test-Path -LiteralPath $root) { Deny 'fixture_already_exists' }
