@@ -167,7 +167,9 @@ jobs:
             'scripts/windows_signed_installer_driver.ps1',
             'scripts/windows_signed_installer_worker.ps1',
             'scripts/windows_upgrade_rollback_probe.ps1',
-            'scripts/windows_upgrade_task_ownership_probe.ps1'
+            'scripts/windows_upgrade_task_ownership_probe.ps1',
+            'scripts/windows_uninstall_acceptance_probe.ps1',
+            'install/uninstall-windows.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
