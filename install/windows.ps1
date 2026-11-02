@@ -80,8 +80,12 @@ if ($previous) {
     }
     $priorLauncherBytes = [IO.File]::ReadAllBytes($priorLauncherPath)
     if (!$oldTask) { throw 'Upgrade requires an existing managed interactive logon task.' }
-    $allowedUsers = @($identity.Name, $identity.User.Value, $env:USERNAME,
-        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+    # Start-Process -Credential may inherit USERNAME from a different caller.
+    # Authorize only aliases of the authenticated Windows token.
+    $actualUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
+    $allowedUsers = @($identity.Name, $identity.User.Value, $actualUser,
+        ([Environment]::MachineName + '\' + $actualUser), ('.\' + $actualUser))
+    $expectedLauncherArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $priorLauncherPath + '"'
     if ([string]$oldTask.Principal.UserId -notin $allowedUsers -or
         [string]$oldTask.Principal.LogonType -ne 'Interactive' -or
         [string]$oldTask.Principal.RunLevel -ne 'Limited' -or
@@ -90,7 +94,7 @@ if ($previous) {
         [string]$oldTask.Triggers[0].UserId -notin $allowedUsers -or
         $oldTask.Actions.Count -ne 1 -or
         [string]$oldTask.Actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$' -or
-        !([string]$oldTask.Actions[0].Arguments).Contains((Join-Path $root 'run-agent.ps1'))) {
+        [string]$oldTask.Actions[0].Arguments -cne $expectedLauncherArguments) {
         throw 'Refusing to upgrade an unowned or unexpected scheduled task.'
     }
     # Fail closed if task export is unavailable. This backup is never logged.
@@ -255,8 +259,10 @@ exit $LASTEXITCODE
             if ($taskReplaceAttempted) {
                 $newTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
                 if ($newTask) {
-                    $owners = @($identity.Name, $identity.User.Value,
-                        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+                    # Use the authenticated token even during rollback.
+                    $rollbackUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
+                    $owners = @($identity.Name, $identity.User.Value, $rollbackUser,
+                        ([Environment]::MachineName + '\' + $rollbackUser), ('.\' + $rollbackUser))
                     if ($newTask.Description -ne $taskDescription -or
                         [string]$newTask.Principal.UserId -notin $owners) {
                         throw 'Refusing to remove an unowned scheduled task.'

@@ -184,7 +184,7 @@ try {
         throw 'Missing disposable Windows task ownership fixture.'
     }
     $ownerReport = & $ownerProbe -Installer $installer -Origin $Origin | ConvertFrom-Json
-    if ($ownerReport.status -ne 'PASS' -or $ownerReport.scenarios -ne 7 -or
+    if ($ownerReport.status -ne 'PASS' -or $ownerReport.scenarios -ne 12 -or
         $ownerReport.task_ownership_denied -ne $true -or $ownerReport.unchanged -ne $true) {
         throw 'Managed Windows task ownership negative matrix failed.'
     }

@@ -127,8 +127,16 @@ function Start-ScheduledTask {
 try {
     # Deliberately fake identity content. No enrollment tokens or device grants.
     Set-Content -LiteralPath $statePath -Value '{"ci_mock_identity":true}' -NoNewline
-    & $Installer -Server $Origin -ManifestUrl ($Origin + '/releases/agent/manifest-upgrade.json') -NoEnroll -Upgrade | Out-Null
-    if (!$? -or !$global:CommandCoreCiWindowsUpgrade.lookup -or
+    # A credential-launched process can inherit USERNAME from another account.
+    # The signed positive upgrade must still accept its actual Windows token.
+    $previousUsername = $env:USERNAME
+    try {
+        $env:USERNAME = 'cc_inherited_foreign_account'
+        & $Installer -Server $Origin -ManifestUrl ($Origin + '/releases/agent/manifest-upgrade.json') -NoEnroll -Upgrade | Out-Null
+    } finally {
+        $env:USERNAME = $previousUsername
+    }
+    if (!$global:CommandCoreCiWindowsUpgrade.lookup -or
         !$global:CommandCoreCiWindowsUpgrade.exported -or
         !$global:CommandCoreCiWindowsUpgrade.stopped -or
         !$global:CommandCoreCiWindowsUpgrade.registered -or

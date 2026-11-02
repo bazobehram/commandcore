@@ -62,7 +62,7 @@ function Get-ScheduledTask {
         })
         Actions = @([pscustomobject]@{
             Execute = 'powershell.exe'
-            Arguments = ('-NoProfile -NonInteractive -File "' + $launcher + '"')
+            Arguments = ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher + '"')
         })
     }
     switch ($global:CommandCoreCiOwnerProbe.mode) {
@@ -72,6 +72,14 @@ function Get-ScheduledTask {
         'password_logon' { $task.Principal.LogonType = 'Password' }
         'foreign_trigger' { $task.Triggers[0].UserId = 'S-1-5-32-544' }
         'foreign_action' { $task.Actions[0].Arguments = '-NoProfile -File "C:\unrelated.ps1"' }
+        'action_suffix' { $task.Actions[0].Arguments += ' -EncodedCommand AAA' }
+        'action_prefix' { $task.Actions[0].Arguments = '-File "C:\unrelated.ps1" ' + $task.Actions[0].Arguments }
+        'spoofed_env_owner' {
+            $task.Principal.UserId = $env:USERNAME
+            $task.Triggers[0].UserId = $env:USERNAME
+        }
+        'multiple_actions' { $task.Actions = @($task.Actions[0], $task.Actions[0]) }
+        'multiple_triggers' { $task.Triggers = @($task.Triggers[0], $task.Triggers[0]) }
     }
     return $task
 }
@@ -100,10 +108,16 @@ $scenarios = @(
     @{ mode = 'elevated_principal'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
     @{ mode = 'password_logon'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
     @{ mode = 'foreign_trigger'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
-    @{ mode = 'foreign_action'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' }
+    @{ mode = 'foreign_action'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
+    @{ mode = 'action_suffix'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
+    @{ mode = 'action_prefix'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
+    @{ mode = 'spoofed_env_owner'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
+    @{ mode = 'multiple_actions'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' },
+    @{ mode = 'multiple_triggers'; expected = 'Refusing to upgrade an unowned or unexpected scheduled task.' }
 )
 try {
     Set-Content -LiteralPath $statePath -Value '{"ci_fixture":true}' -NoNewline -ErrorAction Stop
+    $originalUsername = $env:USERNAME
     foreach ($case in $scenarios) {
         $global:CommandCoreCiOwnerProbe.mode = $case.mode
         $global:CommandCoreCiOwnerProbe.looked_up = $false
@@ -111,9 +125,14 @@ try {
         $global:CommandCoreCiOwnerProbe.mutated = $false
         $denied = $false
         try {
+            if ($case.mode -eq 'spoofed_env_owner') {
+                $env:USERNAME = 'cc_inherited_foreign_account'
+            }
             & $Installer -Server $Origin -NoEnroll -Upgrade | Out-Null
         } catch {
             $denied = ([string]$_.Exception.Message -ceq [string]$case.expected)
+        } finally {
+            $env:USERNAME = $originalUsername
         }
         if (!$denied -or !$global:CommandCoreCiOwnerProbe.looked_up -or
             $global:CommandCoreCiOwnerProbe.exported -or
