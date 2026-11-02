@@ -169,6 +169,7 @@ jobs:
             'scripts/windows_upgrade_rollback_probe.ps1',
             'scripts/windows_upgrade_task_ownership_probe.ps1',
             'scripts/windows_uninstall_acceptance_probe.ps1',
+            'scripts/windows_signed_upgrade_success_probe.ps1',
             'install/uninstall-windows.ps1'
           )) {
             $tokens = $null
