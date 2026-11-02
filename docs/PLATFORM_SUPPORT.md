@@ -48,6 +48,14 @@ is intentionally preserved for explicit panel revocation (verified with a
 harmless local test sentinel, not an enrolled device secret). Real Task Scheduler
 cleanup, revocation and reboot still require external interactive VM acceptance.
 
+Disposable Windows CI also tests the **positive signed version-selection upgrade**
+on the actual packaged installer and a freshly signed newer manifest. The existing
+version must remain intact; the new version is activated, runnable and represented
+in the installation metadata. Scheduled Task changes and healthy Agent connection
+are synthetic test doubles, clearly **not** proof of a real connected Agent or
+end-user Windows upgrade. Real authenticated upgrade, GUI logon/reboot, reconnect,
+revocation and external-VM acceptance are still pending.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |

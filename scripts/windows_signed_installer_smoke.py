@@ -408,6 +408,10 @@ def main() -> int:
                 output / "uninstall_acceptance_probe.ps1",
             )
             shutil.copyfile(
+                ROOT / "scripts" / "windows_signed_upgrade_success_probe.ps1",
+                output / "signed_upgrade_success_probe.ps1",
+            )
+            shutil.copyfile(
                 ROOT / "install" / "uninstall-windows.ps1",
                 output / "uninstall-windows.ps1",
             )
@@ -446,6 +450,7 @@ def main() -> int:
                         "installed_artifacts_unchanged": True,
                         "simulated_signed_upgrade_rollback": True,
                         "task_ownership_denial_matrix": True,
+                        "simulated_signed_upgrade_success": True,
                         "uninstall_ownership_denial_matrix": True,
                         "signed_install_uninstall_cleanup": True,
                         "scope": "no-enroll signed install, integrity denials and simulated failed signed upgrade/task rollback; genuine successful upgrade, live task execution, reboot and enrollment remain gated",
