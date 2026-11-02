@@ -16,8 +16,11 @@ if ($task) {
     # description match. The existing task must be the current user's exact
     # limited, interactive CommandCore at-logon launcher.
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $allowedUsers = @($identity.Name, $identity.User.Value, $env:USERNAME,
-        ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))
+    # Start-Process -Credential can inherit USERNAME from the caller, so
+    # derive all task ownership aliases from the authenticated Windows token.
+    $actualUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
+    $allowedUsers = @($identity.Name, $identity.User.Value, $actualUser,
+        ($env:COMPUTERNAME + '\' + $actualUser), ('.\' + $actualUser))
     $launcher = Join-Path $root 'run-agent.ps1'
     $actions = @($task.Actions)
     $triggers = @($task.Triggers)
