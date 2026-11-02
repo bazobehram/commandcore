@@ -34,6 +34,7 @@ if ((Test-Path -LiteralPath $root) -or (Test-Path -LiteralPath $state) -or
 }
 $installStarted = $false
 $registerAttempted = $false
+$phase = 'preconditions'
 function Test-OwnedFixtureTask($task) {
     if (!$task) { return $false }
     $triggers = @($task.Triggers)
@@ -52,6 +53,7 @@ function Test-OwnedFixtureTask($task) {
     )
 }
 try {
+    $phase = 'signed_reinstall'
     $installStarted = $true
     & $Installer -Server $Origin -NoEnroll -NoTask | Out-Null
     if (!(Test-Path -LiteralPath $marker -PathType Leaf) -or
@@ -68,14 +70,18 @@ try {
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
     $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero)
+    $phase = 'task_register'
     $registerAttempted = $true
     Register-ScheduledTask -TaskName $name -Description $description -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -ErrorAction Stop | Out-Null
+    $phase = 'task_verify'
     $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
     if (!(Test-OwnedFixtureTask $task) -or [string]$task.State -eq 'Running') {
         throw 'Unexpected disposable Scheduled Task ownership or state.'
     }
     # The real product uninstaller must unregister this Ready task, not start it.
+    $phase = 'uninstall'
     & $Uninstaller | Out-Null
+    $phase = 'verify_cleanup'
     if ((Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) -or
         (Test-Path -LiteralPath $root) -or
         !(Test-Path -LiteralPath $state -PathType Leaf) -or
@@ -85,6 +91,9 @@ try {
     @{status='PASS'; real_task_registered=$true; real_task_removed=$true;
       signed_files_removed=$true; disposable_identity_preserved=$true;
       gui_logon_tested=$false} | ConvertTo-Json -Compress
+} catch {
+    # Only a fixed phase is exposed to CI; never print exception details.
+    throw ('CI_REAL_TASK_PHASE_' + $phase)
 } finally {
     # On failure, clean only the exact fixture we just attempted to register.
     if ($registerAttempted) {
