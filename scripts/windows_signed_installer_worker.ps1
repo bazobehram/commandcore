@@ -13,6 +13,7 @@ $rollbackErrorId = 'none'
 $rollbackSource = 'none'
 $rollbackSourceLine = 0
 $rollbackFlags = 'none'
+$realTaskPhase = 'none'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -220,7 +221,17 @@ try {
     if (!(Test-Path -LiteralPath $realProbe -PathType Leaf)) {
         throw 'Real disposable Windows Task Scheduler uninstall probe missing.'
     }
-    $realReport = & $realProbe -Installer $installer -Uninstaller $uninstaller -Origin $Origin | ConvertFrom-Json
+    try {
+        $realReport = & $realProbe -Installer $installer -Uninstaller $uninstaller -Origin $Origin | ConvertFrom-Json
+    } catch {
+        $reason = [string]$_.Exception.Message
+        foreach ($phase in @('preconditions', 'signed_reinstall', 'task_register', 'task_verify', 'uninstall', 'verify_cleanup')) {
+            if ($reason -ceq ('CI_REAL_TASK_PHASE_' + $phase)) {
+                $realTaskPhase = $phase
+            }
+        }
+        throw
+    }
     if ($realReport.status -ne 'PASS' -or
         $realReport.real_task_registered -ne $true -or
         $realReport.real_task_removed -ne $true -or
@@ -292,7 +303,7 @@ try {
     $failureCommand = 'other'
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
-    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; real_task_phase=$realTaskPhase; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
     exit 1
