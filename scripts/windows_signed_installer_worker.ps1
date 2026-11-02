@@ -300,6 +300,9 @@ try {
     if ($installerLine -eq 0 -and $stack -match '(?i)windows\.ps1:\s*line\s+([0-9]{1,3})') {
         $installerLine = [int]$Matches[1]
     }
+    if ($stage -eq 'real_task_uninstall' -and $stack -match '(?i)uninstall-windows\.ps1:\s*line\s+([0-9]{1,3})') {
+        $installerLine = [int]$Matches[1]
+    }
     $failureCommand = 'other'
     if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
     elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
