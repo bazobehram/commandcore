@@ -64,6 +64,7 @@ if ($model -notmatch '(?i)virtual.machine|vmware|virtualbox|qemu|kvm|parallels|h
 Import-Module ScheduledTasks -ErrorAction Stop
 # Only pure task-shape code is imported; no Scheduler mutations here.
 . (Join-Path $PSScriptRoot 'windows_interactive_vm_task_shape.ps1')
+. (Join-Path $PSScriptRoot 'windows_interactive_vm_proof_validation.ps1')
 
 if ($Mode -eq 'Prepare') {
     if (Test-Path -LiteralPath $root) { Deny 'fixture_already_exists' }
@@ -128,22 +129,14 @@ if ($Mode -eq 'Cleanup') {
 
 if (!(Test-Path -LiteralPath $proofPath -PathType Leaf)) { Deny 'logon_action_not_observed' }
 $proof = Get-Content -LiteralPath $proofPath -Raw | ConvertFrom-Json
-if ($proof.schema -ne 1 -or $proof.nonce -cne $state.nonce -or $proof.user_sid -ne $state.user_sid -or
-    $proof.non_admin -ne $true -or [int]$proof.session_id -le 0 -or
-    [string]$proof.logon_sid -ne $currentLogonSid -or [string]$proof.logon_sid -eq [string]$state.logon_sid) { Deny 'proof_invalid' }
-$prepared = [DateTimeOffset]::Parse([string]$state.prepared_utc)
-$started = [DateTimeOffset]::Parse([string]$proof.started_utc)
-if ($started -le $prepared.AddSeconds(2) -or $started -gt [DateTimeOffset]::UtcNow.AddMinutes(1)) {
-    Deny 'proof_timestamp_invalid'
-}
 $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -TaskPath $taskPath -ErrorAction Stop
-if ($taskInfo.LastTaskResult -ne 0 -or [DateTimeOffset]$taskInfo.LastRunTime -le $prepared) {
-    Deny 'scheduler_task_execution_unconfirmed'
-}
-$bootNow = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
-if ($RequireReboot -and $bootNow -le [DateTimeOffset]::Parse([string]$state.boot_utc).UtcDateTime) {
-    Deny 'reboot_not_observed'
-}
+$bootNow = [DateTimeOffset](Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+$proofResult = Test-CommandCoreVmLogonProof -State $state -Proof $proof `
+    -TaskInfo $taskInfo -CurrentUserSid ([string]$identity.User.Value) `
+    -CurrentLogonSid $currentLogonSid -Now ([DateTimeOffset]::UtcNow) `
+    -BootNow $bootNow -RequireReboot:$RequireReboot
+if ($proofResult -ne 'valid') { Deny $proofResult }
+
 Write-Output 'PASS: disposable interactive Windows logon task executed as intended non-admin user'
 if ($RequireReboot) { Write-Output 'PASS: OS reboot observed after task preparation' }
 Write-Output 'NOT_TESTED: actual CommandCore Agent enrollment, reconnect, upgrade, rollback'
