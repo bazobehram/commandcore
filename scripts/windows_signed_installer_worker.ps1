@@ -215,7 +215,21 @@ try {
         $uninstallReport.managed_task_cleanup_simulated -ne $true) {
         throw 'Windows signed-install uninstall acceptance failed.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; simulated_signed_upgrade_success=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true} |
+    $stage = 'real_task_uninstall'
+    $realProbe = Join-Path $FixtureRoot 'installers\real_task_uninstall_probe.ps1'
+    if (!(Test-Path -LiteralPath $realProbe -PathType Leaf)) {
+        throw 'Real disposable Windows Task Scheduler uninstall probe missing.'
+    }
+    $realReport = & $realProbe -Installer $installer -Uninstaller $uninstaller -Origin $Origin | ConvertFrom-Json
+    if ($realReport.status -ne 'PASS' -or
+        $realReport.real_task_registered -ne $true -or
+        $realReport.real_task_removed -ne $true -or
+        $realReport.signed_files_removed -ne $true -or
+        $realReport.disposable_identity_preserved -ne $true -or
+        $realReport.gui_logon_tested -ne $false) {
+        throw 'Real owned Windows Scheduled Task uninstall acceptance failed.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; simulated_signed_upgrade_success=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true; real_scheduler_uninstall=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
