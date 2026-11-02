@@ -83,6 +83,7 @@ try {
                     $report.unchanged_after_denial -eq $true -and
                     $report.simulated_upgrade_rollback -eq $true -and
                     $report.task_ownership_denial_matrix -eq $true -and
+                    $report.simulated_signed_upgrade_success -eq $true -and
                     $report.uninstall_ownership_denial_matrix -eq $true -and
                     $report.signed_install_uninstall_cleanup -eq $true
             }
