@@ -131,13 +131,17 @@ try {
     & $verifier verify-release $manifest --public-key $ReleasePublicKey --platform windows --architecture $arch --artifact $artifact | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Artifact integrity verification failed.' }
     foreach ($path in @($root, $stateRoot)) {
-        if ($previous) {
+        $existingDirectory = Test-Path -LiteralPath $path -PathType Container
+        if ($previous -or $existingDirectory) {
+            # A clean reinstall after uninstall may retain the identity State
+            # directory. Validate its secured ACL without resetting ownership:
+            # the normal user cannot necessarily call SetOwner twice.
             # Existing, properly managed directories must keep their secured
             # owner/DACL intact. Reapplying SetOwner/Set-Acl on an upgrade can
             # require privileges unavailable to the normal user. Fail closed
             # on any drift rather than elevating or silently weakening ACLs.
-            if (!(Test-Path -LiteralPath $path -PathType Container)) {
-                throw 'Upgrade requires existing protected Agent directories.'
+            if (!$existingDirectory) {
+                throw 'Existing Agent installation requires protected directories.'
             }
             $acl = Get-Acl -LiteralPath $path -ErrorAction Stop
             if (!$acl.AreAccessRulesProtected -or
