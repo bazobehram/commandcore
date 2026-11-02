@@ -408,6 +408,10 @@ def main() -> int:
                 output / "uninstall_acceptance_probe.ps1",
             )
             shutil.copyfile(
+                ROOT / "scripts" / "windows_signed_upgrade_success_probe.ps1",
+                output / "signed_upgrade_success_probe.ps1",
+            )
+            shutil.copyfile(
                 ROOT / "install" / "uninstall-windows.ps1",
                 output / "uninstall-windows.ps1",
             )
