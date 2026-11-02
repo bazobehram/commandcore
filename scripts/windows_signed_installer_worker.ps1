@@ -13,6 +13,7 @@ $rollbackErrorId = 'none'
 $rollbackSource = 'none'
 $rollbackSourceLine = 0
 $rollbackFlags = 'none'
+$realTaskPhase = 'none'
 try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -220,7 +221,92 @@ try {
     if (!(Test-Path -LiteralPath $realProbe -PathType Leaf)) {
         throw 'Real disposable Windows Task Scheduler uninstall probe missing.'
     }
-    $realReport = & $realProbe -Installer $installer -Uninstaller $uninstaller -Origin $Origin | ConvertFrom-Json
+    try {
+        $realReport = & $realProbe -Installer $installer -Uninstaller $uninstaller -Origin $Origin | ConvertFrom-Json
+    } catch {
+        $candidate = [string]$_.Exception.Message
+        if ($candidate -match '^CI_REAL_TASK_PHASE_(preconditions|signed_reinstall|task_register|task_verify|uninstall|verify_cleanup)
+    if ($realReport.status -ne 'PASS' -or
+        $realReport.real_task_registered -ne $true -or
+        $realReport.real_task_removed -ne $true -or
+        $realReport.signed_files_removed -ne $true -or
+        $realReport.disposable_identity_preserved -ne $true -or
+        $realReport.gui_logon_tested -ne $false) {
+        throw 'Real owned Windows Scheduled Task uninstall acceptance failed.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; simulated_signed_upgrade_success=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true; real_scheduler_uninstall=$true} |
+        ConvertTo-Json -Compress |
+        Set-Content -LiteralPath $report -Encoding UTF8
+} catch {
+    # Never serialize the exception, command arguments, token, URL, or path.
+    # Only allowlisted categories are returned to the privileged CI driver.
+    $hint = 'other'
+    if ($stage -eq 'installer') {
+        $message = [string]$_.Exception.Message
+        $errorId = [string]$_.FullyQualifiedErrorId
+        if ($message -match '(?i)Release download failed|curl_exit|HTTP|SSL|TLS|certificate') {
+            $hint = 'download_or_tls'
+        } elseif ($message -match '(?i)checksum|integrity|sha256|signature') {
+            $hint = 'release_integrity'
+        } elseif ($message -match '(?i)manifest|verify-release|artifact|release') {
+            $hint = 'release_metadata'
+        } elseif ($message -match '(?i)ACL|Set-Acl|Access to the path|access is denied|UnauthorizedAccess') {
+            $hint = 'filesystem_acl'
+        } elseif ($message -match '(?i)execution policy|not digitally signed|running scripts') {
+            $hint = 'powershell_policy'
+        } elseif ($message -match '(?i)already exists|existing directory|unrelated') {
+            $hint = 'preexisting_installation'
+        } elseif ($message -match '(?i)parameter cannot be found|ParameterBinding') {
+            $hint = 'parameter_binding'
+        } elseif ($message -match '(?i)not recognized|CommandNotFound') {
+            $hint = 'missing_command'
+        } elseif ($message -match '(?i)Property|strict mode') {
+            $hint = 'powershell_strictmode'
+        } elseif ($errorId -match 'ParserError') {
+            $hint = 'powershell_parse'
+        }
+    }
+    $curlCode = 0
+    if ($stage -eq 'installer' -and $message -match 'curl_exit=([0-9]{1,3})') {
+        $curlCode = [int]$Matches[1]
+    }
+    $installerLine = 0
+    if ($stage -eq 'installer') {
+        $source = [IO.Path]::GetFileName([string]$_.InvocationInfo.ScriptName)
+        $number = [int]$_.InvocationInfo.ScriptLineNumber
+        if ($source -eq 'windows.ps1' -and $number -gt 0 -and $number -lt 1000) {
+            $installerLine = $number
+        }
+    }
+    # Report only known command names, never raw exception text.
+    $missingCommand = 'unknown'
+    if ($_.Exception -is [System.Management.Automation.CommandNotFoundException]) {
+        $candidate = [string]$_.Exception.CommandName
+        if ($candidate -in @('Get-ScheduledTask', 'Get-Command', 'curl.exe', 'Get-FileHash', 'Get-ReleaseFile', 'Get-ItemProperty', 'Set-Acl', 'New-Item', 'ConvertFrom-Json', 'Get-Content', 'Remove-Item')) {
+            $missingCommand = $candidate.Replace('-', '_').Replace('.', '_')
+        }
+    }
+    $failureType = ([string]$_.Exception.GetType().Name)
+    if ($failureType -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureType = 'other' }
+    $failureId = ([string]$_.FullyQualifiedErrorId).Split(',')[0]
+    if ($failureId -notmatch '^[A-Za-z0-9_]{1,64}$') { $failureId = 'other' }
+    $stack = [string]$_.ScriptStackTrace
+    if ($installerLine -eq 0 -and $stack -match '(?i)windows\.ps1:\s*line\s+([0-9]{1,3})') {
+        $installerLine = [int]$Matches[1]
+    }
+    $failureCommand = 'other'
+    if ($stack -match '(?i)Get-ReleaseFile') { $failureCommand = 'GetReleaseFile' }
+    elseif ($stack -match '(?i)Set-Acl') { $failureCommand = 'SetAcl' }
+    @{status='FAIL'; non_admin=$false; signed_install=$false; stage=$stage; hint=$hint; rollback_phase=$rollbackPhase; rollback_category=$rollbackCategory; rollback_error_id=$rollbackErrorId; rollback_source=$rollbackSource; rollback_source_line=$rollbackSourceLine; rollback_flags=$rollbackFlags; real_task_phase=$realTaskPhase; installer_line=$installerLine; curl_exit=$curlCode; failure_type=$failureType; failure_id=$failureId; failure_command=$failureCommand; missing_command=$missingCommand} |
+        ConvertTo-Json -Compress |
+        Set-Content -LiteralPath $report -Encoding UTF8
+    exit 1
+}
+) {
+            $realTaskPhase = $Matches[1]
+        }
+        throw
+    }
     if ($realReport.status -ne 'PASS' -or
         $realReport.real_task_registered -ne $true -or
         $realReport.real_task_removed -ne $true -or
