@@ -12,12 +12,17 @@ function Test-CommandCoreVmLogonProof {
         [Parameter(Mandatory)][DateTimeOffset]$BootNow,
         [switch]$RequireReboot
     )
+    # Malformed evidence must return an allowlisted denial, not a cast error.
+    $sessionNumber = 0
+    if (![int]::TryParse([string]$Proof.session_id, [ref]$sessionNumber)) {
+        return 'proof_invalid'
+    }
     if ($State.schema -ne 1 -or $Proof.schema -ne 1 -or
         [string]$State.nonce -cnotmatch '^[a-f0-9]{32}$' -or
         [string]$State.user_sid -cne $CurrentUserSid -or
         [string]$Proof.user_sid -cne $CurrentUserSid -or
         [string]$Proof.nonce -cne [string]$State.nonce -or
-        $Proof.non_admin -ne $true -or [int]$Proof.session_id -le 0) {
+        $Proof.non_admin -ne $true -or $sessionNumber -le 0) {
         return 'proof_invalid'
     }
     if ($CurrentLogonSid -notmatch '^S-1-5-5-\d+-\d+$' -or
