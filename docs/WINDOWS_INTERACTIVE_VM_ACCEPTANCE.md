@@ -36,8 +36,20 @@ PowerShell action arguments. They never rely on an inherited `USERNAME`
 environment variable to authorize another user's task.
 
 CI runs the separate, **non-mutating** `windows_interactive_vm_task_shape_probe.ps1`
-negative matrix for tampered/foreign tasks. This does not replace actual
-interactive login, reboot, or live Agent acceptance on the disposable VM.
+negative matrix for tampered/foreign tasks. It also runs
+`windows_interactive_vm_proof_probe.ps1` against the pure
+`windows_interactive_vm_proof_validation.ps1` verifier. The latter tests
+unexpected user/logon SIDs, mismatched nonces, administrator or Session 0
+evidence, malformed/stale/future timestamps, failed Scheduler execution,
+and reboot evidence, without logging any real identities. Keep both proof
+scripts alongside the harness.
+
+**Evidence limitation:** task state and proof files belong to the disposable
+local test user, so this is reproducible operator-run acceptance, **not**
+tamper-proof remote attestation. Even a PASS on a real interactive VM proves
+only the harmless action ran at logon; it does not prove actual CommandCore
+Agent enrollment, authenticated reconnect, or a connected signed upgrade.
+Neither this CI matrix nor the harness is permitted to contact production.
 
 From the checked-out source as the same standard user:
 

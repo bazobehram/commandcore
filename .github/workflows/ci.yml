@@ -189,6 +189,10 @@ jobs:
         shell: pwsh
         run: |
           & ./scripts/windows_interactive_vm_task_shape_probe.ps1
+      - name: Offline interactive-VM logon and reboot proof denial matrix
+        shell: pwsh
+        run: |
+          & ./scripts/windows_interactive_vm_proof_probe.ps1
       - name: Interactive VM harness parses and cannot run in CI
         shell: pwsh
         run: |
@@ -197,7 +201,9 @@ jobs:
           foreach ($file in @('scripts/windows_interactive_vm_logon_acceptance.ps1',
             'scripts/windows_interactive_logon_action.ps1',
             'scripts/windows_interactive_vm_task_shape.ps1',
-            'scripts/windows_interactive_vm_task_shape_probe.ps1')) {
+            'scripts/windows_interactive_vm_task_shape_probe.ps1',
+            'scripts/windows_interactive_vm_proof_validation.ps1',
+            'scripts/windows_interactive_vm_proof_probe.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$errors) | Out-Null
