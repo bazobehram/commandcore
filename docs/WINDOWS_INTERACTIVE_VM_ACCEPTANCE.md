@@ -26,6 +26,19 @@ start or enroll a real CommandCore Agent; it does not contact any CommandCore
 server or request FULL_CONTROL. The task and state live only in the test
 account; no secrets or credentials are embedded.
 
+Keep all three scripts together in the same checked-out `scripts/` directory:
+`windows_interactive_vm_logon_acceptance.ps1`,
+`windows_interactive_logon_action.ps1`, and
+`windows_interactive_vm_task_shape.ps1`. Cleanup and verification are scoped to
+the Scheduler root (`\\`), the authenticated Windows token's user identity,
+the exact limited/interactive principal, one at-logon trigger, and the exact
+PowerShell action arguments. They never rely on an inherited `USERNAME`
+environment variable to authorize another user's task.
+
+CI runs the separate, **non-mutating** `windows_interactive_vm_task_shape_probe.ps1`
+negative matrix for tampered/foreign tasks. This does not replace actual
+interactive login, reboot, or live Agent acceptance on the disposable VM.
+
 From the checked-out source as the same standard user:
 
 ### 1. Prepare

@@ -9,32 +9,35 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $taskName = 'CommandCore CI Interactive Logon Acceptance'
+$taskPath = '\'
 $description = 'CommandCore disposable VM interactive logon proof only'
 $root = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CommandCore-VM-Acceptance\WindowsLogon'
 $statePath = Join-Path $root 'state.json'
 $proofPath = Join-Path $root 'proof.json'
 $actionPath = Join-Path $root 'task-action.ps1'
+# Compare the exact action rather than checking whether arguments contain a path.
+$expectedArgs = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $actionPath + '" -FixtureRoot "' + $root + '"'
 
 function Deny([string]$code) {
     Write-Output ('BLOCKED: ' + $code)
     exit 2
 }
 function Get-OwnedTask {
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if (!$task) { return $null }
-    if ($task.Description -ne $description) { Deny 'unrelated_task_name' }
-    if ([string]$task.Principal.UserId -notin @($identity.Name, $identity.User.Value, $env:USERNAME, ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))) {
-        Deny 'task_principal_mismatch'
-    }
-    if ([string]$task.Principal.LogonType -ne 'Interactive' -or [string]$task.Principal.RunLevel -ne 'Limited') {
-        Deny 'unsafe_task_principal'
-    }
+    # Never operate on a task from another Scheduler folder.
+    $tasks = @(Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue)
+    if ($tasks.Count -eq 0) { return $null }
+    if ($tasks.Count -ne 1) { Deny 'ambiguous_task_name' }
+    $task = $tasks[0]
+
+    # A credential-launched process can inherit another account's USERNAME.
+    # Bind to the authenticated Windows token and machine identity instead.
+    $actualUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
     $allowed = @([string]$identity.Name, [string]$identity.User.Value,
-        [string]$env:USERNAME, [string]($env:COMPUTERNAME + '\' + $env:USERNAME), [string]('.\' + $env:USERNAME))
-    if ($task.Triggers.Count -ne 1 -or $task.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
-        [string]$task.Triggers[0].UserId -notin $allowed) { Deny 'unexpected_task_trigger' }
-    if ($task.Actions.Count -ne 1 -or [string]$task.Actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$' -or
-        !([string]$task.Actions[0].Arguments).Contains($actionPath)) { Deny 'unexpected_task_action' }
+        [string]$actualUser, [string]([Environment]::MachineName + '\' + $actualUser),
+        [string]('.\' + $actualUser))
+    $result = Test-CommandCoreVmTaskShape -Task $task -AllowedUsers $allowed `
+        -ExpectedDescription $description -ExpectedArguments $expectedArgs
+    if ($result -ne 'owned') { Deny $result }
     return $task
 }
 
@@ -59,6 +62,8 @@ if ($model -notmatch '(?i)virtual.machine|vmware|virtualbox|qemu|kvm|parallels|h
     Deny 'virtual_machine_not_detected'
 }
 Import-Module ScheduledTasks -ErrorAction Stop
+# Only pure task-shape code is imported; no Scheduler mutations here.
+. (Join-Path $PSScriptRoot 'windows_interactive_vm_task_shape.ps1')
 
 if ($Mode -eq 'Prepare') {
     if (Test-Path -LiteralPath $root) { Deny 'fixture_already_exists' }
@@ -80,12 +85,11 @@ if ($Mode -eq 'Prepare') {
             boot_utc = $boot
         }
         $state | ConvertTo-Json -Compress | Set-Content -LiteralPath $statePath -Encoding UTF8
-        $arg = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $actionPath + '" -FixtureRoot "' + $root + '"'
-        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $expectedArgs
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
         $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
         $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::FromMinutes(2))
-        Register-ScheduledTask -TaskName $taskName -Description $description -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -ErrorAction Stop | Out-Null
+        Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Description $description -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -ErrorAction Stop | Out-Null
         $createdTask = $true
         $saved = Get-OwnedTask
         if (!$saved -or $saved.Triggers.Count -ne 1 -or $saved.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger') {
@@ -97,7 +101,7 @@ if ($Mode -eq 'Prepare') {
         Write-Output 'DO NOT manually start the task; that does not prove at-logon startup'
     } catch {
         if ($createdTask) {
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction SilentlyContinue
         }
         if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
         throw 'Disposable VM preparation failed; owned fixtures were cleaned up'
@@ -116,7 +120,7 @@ if ($task.Triggers.Count -ne 1 -or $task.Triggers[0].CimClass.CimClassName -ne '
     Deny 'not_a_logon_task'
 }
 if ($Mode -eq 'Cleanup') {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+    Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop
     Write-Output 'PASS: only owned disposable task and fixture removed'
     exit 0
@@ -132,7 +136,7 @@ $started = [DateTimeOffset]::Parse([string]$proof.started_utc)
 if ($started -le $prepared.AddSeconds(2) -or $started -gt [DateTimeOffset]::UtcNow.AddMinutes(1)) {
     Deny 'proof_timestamp_invalid'
 }
-$taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
+$taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -TaskPath $taskPath -ErrorAction Stop
 if ($taskInfo.LastTaskResult -ne 0 -or [DateTimeOffset]$taskInfo.LastRunTime -le $prepared) {
     Deny 'scheduler_task_execution_unconfirmed'
 }
