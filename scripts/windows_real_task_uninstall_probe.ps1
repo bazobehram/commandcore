@@ -81,7 +81,15 @@ try {
     }
     # The real product uninstaller must unregister this Ready task, not start it.
     $phase = 'uninstall'
-    & $Uninstaller | Out-Null
+    # A credential-launched process may inherit an unrelated runner USERNAME.
+    # Ensure the real uninstaller trusts the authenticated token, not env data.
+    $previousUsername = $env:USERNAME
+    try {
+        $env:USERNAME = 'cc_ci_inherited_other_user'
+        & $Uninstaller | Out-Null
+    } finally {
+        $env:USERNAME = $previousUsername
+    }
     $phase = 'verify_cleanup'
     if ((Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) -or
         (Test-Path -LiteralPath $root) -or
