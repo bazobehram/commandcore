@@ -33,7 +33,12 @@ if ($task) {
         !([string]$actions[0].Arguments).Contains('"' + $launcher + '"')) {
         throw 'Refusing an unowned or unexpected scheduled task.'
     }
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    # An at-logon task registered during a credential-launched CI process
+    # is Ready, not Running. Stopping a Ready task is unnecessary and some
+    # Windows versions reject it; owned tasks must still be unregistered.
+    if ([string]$task.State -eq 'Running') {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    }
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
 }
 Remove-Item -LiteralPath $root -Recurse -Force
