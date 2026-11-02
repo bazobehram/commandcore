@@ -408,6 +408,10 @@ def main() -> int:
                 output / "uninstall_acceptance_probe.ps1",
             )
             shutil.copyfile(
+                ROOT / "scripts" / "windows_real_task_uninstall_probe.ps1",
+                output / "real_task_uninstall_probe.ps1",
+            )
+            shutil.copyfile(
                 ROOT / "scripts" / "windows_signed_upgrade_success_probe.ps1",
                 output / "signed_upgrade_success_probe.ps1",
             )
@@ -453,7 +457,8 @@ def main() -> int:
                         "simulated_signed_upgrade_success": True,
                         "uninstall_ownership_denial_matrix": True,
                         "signed_install_uninstall_cleanup": True,
-                        "scope": "no-enroll signed install, integrity denials and simulated failed signed upgrade/task rollback; genuine successful upgrade, live task execution, reboot and enrollment remain gated",
+                        "real_scheduler_uninstall": True,
+                        "scope": "signed install plus real owned task register/unregister and file uninstall; upgrade Task Scheduler/health mocked, GUI logon and reboot untested",
                     }
                 )
             )
