@@ -92,8 +92,9 @@ try {
       signed_files_removed=$true; disposable_identity_preserved=$true;
       gui_logon_tested=$false} | ConvertTo-Json -Compress
 } catch {
-    # Only a fixed phase is exposed to CI; never print exception details.
-    throw ('CI_REAL_TASK_PHASE_' + $phase)
+    # Preserve the originating error/stack for the parent worker's bounded
+    # exception-type and source-line diagnostics; never print raw details.
+    throw
 } finally {
     # On failure, clean only the exact fixture we just attempted to register.
     if ($registerAttempted) {
