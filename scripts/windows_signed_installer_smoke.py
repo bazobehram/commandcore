@@ -257,9 +257,7 @@ def run_powershell(script: Path, env: dict[str, str], *args: str) -> None:
             matches = re.findall(rf"(?m)^{field}:({allowed})\s*$", process.stdout)
             if matches:
                 print("FAIL: " + field.lower() + "=" + matches[-1])
-        phases = re.findall(
-            r"(?m)^CI_REAL_TASK_PHASE:([a-z_]+)\s*$", process.stdout
-        )
+        phases = re.findall(r"(?m)^CI_REAL_TASK_PHASE:([a-z_]+)\s*$", process.stdout)
         allowed_phases = {
             "preconditions",
             "signed_reinstall",
