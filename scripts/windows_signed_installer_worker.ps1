@@ -187,6 +187,20 @@ try {
         $ownerReport.task_ownership_denied -ne $true -or $ownerReport.unchanged -ne $true) {
         throw 'Managed Windows task ownership negative matrix failed.'
     }
+    $stage = 'simulated_signed_upgrade_success'
+    $successProbe = Join-Path $FixtureRoot 'installers\signed_upgrade_success_probe.ps1'
+    if (!(Test-Path -LiteralPath $successProbe -PathType Leaf)) {
+        throw 'Missing disposable signed upgrade success probe.'
+    }
+    $successReport = & $successProbe -Installer $installer -Origin $Origin | ConvertFrom-Json
+    if ($successReport.status -ne 'PASS' -or
+        $successReport.simulated_signed_upgrade_success -ne $true -or
+        $successReport.previous_release_preserved -ne $true -or
+        $successReport.new_release_activated -ne $true -or
+        $successReport.task_replacement_simulated -ne $true -or
+        $successReport.health_synthetic_only -ne $true) {
+        throw 'Positive signed upgrade with simulated scheduler/health failed.'
+    }
     $stage = 'uninstall_ownership_matrix'
     $uninstaller = Join-Path $FixtureRoot 'installers\uninstall-windows.ps1'
     $uninstallProbe = Join-Path $FixtureRoot 'installers\uninstall_acceptance_probe.ps1'
@@ -201,7 +215,7 @@ try {
         $uninstallReport.managed_task_cleanup_simulated -ne $true) {
         throw 'Windows signed-install uninstall acceptance failed.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true} |
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; simulated_signed_upgrade_success=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
