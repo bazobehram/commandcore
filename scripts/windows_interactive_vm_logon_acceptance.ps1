@@ -9,32 +9,153 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $taskName = 'CommandCore CI Interactive Logon Acceptance'
+$taskPath = '\'
 $description = 'CommandCore disposable VM interactive logon proof only'
 $root = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CommandCore-VM-Acceptance\WindowsLogon'
 $statePath = Join-Path $root 'state.json'
 $proofPath = Join-Path $root 'proof.json'
 $actionPath = Join-Path $root 'task-action.ps1'
+# Require the exact argument list registered by Prepare, not merely a path
+# substring that could appear in an unrelated or unsafe command.
+$expectedArgs = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $actionPath + '" -FixtureRoot "' + $root + '"'
 
 function Deny([string]$code) {
     Write-Output ('BLOCKED: ' + $code)
     exit 2
 }
 function Get-OwnedTask {
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if (!$task) { return $null }
+    # Only touch the task in the root Scheduler folder where Prepare created it.
+    $tasks = @(Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue)
+    if ($tasks.Count -eq 0) { return $null }
+    if ($tasks.Count -ne 1) { Deny 'ambiguous_task_name' }
+    $task = $tasks[0]
     if ($task.Description -ne $description) { Deny 'unrelated_task_name' }
-    if ([string]$task.Principal.UserId -notin @($identity.Name, $identity.User.Value, $env:USERNAME, ($env:COMPUTERNAME + '\' + $env:USERNAME), ('.\' + $env:USERNAME))) {
+
+    # An explicitly credential-launched process may inherit USERNAME from a
+    # different user. Authorize against WindowsIdentity, never that variable.
+    $actualUser = $identity.Name.Substring($identity.Name.LastIndexOf('\') + 1)
+    $allowed = @([string]$identity.Name, [string]$identity.User.Value,
+        [string]$actualUser, [string]([Environment]::MachineName + '\' + $actualUser),
+        [string]('.\' + $actualUser))
+    if ([string]$task.Principal.UserId -notin $allowed) {
         Deny 'task_principal_mismatch'
     }
     if ([string]$task.Principal.LogonType -ne 'Interactive' -or [string]$task.Principal.RunLevel -ne 'Limited') {
         Deny 'unsafe_task_principal'
     }
-    $allowed = @([string]$identity.Name, [string]$identity.User.Value,
-        [string]$env:USERNAME, [string]($env:COMPUTERNAME + '\' + $env:USERNAME), [string]('.\' + $env:USERNAME))
-    if ($task.Triggers.Count -ne 1 -or $task.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
-        [string]$task.Triggers[0].UserId -notin $allowed) { Deny 'unexpected_task_trigger' }
-    if ($task.Actions.Count -ne 1 -or [string]$task.Actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe$' -or
-        !([string]$task.Actions[0].Arguments).Contains($actionPath)) { Deny 'unexpected_task_action' }
+    $triggers = @($task.Triggers)
+    $actions = @($task.Actions)
+    if ($triggers.Count -ne 1 -or $triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
+        [string]$triggers[0].UserId -notin $allowed) { Deny 'unexpected_task_trigger' }
+    if ($actions.Count -ne 1 -or [string]$actions[0].Execute -notmatch '(?i)(^|\\)powershell\.exe
+
+# CI cannot supply the interactive logon requirement; fail before all mutations.
+if ($env:CI -eq 'true' -or $env:GITHUB_ACTIONS -eq 'true') { Deny 'not_interactive_ci' }
+if (!$ConfirmDisposableVM.IsPresent) { Deny 'explicit_disposable_vm_consent_required' }
+if ($env:OS -ne 'Windows_NT') { Deny 'windows_only' }
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($identity)
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Deny 'must_use_standard_user' }
+$sessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId
+if ($sessionId -le 0 -or ![Environment]::UserInteractive) { Deny 'interactive_desktop_required' }
+$logonSids = @($identity.Groups | ForEach-Object { $_.Value } | Where-Object { $_ -match '^S-1-5-5-\d+-\d+$' })
+if ($logonSids.Count -ne 1) { Deny 'unique_logon_identity_unavailable' }
+$currentLogonSid = [string]$logonSids[0]
+
+# Require a virtualized environment as an additional safeguard against running
+# this task fixture on the maintainer's own PC. These are not production hosts.
+$system = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+$model = [string]$system.Model + ' ' + [string]$system.Manufacturer
+if ($model -notmatch '(?i)virtual.machine|vmware|virtualbox|qemu|kvm|parallels|hyper-v|virtual.platform|bochs|hvm domu') {
+    Deny 'virtual_machine_not_detected'
+}
+Import-Module ScheduledTasks -ErrorAction Stop
+
+if ($Mode -eq 'Prepare') {
+    if (Test-Path -LiteralPath $root) { Deny 'fixture_already_exists' }
+    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { Deny 'task_already_exists' }
+    $source = Join-Path $PSScriptRoot 'windows_interactive_logon_action.ps1'
+    if (!(Test-Path -LiteralPath $source -PathType Leaf)) { Deny 'missing_action_source' }
+    $createdTask = $false
+    try {
+        New-Item -ItemType Directory -Path $root -ErrorAction Stop | Out-Null
+        Copy-Item -LiteralPath $source -Destination $actionPath -ErrorAction Stop
+        $now = [DateTimeOffset]::UtcNow.ToString('o')
+        $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
+        $state = @{
+            schema = 1
+            nonce = [guid]::NewGuid().ToString('N')
+            user_sid = [string]$identity.User.Value
+            logon_sid = $currentLogonSid
+            prepared_utc = $now
+            boot_utc = $boot
+        }
+        $state | ConvertTo-Json -Compress | Set-Content -LiteralPath $statePath -Encoding UTF8
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $expectedArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
+        $taskPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name -LogonType Interactive -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::FromMinutes(2))
+        Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Description $description -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $settings -ErrorAction Stop | Out-Null
+        $createdTask = $true
+        $saved = Get-OwnedTask
+        if (!$saved -or $saved.Triggers.Count -ne 1 -or $saved.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger') {
+            throw 'task_shape_rejected'
+        }
+        Write-Output 'PASS: limited interactive at-logon task prepared in a disposable VM'
+        Write-Output 'NEXT: sign out and sign in as the SAME disposable user, then run Verify'
+        Write-Output 'ALTERNATIVE: reboot and run Verify -RequireReboot'
+        Write-Output 'DO NOT manually start the task; that does not prove at-logon startup'
+    } catch {
+        if ($createdTask) {
+            Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+        throw 'Disposable VM preparation failed; owned fixtures were cleaned up'
+    }
+    exit 0
+}
+
+if (!(Test-Path -LiteralPath $statePath -PathType Leaf)) { Deny 'no_owned_fixture' }
+$state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+if ($state.schema -ne 1 -or [string]$state.user_sid -ne [string]$identity.User.Value -or [string]$state.nonce -notmatch '^[a-f0-9]{32}$' -or [string]$state.logon_sid -notmatch '^S-1-5-5-\d+-\d+$') {
+    Deny 'fixture_identity_invalid'
+}
+$task = Get-OwnedTask
+if (!$task) { Deny 'owned_task_missing' }
+if ($task.Triggers.Count -ne 1 -or $task.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger') {
+    Deny 'not_a_logon_task'
+}
+if ($Mode -eq 'Cleanup') {
+    Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+    Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop
+    Write-Output 'PASS: only owned disposable task and fixture removed'
+    exit 0
+}
+
+if (!(Test-Path -LiteralPath $proofPath -PathType Leaf)) { Deny 'logon_action_not_observed' }
+$proof = Get-Content -LiteralPath $proofPath -Raw | ConvertFrom-Json
+if ($proof.schema -ne 1 -or $proof.nonce -cne $state.nonce -or $proof.user_sid -ne $state.user_sid -or
+    $proof.non_admin -ne $true -or [int]$proof.session_id -le 0 -or
+    [string]$proof.logon_sid -ne $currentLogonSid -or [string]$proof.logon_sid -eq [string]$state.logon_sid) { Deny 'proof_invalid' }
+$prepared = [DateTimeOffset]::Parse([string]$state.prepared_utc)
+$started = [DateTimeOffset]::Parse([string]$proof.started_utc)
+if ($started -le $prepared.AddSeconds(2) -or $started -gt [DateTimeOffset]::UtcNow.AddMinutes(1)) {
+    Deny 'proof_timestamp_invalid'
+}
+$taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -TaskPath $taskPath -ErrorAction Stop
+if ($taskInfo.LastTaskResult -ne 0 -or [DateTimeOffset]$taskInfo.LastRunTime -le $prepared) {
+    Deny 'scheduler_task_execution_unconfirmed'
+}
+$bootNow = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime()
+if ($RequireReboot -and $bootNow -le [DateTimeOffset]::Parse([string]$state.boot_utc).UtcDateTime) {
+    Deny 'reboot_not_observed'
+}
+Write-Output 'PASS: disposable interactive Windows logon task executed as intended non-admin user'
+if ($RequireReboot) { Write-Output 'PASS: OS reboot observed after task preparation' }
+Write-Output 'NOT_TESTED: actual CommandCore Agent enrollment, reconnect, upgrade, rollback'
+Write-Output 'NEXT: run Cleanup to remove the owned fixture'
+ -or
+        [string]$actions[0].Arguments -cne $expectedArgs) { Deny 'unexpected_task_action' }
     return $task
 }
 
