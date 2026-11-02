@@ -403,6 +403,14 @@ def main() -> int:
                 ROOT / "scripts" / "windows_upgrade_task_ownership_probe.ps1",
                 output / "upgrade_task_ownership_probe.ps1",
             )
+            shutil.copyfile(
+                ROOT / "scripts" / "windows_uninstall_acceptance_probe.ps1",
+                output / "uninstall_acceptance_probe.ps1",
+            )
+            shutil.copyfile(
+                ROOT / "install" / "uninstall-windows.ps1",
+                output / "uninstall-windows.ps1",
+            )
             add = subprocess.run(
                 ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
                 capture_output=True,
@@ -438,6 +446,8 @@ def main() -> int:
                         "installed_artifacts_unchanged": True,
                         "simulated_signed_upgrade_rollback": True,
                         "task_ownership_denial_matrix": True,
+                        "uninstall_ownership_denial_matrix": True,
+                        "signed_install_uninstall_cleanup": True,
                         "scope": "no-enroll signed install, integrity denials and simulated failed signed upgrade/task rollback; genuine successful upgrade, live task execution, reboot and enrollment remain gated",
                     }
                 )

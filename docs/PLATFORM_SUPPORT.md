@@ -40,6 +40,14 @@ Agent activation, executable, manifest, launcher, marker, and identity state.
 Task APIs are mocked inside the disposable test process; a real interactive
 Windows desktop is still required for positive end-user lifecycle acceptance.
 
+The disposable normal-user Windows signed-install fixture also exercises
+`install/uninstall-windows.ps1`: seven unexpected/foreign task configurations
+must be rejected before any task/filesystem mutation; the matching owned task
+is **mocked**, while real signed installation files are removed. Identity state
+is intentionally preserved for explicit panel revocation (verified with a
+harmless local test sentinel, not an enrolled device secret). Real Task Scheduler
+cleanup, revocation and reboot still require external interactive VM acceptance.
+
 | Platform / component | Status | Evidence / limits |
 |---|---|---|
 | Linux Python Agent | Supported reference | Core filesystem/shell/process/system/transfer/Git, reconnect, helper, update regression |
