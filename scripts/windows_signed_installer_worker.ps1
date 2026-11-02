@@ -187,7 +187,21 @@ try {
         $ownerReport.task_ownership_denied -ne $true -or $ownerReport.unchanged -ne $true) {
         throw 'Managed Windows task ownership negative matrix failed.'
     }
-    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true} |
+    $stage = 'uninstall_ownership_matrix'
+    $uninstaller = Join-Path $FixtureRoot 'installers\uninstall-windows.ps1'
+    $uninstallProbe = Join-Path $FixtureRoot 'installers\uninstall_acceptance_probe.ps1'
+    if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf) -or
+        !(Test-Path -LiteralPath $uninstallProbe -PathType Leaf)) {
+        throw 'Missing disposable Windows uninstall fixture.'
+    }
+    $uninstallReport = & $uninstallProbe -Uninstaller $uninstaller | ConvertFrom-Json
+    if ($uninstallReport.status -ne 'PASS' -or $uninstallReport.rejected_cases -ne 7 -or
+        $uninstallReport.installed_files_removed -ne $true -or
+        $uninstallReport.identity_preserved -ne $true -or
+        $uninstallReport.managed_task_cleanup_simulated -ne $true) {
+        throw 'Windows signed-install uninstall acceptance failed.'
+    }
+    @{status='PASS'; non_admin=$true; signed_install=$true; tampered_manifest_denied=$true; pinned_verifier_denied=$true; clean_after_tamper_denial=$true; repeat_denied=$true; upgrade_without_identity_denied=$true; unchanged_after_denial=$true; simulated_upgrade_rollback=$true; task_ownership_denial_matrix=$true; uninstall_ownership_denial_matrix=$true; signed_install_uninstall_cleanup=$true} |
         ConvertTo-Json -Compress |
         Set-Content -LiteralPath $report -Encoding UTF8
 } catch {
