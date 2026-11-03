@@ -3,12 +3,12 @@
 function Test-CommandCoreVmPlatform {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string]$OperatingSystem,
-        [Parameter(Mandatory)][string]$BuildNumber,
-        [Parameter(Mandatory)][string]$ProductType,
-        [Parameter(Mandatory)][string]$CpuArchitecture,
-        [Parameter(Mandatory)][string]$Manufacturer,
-        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$OperatingSystem,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$BuildNumber,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ProductType,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$CpuArchitecture,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Manufacturer,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Model,
         [Parameter(Mandatory)][bool]$Native64Bit
     )
     if ($OperatingSystem -cne 'Windows_NT') {
