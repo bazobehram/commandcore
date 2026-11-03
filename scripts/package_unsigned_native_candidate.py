@@ -125,7 +125,10 @@ def verify(directory: Path, source_sha: str) -> None:
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("invalid_candidate_directory")
     if {item.name for item in directory.iterdir()} != {
-        BINARY_NAME, MANIFEST_NAME, SOURCE_NAME, HASH_NAME
+        BINARY_NAME,
+        MANIFEST_NAME,
+        SOURCE_NAME,
+        HASH_NAME,
     }:
         raise ValueError("unexpected_candidate_file")
     raw = file_bytes(directory / BINARY_NAME, MAX_BINARY_SIZE)
@@ -136,11 +139,25 @@ def verify(directory: Path, source_sha: str) -> None:
     data = json.loads(manifest_bytes)
     if (
         not isinstance(data, dict)
-        or set(data) != {
-            "schema_version", "kind", "release_status", "source_commit",
-            "package_version", "platform", "architecture", "filename",
-            "sha256", "size", "cargo_lock_sha256", "max_required_glibc",
-            "rustc", "cargo", "provenance", "signatures", "device_lifecycle",
+        or set(data)
+        != {
+            "schema_version",
+            "kind",
+            "release_status",
+            "source_commit",
+            "package_version",
+            "platform",
+            "architecture",
+            "filename",
+            "sha256",
+            "size",
+            "cargo_lock_sha256",
+            "max_required_glibc",
+            "rustc",
+            "cargo",
+            "provenance",
+            "signatures",
+            "device_lifecycle",
         }
         or data["schema_version"] != 1
         or data["kind"] != "commandcore-unsigned-native-agent-review-candidate"
@@ -182,8 +199,13 @@ def main() -> int:
         if args.binary is None or args.version is None or args.cargo_lock is None:
             parser.error("prepare requires binary, version and cargo-lock")
         prepare(
-            args.binary, args.output, args.source_sha, args.version,
-            args.cargo_lock, args.rustc_version, args.cargo_version,
+            args.binary,
+            args.output,
+            args.source_sha,
+            args.version,
+            args.cargo_lock,
+            args.rustc_version,
+            args.cargo_version,
         )
     else:
         verify(args.output, args.source_sha)
