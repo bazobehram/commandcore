@@ -1,0 +1,33 @@
+name: Public distribution HTTP readiness (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      require_helper:
+        description: Require one-command Linux helper onboarding endpoint
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  public-http-readiness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Probe read-only HTTPS delivery endpoints
+        shell: bash
+        env:
+          REQUIRE_HELPER: ${{ inputs.require_helper }}
+        run: |
+          set -euo pipefail
+          if [[ "$REQUIRE_HELPER" == "true" ]]; then
+            python scripts/public_distribution_readiness.py --require-helper
+          else
+            python scripts/public_distribution_readiness.py
+          fi
