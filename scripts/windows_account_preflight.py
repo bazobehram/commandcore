@@ -144,7 +144,7 @@ def run_driver(
         "CI_HTTPS_TLS_HRESULT",
         "CI_HTTPS_NO_REVOCATION_EXIT",
     ):
-        found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\\s*$", stdout)
+        found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\s*$", stdout)
         if found:
             print("FAIL: " + key + "=" + found[-1])
     return False
