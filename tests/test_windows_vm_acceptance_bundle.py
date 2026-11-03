@@ -10,7 +10,9 @@ import pytest
 
 _SPEC = importlib.util.spec_from_file_location(
     "package_windows_vm_acceptance",
-    Path(__file__).resolve().parents[1] / "scripts" / "package_windows_vm_acceptance.py",
+    Path(__file__).resolve().parents[1]
+    / "scripts"
+    / "package_windows_vm_acceptance.py",
 )
 assert _SPEC is not None and _SPEC.loader is not None
 bundle = importlib.util.module_from_spec(_SPEC)
