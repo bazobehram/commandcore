@@ -138,6 +138,31 @@ def main():
     with tempfile.TemporaryDirectory(prefix="cc-rust-full-") as tmp:
         td = Path(tmp)
         os.chmod(td, 0o755)
+        # GitHub checkout path permissions vary. The Agent runs as nobody,
+        # so diagnostics must not depend on traversing the source checkout.
+        # Copy ONLY the reviewed, noncredential stdlib probe to this isolated
+        # disposable fixture; never chmod the checkout or the actual helper key.
+        probe_source = ROOT / "scripts/helper_unprivileged_probe_diagnostic.py"
+        probe_path = td / "helper-unprivileged-diagnostic.py"
+        shutil.copyfile(probe_source, probe_path)
+        os.chmod(probe_path, 0o644)
+        probe_access = subprocess.run(
+            [
+                "setpriv",
+                f"--reuid={nobody.pw_uid}",
+                f"--regid={nogroup.gr_gid}",
+                "--clear-groups",
+                sys.executable,
+                "-c",
+                "import pathlib,sys; pathlib.Path(sys.argv[1]).open('rb').read(1)",
+                str(probe_path),
+            ],
+            cwd=td,
+            capture_output=True,
+            timeout=8,
+        )
+        if probe_access.returncode != 0:
+            raise RuntimeError("unprivileged diagnostic fixture is not readable")
         agent_state = td / "agent-state"
         agent_state.mkdir(mode=0o700)
         os.chown(agent_state, nobody.pw_uid, nogroup.gr_gid)
@@ -251,9 +276,9 @@ def main():
                         f"--regid={nogroup.gr_gid}",
                         "--clear-groups",
                         sys.executable,
-                        "scripts/helper_unprivileged_probe_diagnostic.py",
+                        str(probe_path),
                     ],
-                    cwd=ROOT,
+                    cwd=td,
                     env=env,
                     capture_output=True,
                     text=True,
