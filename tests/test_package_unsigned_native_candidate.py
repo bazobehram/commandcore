@@ -1,0 +1,140 @@
+"""Offline test matrix for the unsigned source-pinned Linux review candidate."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import struct
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location(
+    "package_unsigned_native_candidate",
+    ROOT / "scripts/package_unsigned_native_candidate.py",
+)
+assert spec and spec.loader
+MODULE = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(MODULE)
+SHA = "a" * 40
+VERSION = "0.9.0-rc7"
+
+
+def elf_fixture() -> bytes:
+    raw = bytearray(256)
+    raw[:7] = b"\x7fELF\x02\x01\x01"
+    struct.pack_into("<H", raw, 16, 3)
+    struct.pack_into("<H", raw, 18, 62)
+    return bytes(raw)
+
+
+def setup_candidate(tmp_path, monkeypatch):
+    binary = tmp_path / "native-agent"
+    binary.write_bytes(elf_fixture())
+    lock = tmp_path / "Cargo.lock"
+    lock.write_text("locked dependency fixture\n")
+    monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 35))
+    output = tmp_path / "candidate"
+    MODULE.prepare(binary, output, SHA, VERSION, lock, "rustc test", "cargo test")
+    return output
+
+
+def test_source_pinned_unsigned_candidate_round_trip(tmp_path, monkeypatch):
+    output = setup_candidate(tmp_path, monkeypatch)
+    MODULE.verify(output, SHA)
+    metadata = json.loads((output / MODULE.MANIFEST_NAME).read_text())
+    assert metadata["source_commit"] == SHA
+    assert metadata["signatures"] == "NONE"
+    assert metadata["release_status"] == "UNSIGNED_NOT_APPROVED"
+    assert metadata["sha256"] == hashlib.sha256(elf_fixture()).hexdigest()
+    assert metadata["max_required_glibc"] == "2.35"
+
+
+@pytest.mark.parametrize("part", ["binary", "source", "hashes", "metadata"])
+def test_modified_candidate_fails_closed(tmp_path, monkeypatch, part):
+    output = setup_candidate(tmp_path, monkeypatch)
+    if part == "binary":
+        path = output / MODULE.BINARY_NAME
+        raw = path.read_bytes()
+        path.write_bytes(raw[:64] + b"altered" + raw[71:])
+    elif part == "source":
+        (output / MODULE.SOURCE_NAME).write_text("b" * 40 + "\n")
+    elif part == "hashes":
+        (output / MODULE.HASH_NAME).write_text("INVALID")
+    else:
+        metadata_path = output / MODULE.MANIFEST_NAME
+        data = json.loads(metadata_path.read_text())
+        data["release_status"] = "APPROVED"
+        metadata_path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        MODULE.verify(output, SHA)
+
+
+def test_candidate_refuses_unexpected_extra_file(tmp_path, monkeypatch):
+    output = setup_candidate(tmp_path, monkeypatch)
+    (output / "release-private-seed").write_bytes(b"unsafe")
+    with pytest.raises(ValueError, match="unexpected_candidate_file"):
+        MODULE.verify(output, SHA)
+
+
+def test_candidate_refuses_existing_output(tmp_path, monkeypatch):
+    setup_candidate(tmp_path, monkeypatch)
+    binary = tmp_path / "native-agent"
+    with pytest.raises(ValueError, match="refuse_existing_output"):
+        MODULE.prepare(
+            binary,
+            tmp_path / "candidate",
+            SHA,
+            VERSION,
+            tmp_path / "Cargo.lock",
+            "rustc fixture",
+            "cargo fixture",
+        )
+
+
+def test_candidate_rejects_arm64_and_executable_type(tmp_path, monkeypatch):
+    monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 35))
+    binary = tmp_path / "native"
+    arm = bytearray(elf_fixture())
+    struct.pack_into("<H", arm, 18, 183)
+    binary.write_bytes(arm)
+    with pytest.raises(ValueError, match="not_linux_x86_64_pie_elf"):
+        MODULE.prepare(
+            binary, tmp_path / "out", SHA, VERSION, tmp_path / "Cargo.lock", "", ""
+        )
+
+
+def test_glibc_runtime_above_supported_minimum_rejected(monkeypatch, tmp_path):
+    binary = tmp_path / "native"
+    binary.write_bytes(elf_fixture())
+    monkeypatch.setattr(
+        MODULE.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 0, "GLIBC_2.17 GLIBC_2.39", ""
+        ),
+    )
+    with pytest.raises(ValueError, match="glibc_requirement_exceeds_2_36"):
+        MODULE.glibc_max_required(binary)
+
+
+def test_glibc_runtime_below_supported_minimum_passes(monkeypatch, tmp_path):
+    binary = tmp_path / "native"
+    binary.write_bytes(elf_fixture())
+    monkeypatch.setattr(
+        MODULE.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 0, "GLIBC_2.17 GLIBC_2.35", ""
+        ),
+    )
+    assert MODULE.glibc_max_required(binary) == (2, 35)
+
+
+def test_source_sha_must_match_reviewed_commit(tmp_path, monkeypatch):
+    output = setup_candidate(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="invalid_candidate_metadata"):
+        MODULE.verify(output, "b" * 40)

@@ -10,6 +10,41 @@ the operator must independently review and approve the exact source commit,
 signed release, key custody, target binaries, signing provenance and runtime
 installation/update/rollback evidence.
 
+## Native unsigned x86_64 review candidate (CI; not a release)
+
+The manually dispatched
+[unsigned Linux Agent review workflow](../.github/workflows/unsigned-linux-native-candidate.yml)
+also makes a **one-time** candidate when its reviewed packaging script/workflow
+is first merged into `main`. It builds the Rust Agent using the checked-in
+Cargo.lock on an Ubuntu 22.04 runner, runs the actual native localhost
+enrollment/reconnect/MCP smoke test, and produces a 14-day GitHub Actions
+artifact named `unsigned-linux-x86_64-agent-review-candidate`.
+
+The artifact contains an **unsigned** Linux x86_64 executable,
+`UNSIGNED_BUILD_METADATA.json`, `SOURCE_COMMIT.txt` and `SHA256SUMS.txt`.
+It records exact bytes, source SHA, Cargo.lock digest, package version,
+toolchain versions and maximum referenced GLIBC version, with a fail-closed
+ceiling of GLIBC 2.36 because the Linux installer advertises glibc 2.36+.
+It refuses ARM64/32-bit/non-PIE binaries and unrecognized runtime symbol
+requirements. The workflow has read-only repository permissions and cannot
+create GitHub Releases, write deployment data, or access signing secrets.
+
+An artifact from this job is **not signed**, not an independent provenance
+attestation, and not approved for installation. Its Cargo package version
+may still be `0.9.0-rc7` even when source changes postdate that tag; the
+reviewer must set a distinct actual release version and reconfirm all
+version/source metadata **before** independent signing. Do not rename or
+silently reuse this development binary as a previously signed release.
+External acceptance of the exact built bytes, clean-install/update/rollback
+behavior, SBOM/license checks and signing provenance remain required.
+
+After downloading an artifact, compare its recorded source SHA to the
+reviewed `main` commit of the build run; verify every SHA256SUMS entry and
+run `scripts/package_unsigned_native_candidate.py verify` on the extracted
+candidate. The later signed-feed staging verifier below works only with a
+**separately signed** release manifest and an independently trusted public
+verification key.
+
 ## Inputs and custody
 
 The reviewer obtains independently from the signed-release process:
