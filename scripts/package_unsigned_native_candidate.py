@@ -22,6 +22,7 @@ SOURCE_NAME = "SOURCE_COMMIT.txt"
 HASH_NAME = "SHA256SUMS.txt"
 MAX_BINARY_SIZE = 134_217_728
 SHA256_RE = re.compile(r"[a-f0-9]{64}")
+COMMIT_RE = re.compile(r"[a-f0-9]{40}")
 VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?")
 GLIBC_RE = re.compile(r"GLIBC_([0-9]+)\.([0-9]+)")
 
@@ -76,7 +77,7 @@ def prepare(
     rustc_version: str,
     cargo_version: str,
 ) -> None:
-    if not SHA256_RE.fullmatch(source_sha) or not VERSION_RE.fullmatch(version):
+    if not COMMIT_RE.fullmatch(source_sha) or not VERSION_RE.fullmatch(version):
         raise ValueError("invalid_build_identity")
     if output.exists() or output.is_symlink():
         raise ValueError("refuse_existing_output")
@@ -120,7 +121,7 @@ def prepare(
 
 
 def verify(directory: Path, source_sha: str) -> None:
-    if not SHA256_RE.fullmatch(source_sha):
+    if not COMMIT_RE.fullmatch(source_sha):
         raise ValueError("invalid_source_sha")
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("invalid_candidate_directory")
