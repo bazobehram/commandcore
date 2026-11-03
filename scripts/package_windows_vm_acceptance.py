@@ -3,6 +3,7 @@
 This artifact contains harmless Task Scheduler logon/reboot probes only.
 It never ships an Agent, installer, identity, enrollment key, or production URL.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -63,7 +64,9 @@ def verify(archive_path: Path) -> None:
         infos = archive.infolist()
         names = [i.filename for i in infos]
         if len(names) != len(expected) or set(names) != expected:
-            raise ValueError("Archive missing required file, contains extras, or has duplicates")
+            raise ValueError(
+                "Archive missing required file, contains extras, or has duplicates"
+            )
         entries: dict[str, bytes] = {}
         for info in infos:
             if info.file_size > MAX_FILE or not stat.S_ISREG(info.external_attr >> 16):
