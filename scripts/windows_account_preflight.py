@@ -265,7 +265,9 @@ def main() -> int:
                         check=False,
                     )
                 except (OSError, subprocess.TimeoutExpired):
-                    raise RuntimeError("CI temporary root cleanup unavailable") from None
+                    raise RuntimeError(
+                        "CI temporary root cleanup unavailable"
+                    ) from None
                 if removed.returncode != 0:
                     raise RuntimeError("CI temporary root cleanup failed")
     print("PASS: standard-user localhost HTTPS curl transport")
