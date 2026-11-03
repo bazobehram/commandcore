@@ -1,4 +1,5 @@
 """Offline acceptance bundle regression tests; no VM or production access."""
+
 from __future__ import annotations
 
 from zipfile import ZipFile
