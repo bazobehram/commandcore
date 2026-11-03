@@ -12,7 +12,9 @@ import pytest
 MODULE_PATH = (
     Path(__file__).resolve().parents[1] / "scripts" / "public_distribution_readiness.py"
 )
-spec = importlib.util.spec_from_file_location("public_distribution_readiness", MODULE_PATH)
+spec = importlib.util.spec_from_file_location(
+    "public_distribution_readiness", MODULE_PATH
+)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
 import sys
@@ -83,7 +85,10 @@ def test_missing_both_public_feed_files_fails() -> None:
         (Response(301, "text/plain", b"#!test"), "http_failure"),
         (Response(200, "text/html", b"#!/bin/sh"), "unexpected_payload"),
         (Response(200, "text/plain", b"<html/>"), "unexpected_payload"),
-        (Response(200, "text/plain", b"#!/bin/sh", too_large=True), "unexpected_payload"),
+        (
+            Response(200, "text/plain", b"#!/bin/sh", too_large=True),
+            "unexpected_payload",
+        ),
     ],
 )
 def test_unexpected_linux_endpoint_is_rejected(
