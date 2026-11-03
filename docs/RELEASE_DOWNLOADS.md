@@ -3,6 +3,43 @@
 CommandCore distributes Agents through signed manifests and immutable artifacts.
 A deployment may host its own release feed.
 
+## Public distribution readiness check
+
+The public installer and release manifest must be **published intentionally**
+before new users can run signed Agent onboarding. A healthy container or a
+successfully merged source release does not imply that this has happened.
+
+Use the manual [public distribution HTTP readiness workflow](../.github/workflows/public-distribution-readiness.yml),
+or run this read-only check from a reviewed checkout:
+
+~~~bash
+python scripts/public_distribution_readiness.py --origin https://commandcore.app
+~~~
+
+To require the optional one-command privileged-helper onboarding endpoint too,
+use `--require-helper`. The check makes bounded, certificate-verified same-origin
+HTTPS GET requests to `/install/linux`, `/releases/agent/manifest.json`,
+`/install/linux-ready`, and `/install/windows`. It does **not** follow redirects,
+execute scripts, download Agent binaries, reveal response bodies, or use
+deployment credentials.
+
+Exit 0 means **HTTP content is present and structurally plausible only**.
+It does *not* authenticate the embedded public key, verify the Ed25519
+manifest signature, fetch/verify release artifacts, prove installer safety,
+or pass enrollment/update/rollback/real-platform acceptance. Its output
+always says `CRYPTOGRAPHIC_RELEASE_APPROVAL=NOT_VERIFIED` and
+`AGENT_INSTALLER_LIFECYCLE=NOT_VERIFIED`, including on HTTP success.
+For a real public release, independently verify the signing public key
+fingerprint, the manifest signature, exact artifact hashes and sizes,
+the pinned installer and real Agent lifecycle against disposable devices.
+Do not ever publish a development/private signing key to make this test pass.
+
+An absent Linux installer or manifest returns a failing status. A 503
+`/install/linux-ready` usually means the separate helper pins/config are
+not ready; it is informational unless `--require-helper` was requested.
+`/install/windows` is assessed only as a **Preview** visibility signal,
+never accepted as proof of supported Windows installation.
+
 ## Publish a deployment feed
 
 The default server does not ship agent binaries or a signed manifest. Its
