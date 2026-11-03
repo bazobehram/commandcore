@@ -16,10 +16,30 @@ run elevated, using a saved account password, or altering production devices.
 ## Safe environment
 
 Use a newly provisioned **disposable Windows 11 x86_64 desktop VM**, with a
-local **non-administrator** test account signed into its desktop. This
-harness detects common hypervisors, rejects GitHub CI and Session 0, refuses
-administrator tokens and pre-existing tasks, and requires explicit consent.
-Do not execute it on a personal Windows PC or a production Windows host.
+local **non-administrator** test account signed into its desktop. The harness
+requires Windows 11 build 22000+, workstation product type, native x64 CPU and
+64-bit PowerShell, a known virtual-machine manufacturer/model, a non-admin
+interactive token and a nonzero GUI session. It rejects Windows 10, Windows
+Server, ARM64 guests (including x64-emulated PowerShell), GitHub CI, Session 0,
+and pre-existing tasks. It requires explicit consent. Do not execute it on a
+personal Windows PC or a production Windows host.
+
+Microsoft currently provides a 90-day Windows 11 Enterprise evaluation ISO:
+[Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise).
+Choose an **x64** image, not Arm64. Verify the exact ISO SHA-256 against
+[Microsoft's published evaluation hashes](https://support.microsoft.com/en-us/servicing/os/windows/docs/2026/09/verify-the-authenticity-of-a-windows-11-enterprise-evaluation-iso-file)
+for the **specific build, locale and edition** before installation. Do not
+assume the hash of a different ISO release or locale is interchangeable.
+Microsoft's license and any evaluation/activation conditions still apply.
+Use a separately provisioned test VM host; **do not** allocate memory, disk
+or CPU for this VM on homeserver, Netti or the personal Windows PC.
+
+The offline `windows_interactive_vm_platform_probe.ps1` matrix contains 11
+negative cases covering Windows 10, Server, ARM64, 32-bit execution, physical
+hardware and invalid metadata. It runs on CI without touching Task Scheduler.
+Passing the platform gate is a safeguard, not hypervisor attestation: model
+and manufacturer strings can be forged, so the test operator must independently
+confirm the disposable guest's provenance.
 
 The harness uses an offline, harmless PowerShell action. It does not install,
 start or enroll a real CommandCore Agent; it does not contact any CommandCore
@@ -29,7 +49,8 @@ account; no secrets or credentials are embedded.
 Keep all included scripts together in the same `scripts/` directory,
 including `windows_interactive_vm_logon_acceptance.ps1`,
 `windows_interactive_logon_action.ps1`, `windows_interactive_vm_task_shape.ps1`,
-and `windows_interactive_vm_proof_validation.ps1`. Cleanup and verification are scoped to
+`windows_interactive_vm_platform_validation.ps1`, and
+`windows_interactive_vm_proof_validation.ps1`. Cleanup and verification are scoped to
 the Scheduler root (`\\`), the authenticated Windows token's user identity,
 the exact limited/interactive principal, one at-logon trigger, and the exact
 PowerShell action arguments. They never rely on an inherited `USERNAME`
@@ -41,8 +62,8 @@ negative matrix for tampered/foreign tasks. It also runs
 `windows_interactive_vm_proof_validation.ps1` verifier. The latter tests
 unexpected user/logon SIDs, mismatched nonces, administrator or Session 0
 evidence, malformed/stale/future timestamps, failed Scheduler execution,
-and reboot evidence, without logging any real identities. Keep both proof
-scripts alongside the harness.
+and reboot evidence, without logging any real identities. Keep both proof scripts and the platform-validation script plus
+`windows_interactive_vm_platform_probe.ps1` alongside the harness.
 
 **Evidence limitation:** task state and proof files belong to the disposable
 local test user, so this is reproducible operator-run acceptance, **not**
