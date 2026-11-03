@@ -31,8 +31,8 @@ Choose an **x64** image, not Arm64. Verify the exact ISO SHA-256 against
 for the **specific build, locale and edition** before installation. Do not
 assume the hash of a different ISO release or locale is interchangeable.
 Microsoft's license and any evaluation/activation conditions still apply.
-Use a separately provisioned test VM host; **do not** allocate memory, disk
-or CPU for this VM on homeserver, Netti or the personal Windows PC.
+Use a separately provisioned disposable test VM host; **do not**
+allocate memory, disk, or CPU on a production-services host or personal PC.
 
 The offline `windows_interactive_vm_platform_probe.ps1` matrix contains 11
 negative cases covering Windows 10, Server, ARM64, 32-bit execution, physical
