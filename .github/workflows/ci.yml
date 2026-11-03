@@ -195,6 +195,9 @@ jobs:
       - name: Timeout cleanup refuses unrelated Windows accounts
         shell: pwsh
         run: ./scripts/windows_ci_timeout_cleanup_probe.ps1
+      - name: Offline Windows 11 x64 VM platform denial matrix
+        shell: pwsh
+        run: ./scripts/windows_interactive_vm_platform_probe.ps1
       - name: Offline interactive-VM task ownership denial matrix
         shell: pwsh
         run: |
@@ -213,7 +216,9 @@ jobs:
             'scripts/windows_interactive_vm_task_shape.ps1',
             'scripts/windows_interactive_vm_task_shape_probe.ps1',
             'scripts/windows_interactive_vm_proof_validation.ps1',
-            'scripts/windows_interactive_vm_proof_probe.ps1')) {
+            'scripts/windows_interactive_vm_proof_probe.ps1',
+            'scripts/windows_interactive_vm_platform_validation.ps1',
+            'scripts/windows_interactive_vm_platform_probe.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$errors) | Out-Null

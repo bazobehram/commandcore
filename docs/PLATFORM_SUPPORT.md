@@ -6,7 +6,11 @@ Windows at-logon task **registration** is covered by disposable CI. Actual
 interactive login/reboot acceptance requires the separately gated
 [disposable Windows desktop VM harness](WINDOWS_INTERACTIVE_VM_ACCEPTANCE.md).
 The offline harness tests only a harmless task action, **not** real Agent
-startup, enrollment, reconnect or upgrade. Windows remains Preview.
+startup, enrollment, reconnect or upgrade. It refuses Windows 10, Server,
+ARM64, 32-bit PowerShell and physical hosts before its Task Scheduler changes;
+CI exercises these denials without a desktop VM. A successful platform check
+does not prove a virtual machine's identity or substitute for observed
+sign-out/sign-in and reboot. Windows remains Preview.
 
 Disposable Windows signed-installer CI additionally verifies negative safety paths:
 normal-user repeat installation and attempted `-Upgrade` without the existing

@@ -22,6 +22,8 @@ FILES = (
     "scripts/windows_interactive_vm_task_shape_probe.ps1",
     "scripts/windows_interactive_vm_proof_validation.ps1",
     "scripts/windows_interactive_vm_proof_probe.ps1",
+    "scripts/windows_interactive_vm_platform_validation.ps1",
+    "scripts/windows_interactive_vm_platform_probe.ps1",
 )
 SOURCE_NAME = "SOURCE_COMMIT.txt"
 HASHES_NAME = "SHA256SUMS.txt"
