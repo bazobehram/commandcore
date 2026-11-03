@@ -31,6 +31,30 @@ def fixture_env() -> dict[str, str]:
     return env
 
 
+def _cleanup_after_outer_timeout(name: str) -> bool:
+    """Kill only the timed-out CI driver's fixture account (by owned marker)."""
+    helper = Path(__file__).resolve().with_name("windows_ci_timeout_cleanup.ps1")
+    try:
+        result = subprocess.run(
+            [
+                "pwsh.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-File",
+                str(helper),
+                "-UserName",
+                name,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def run_driver(
     driver: Path,
     root: Path,
@@ -41,31 +65,65 @@ def run_driver(
 ) -> bool:
     env = fixture_env()
     name = "cc" + secrets.token_hex(5)
-    result = subprocess.run(
-        [
-            "pwsh.exe",
-            "-NoProfile",
-            "-NonInteractive",
-            "-File",
-            str(driver),
-            "-UserName",
-            name,
-            "-FixtureRoot",
-            str(root),
-            "-Origin",
-            origin,
-            mode,
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-    env.pop("COMMANDCORE_CI_USER_PASSWORD", None)
-    if result.returncode == 0:
+    command = [
+        "pwsh.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        str(driver),
+        "-UserName",
+        name,
+        "-FixtureRoot",
+        str(root),
+        "-Origin",
+        origin,
+        mode,
+    ]
+    # A hard Python timeout used to kill the PowerShell driver before its
+    # finally block could remove the disposable account. Give its internal
+    # worker deadline room to complete, and terminate descendants + clean
+    # only the marked CI account if an outer watchdog still fires.
+    try:
+        process = subprocess.Popen(
+            command,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError:
+        print("FAIL: CI_DRIVER_LAUNCH=failed")
+        return False
+    finally:
+        env.pop("COMMANDCORE_CI_USER_PASSWORD", None)
+
+    try:
+        stdout, _stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            subprocess.run(
+                ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if process.poll() is None:
+            process.kill()
+        try:
+            process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        cleaned = _cleanup_after_outer_timeout(name)
+        print("FAIL: CI_DRIVER_TIMEOUT=outer_watchdog")
+        print("CI_TIMEOUT_CLEANUP=" + ("ok" if cleaned else "failed"))
+        return False
+
+    if process.returncode == 0:
         return True
-    # Fixed diagnostic codes only; no raw stdout/stderr, user, path or password.
+    # Fixed diagnostic codes only; never reveal child stdout/stderr, names,
+    # paths, passwords, or a raw TimeoutExpired command traceback.
     for key in (
         "CI_INSTALL_STAGE",
         "CI_USER_CREATE_CATEGORY",
@@ -86,7 +144,7 @@ def run_driver(
         "CI_HTTPS_TLS_HRESULT",
         "CI_HTTPS_NO_REVOCATION_EXIT",
     ):
-        found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\s*$", result.stdout)
+        found = re.findall(rf"(?m)^{key}:([-A-Za-z0-9_]+)\\s*$", stdout)
         if found:
             print("FAIL: " + key + "=" + found[-1])
     return False
@@ -98,7 +156,7 @@ def main() -> int:
         return 2
     root = Path(os.environ["PROGRAMDATA"])
     driver = Path(__file__).resolve().with_name("windows_signed_installer_driver.ps1")
-    if not run_driver(driver, root, "-OnlyAccount", timeout=30):
+    if not run_driver(driver, root, "-OnlyAccount", timeout=60):
         return 1
     print("PASS: disposable Windows local-account creation/cleanup")
     with tempfile.TemporaryDirectory(
@@ -111,7 +169,7 @@ def main() -> int:
             Path(__file__).resolve().with_name("windows_task_preflight_worker.ps1"),
             fixture / "installers" / "worker.ps1",
         )
-        if not run_driver(driver, fixture, "-OnlyCredential", timeout=40):
+        if not run_driver(driver, fixture, "-OnlyCredential", timeout=150):
             return 1
     print("PASS: disposable Windows standard-user credential process/cleanup")
     # Validate at-logon registration under the same real non-admin token.
@@ -126,7 +184,7 @@ def main() -> int:
             Path(__file__).resolve().with_name("windows_logon_registration_worker.ps1"),
             fixture / "installers" / "worker.ps1",
         )
-        if not run_driver(driver, fixture, "-OnlyCredential", timeout=60):
+        if not run_driver(driver, fixture, "-OnlyCredential", timeout=150):
             return 1
     print("PASS: standard-user at-logon task registration and cleanup (not startup)")
     # A real localhost HTTPS server isolates Schannel/curl failures from the
@@ -182,7 +240,7 @@ def main() -> int:
             trusted = True
             origin = f"https://localhost:{server.server_port}"
             if not run_driver(
-                driver, fixture, "-OnlyCredential", timeout=40, origin=origin
+                driver, fixture, "-OnlyCredential", timeout=150, origin=origin
             ):
                 return 1
         finally:
