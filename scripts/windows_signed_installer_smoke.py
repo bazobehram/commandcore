@@ -399,7 +399,7 @@ def main() -> int:
         user = "cc" + secrets.token_hex(5)
         crl_thread.start()
         server_thread.start()
-        trusted = False
+        trust_attempted = False
         try:
             create_release(feed, output, native, origin)
             shutil.copyfile(
@@ -430,16 +430,19 @@ def main() -> int:
                 ROOT / "install" / "uninstall-windows.ps1",
                 output / "uninstall-windows.ps1",
             )
-            add = subprocess.run(
-                ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
+            trust_attempted = True
+            try:
+                add = subprocess.run(
+                    ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("ephemeral_ca_trust_timeout") from None
             if add.returncode:
                 raise RuntimeError("ephemeral_ca_trust_failed")
-            trusted = True
             run_powershell(
                 ROOT / "scripts" / "windows_signed_installer_driver.ps1",
                 env,
@@ -480,13 +483,20 @@ def main() -> int:
             crl_server.shutdown()
             crl_server.server_close()
             crl_thread.join(timeout=5)
-            if trusted:
-                subprocess.run(
-                    ["certutil.exe", "-delstore", "Root", ca_thumbprint],
-                    capture_output=True,
-                    timeout=15,
-                    check=False,
-                )
+            if trust_attempted:
+                # A timed-out addstore may have succeeded. Remove the exact
+                # disposable certificate even after the setup path failed.
+                try:
+                    removed = subprocess.run(
+                        ["certutil.exe", "-delstore", "Root", ca_thumbprint],
+                        capture_output=True,
+                        timeout=45,
+                        check=False,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    raise RuntimeError("ephemeral_ca_cleanup_unavailable") from None
+                if removed.returncode:
+                    raise RuntimeError("ephemeral_ca_cleanup_failed")
             env.pop("COMMANDCORE_CI_USER_PASSWORD", None)
     return 0
 
