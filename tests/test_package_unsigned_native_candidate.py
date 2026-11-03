@@ -85,8 +85,13 @@ def test_candidate_refuses_existing_output(tmp_path, monkeypatch):
     binary = tmp_path / "native-agent"
     with pytest.raises(ValueError, match="refuse_existing_output"):
         MODULE.prepare(
-            binary, tmp_path / "candidate", SHA, VERSION, tmp_path / "Cargo.lock",
-            "rustc fixture", "cargo fixture",
+            binary,
+            tmp_path / "candidate",
+            SHA,
+            VERSION,
+            tmp_path / "Cargo.lock",
+            "rustc fixture",
+            "cargo fixture",
         )
 
 
@@ -97,14 +102,17 @@ def test_candidate_rejects_arm64_and_executable_type(tmp_path, monkeypatch):
     struct.pack_into("<H", arm, 18, 183)
     binary.write_bytes(arm)
     with pytest.raises(ValueError, match="not_linux_x86_64_pie_elf"):
-        MODULE.prepare(binary, tmp_path / "out", SHA, VERSION, tmp_path / "Cargo.lock", "", "")
+        MODULE.prepare(
+            binary, tmp_path / "out", SHA, VERSION, tmp_path / "Cargo.lock", "", ""
+        )
 
 
 def test_glibc_runtime_above_supported_minimum_rejected(monkeypatch, tmp_path):
     binary = tmp_path / "native"
     binary.write_bytes(elf_fixture())
     monkeypatch.setattr(
-        MODULE.subprocess, "run",
+        MODULE.subprocess,
+        "run",
         lambda *args, **kwargs: subprocess.CompletedProcess(
             args[0], 0, "GLIBC_2.17 GLIBC_2.39", ""
         ),
@@ -117,7 +125,8 @@ def test_glibc_runtime_below_supported_minimum_passes(monkeypatch, tmp_path):
     binary = tmp_path / "native"
     binary.write_bytes(elf_fixture())
     monkeypatch.setattr(
-        MODULE.subprocess, "run",
+        MODULE.subprocess,
+        "run",
         lambda *args, **kwargs: subprocess.CompletedProcess(
             args[0], 0, "GLIBC_2.17 GLIBC_2.35", ""
         ),
