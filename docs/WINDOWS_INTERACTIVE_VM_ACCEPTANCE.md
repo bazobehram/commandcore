@@ -53,12 +53,16 @@ Neither this CI matrix nor the harness is permitted to contact production.
 
 ## Portable, offline acceptance bundle
 
-To avoid requiring Git or Python inside a clean Windows evaluation VM, use the
-manual GitHub Actions workflow
+To avoid requiring Git or Python inside a clean Windows evaluation VM, use
+the GitHub Actions
 [Windows M3 disposable VM acceptance bundle](../.github/workflows/windows-vm-acceptance-bundle.yml)
-on the tested `main` commit. Download its `windows-m3-disposable-vm-acceptance`
-artifact from the workflow run, and copy the contained ZIP to the **isolated
-disposable VM only**. This archive has **only** source-controlled offline
+workflow. It publishes an artifact automatically **only when its workflow,
+packager, offline harness or runbook changes are merged into `main`**; an
+operator may also trigger `workflow_dispatch` manually for a reviewed `main`
+commit. Check that the run completed successfully, was started from the
+intended `main` SHA, and did not originate from an untrusted fork. Download
+its `windows-m3-disposable-vm-acceptance` artifact within its 14-day retention
+window, and copy the contained ZIP to the **isolated disposable VM only**. This archive has **only** source-controlled offline
 PowerShell acceptance scripts, this runbook, `SOURCE_COMMIT.txt`, and
 `SHA256SUMS.txt`. It contains **no Agent binary, production URL, installer,
 credentials, enrollment keys, or user state**.
