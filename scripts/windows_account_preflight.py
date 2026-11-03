@@ -223,21 +223,25 @@ def main() -> int:
             .fingerprint(hashes.SHA1())
             .hex()
         )
-        trusted = False
+        trust_attempted = False
         crl_thread.start()
         thread.start()
         try:
-            add = subprocess.run(
-                ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
+            trust_attempted = True
+            try:
+                add = subprocess.run(
+                    ["certutil.exe", "-addstore", "-f", "Root", str(ca_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                print("FAIL: localhost_tls_trust_setup_timeout")
+                return 1
             if add.returncode != 0:
                 print("FAIL: localhost_tls_trust_setup")
                 return 1
-            trusted = True
             origin = f"https://localhost:{server.server_port}"
             if not run_driver(
                 driver, fixture, "-OnlyCredential", timeout=150, origin=origin
@@ -250,13 +254,20 @@ def main() -> int:
             crl_server.shutdown()
             crl_server.server_close()
             crl_thread.join(timeout=5)
-            if trusted:
-                subprocess.run(
-                    ["certutil.exe", "-delstore", "Root", thumbprint],
-                    capture_output=True,
-                    timeout=15,
-                    check=False,
-                )
+            if trust_attempted:
+                # Even a timed-out addstore may have installed the local CA.
+                # Always attempt removal and fail CI if it cannot be verified.
+                try:
+                    removed = subprocess.run(
+                        ["certutil.exe", "-delstore", "Root", thumbprint],
+                        capture_output=True,
+                        timeout=45,
+                        check=False,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    raise RuntimeError("CI temporary root cleanup unavailable") from None
+                if removed.returncode != 0:
+                    raise RuntimeError("CI temporary root cleanup failed")
     print("PASS: standard-user localhost HTTPS curl transport")
     return 0
 
