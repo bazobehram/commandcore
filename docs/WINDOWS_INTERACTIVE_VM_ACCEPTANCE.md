@@ -26,10 +26,10 @@ start or enroll a real CommandCore Agent; it does not contact any CommandCore
 server or request FULL_CONTROL. The task and state live only in the test
 account; no secrets or credentials are embedded.
 
-Keep all three scripts together in the same checked-out `scripts/` directory:
-`windows_interactive_vm_logon_acceptance.ps1`,
-`windows_interactive_logon_action.ps1`, and
-`windows_interactive_vm_task_shape.ps1`. Cleanup and verification are scoped to
+Keep all included scripts together in the same `scripts/` directory,
+including `windows_interactive_vm_logon_acceptance.ps1`,
+`windows_interactive_logon_action.ps1`, `windows_interactive_vm_task_shape.ps1`,
+and `windows_interactive_vm_proof_validation.ps1`. Cleanup and verification are scoped to
 the Scheduler root (`\\`), the authenticated Windows token's user identity,
 the exact limited/interactive principal, one at-logon trigger, and the exact
 PowerShell action arguments. They never rely on an inherited `USERNAME`
@@ -51,12 +51,56 @@ only the harmless action ran at logon; it does not prove actual CommandCore
 Agent enrollment, authenticated reconnect, or a connected signed upgrade.
 Neither this CI matrix nor the harness is permitted to contact production.
 
-From the checked-out source as the same standard user:
+## Portable, offline acceptance bundle
+
+To avoid requiring Git or Python inside a clean Windows evaluation VM, use the
+manual GitHub Actions workflow
+[Windows M3 disposable VM acceptance bundle](../.github/workflows/windows-vm-acceptance-bundle.yml)
+on the tested `main` commit. Download its `windows-m3-disposable-vm-acceptance`
+artifact from the workflow run, and copy the contained ZIP to the **isolated
+disposable VM only**. This archive has **only** source-controlled offline
+PowerShell acceptance scripts, this runbook, `SOURCE_COMMIT.txt`, and
+`SHA256SUMS.txt`. It contains **no Agent binary, production URL, installer,
+credentials, enrollment keys, or user state**.
+
+Before running scripts, verify the workflow's GitHub repository and commit
+against `SOURCE_COMMIT.txt`, and inspect the bundle contents. File hashes
+detect accidental changes **within the downloaded bundle**, not substitution
+of both files by a malicious publisher. The entire artifact must come from
+the trusted repository and its reviewed GitHub Actions run.
+
+Windows 11 includes **Windows PowerShell 5.1** (`powershell.exe`). PowerShell 7
+(`pwsh`) is *not* a prerequisite. The following commands use the built-in
+PowerShell executable; `-ExecutionPolicy Bypass` applies to that process only
+and does not change the system's execution policy.
+
+As the disposable VM's non-administrator desktop user, extract the archive,
+open Windows PowerShell in the extracted folder, and verify all file digests:
+
+~~~powershell
+Expand-Archive -LiteralPath .\windows-m3-vm-acceptance.zip -DestinationPath .\m3-vm -ErrorAction Stop
+Set-Location .\m3-vm
+foreach ($line in Get-Content -LiteralPath .\SHA256SUMS.txt) {
+    if ($line -cnotmatch '^([0-9a-f]{64})  ([A-Za-z0-9_./-]+)$') { throw 'Invalid manifest line' }
+    $expected = $Matches[1]
+    $filename = $Matches[2]
+    if (!(Test-Path -LiteralPath $filename -PathType Leaf)) { throw 'Missing acceptance script' }
+    if ((Get-FileHash -LiteralPath $filename -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expected) {
+        throw 'Offline acceptance file checksum mismatch'
+    }
+}
+'PASS: offline acceptance bundle file hashes match'
+~~~
+
+These checks do **not** prove a live logon or signed Agent connectivity.
+They only ensure the operator has the reviewed offline acceptance scripts.
+
+From the extracted bundle or checked-out source as the same standard user:
 
 ### 1. Prepare
 
 ~~~powershell
-pwsh -NoProfile -File ./scripts/windows_interactive_vm_logon_acceptance.ps1 -Mode Prepare -ConfirmDisposableVM
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_interactive_vm_logon_acceptance.ps1 -Mode Prepare -ConfirmDisposableVM
 ~~~
 
 Expected: PASS: limited interactive at-logon task prepared.
@@ -71,7 +115,7 @@ Start-Process -Credential or Start-ScheduledTask.
 After the desktop appears:
 
 ~~~powershell
-pwsh -NoProfile -File ./scripts/windows_interactive_vm_logon_acceptance.ps1 -Mode Verify -ConfirmDisposableVM
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_interactive_vm_logon_acceptance.ps1 -Mode Verify -ConfirmDisposableVM
 ~~~
 
 The verifier requires a matching unique nonce, exact user SID, a **different
@@ -88,7 +132,7 @@ For a *fresh* Prepare cycle, reboot the disposable VM, sign in as the same
 test user and run:
 
 ~~~powershell
-pwsh -NoProfile -File ./scripts/windows_interactive_vm_logon_acceptance.ps1 -Mode Verify -ConfirmDisposableVM -RequireReboot
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_interactive_vm_logon_acceptance.ps1 -Mode Verify -ConfirmDisposableVM -RequireReboot
 ~~~
 
 This also verifies the OS boot timestamp advanced after registration.
@@ -98,7 +142,7 @@ an earlier login is not a substitute for an independent reboot cycle.
 ### 4. Cleanup (always)
 
 ~~~powershell
-pwsh -NoProfile -File ./scripts/windows_interactive_vm_logon_acceptance.ps1 -Mode Cleanup -ConfirmDisposableVM
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_interactive_vm_logon_acceptance.ps1 -Mode Cleanup -ConfirmDisposableVM
 ~~~
 
 Cleanup refuses unrelated tasks and other user identities; it deletes only
