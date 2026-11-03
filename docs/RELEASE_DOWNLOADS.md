@@ -40,6 +40,17 @@ not ready; it is informational unless `--require-helper` was requested.
 `/install/windows` is assessed only as a **Preview** visibility signal,
 never accepted as proof of supported Windows installation.
 
+## Pre-publication signed feed verification
+
+Before enabling any production distribution volume, use the offline
+[public Linux feed staging verifier](PUBLIC_FEED_STAGING.md) with an
+**independently confirmed** Ed25519 public key fingerprint and only accepted
+signed Linux Agent artifacts. This checks candidate installer pins, signed
+manifest identity and signature, exact deployment URLs, binary sizes/hashes,
+and absence of unexpected or linked files. It never executes, signs, publishes,
+or contacts a device, and never substitutes for provenance and lifecycle
+acceptance.
+
 ## Publish a deployment feed
 
 The default server does not ship agent binaries or a signed manifest. Its
