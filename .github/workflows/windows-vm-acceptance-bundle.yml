@@ -2,6 +2,16 @@ name: Windows M3 disposable VM acceptance bundle
 
 on:
   workflow_dispatch:
+  # Publish a fresh, source-pinned offline bundle after reviewed changes
+  # to the harness land on main. Avoid burning Actions minutes on every push.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-vm-acceptance-bundle.yml'
+      - 'scripts/package_windows_vm_acceptance.py'
+      - 'scripts/windows_interactive_vm_*.ps1'
+      - 'scripts/windows_interactive_logon_action.ps1'
+      - 'docs/WINDOWS_INTERACTIVE_VM_ACCEPTANCE.md'
 
 permissions:
   contents: read
