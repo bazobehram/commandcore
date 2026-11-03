@@ -62,12 +62,14 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
         "artifacts": docs,
     }
     source = tmp_path / "manifest.input.json"
+
     def resign():
         raw = json.dumps(
             manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode()
         manifest["signature"] = base64.b64encode(signer.sign(raw)).decode()
         source.write_text(json.dumps(manifest))
+
     resign()
     PACKER.package(
         source,
@@ -151,7 +153,9 @@ def test_unsigned_manifest_mutation_fails_signature(tmp_path):
         validate(fixture)
 
 
-@pytest.mark.parametrize("kind", ["foreign_origin", "duplicate_arch", "wrong_id", "server"])
+@pytest.mark.parametrize(
+    "kind", ["foreign_origin", "duplicate_arch", "wrong_id", "server"]
+)
 def test_wrong_signed_release_scope_rejected(tmp_path, kind):
     fixture = signed_fixture(tmp_path)
     manifest = json.loads((fixture[0] / "manifest.json").read_text())
@@ -177,7 +181,11 @@ def test_wrong_signed_release_scope_rejected(tmp_path, kind):
 def test_installer_trust_pin_mismatch_rejected(tmp_path):
     fixture = signed_fixture(tmp_path)
     script = fixture[0] / "linux.sh"
-    script.write_text(script.read_text().replace("export COMMANDCORE_RELEASE_PUBLIC_KEY_B64", "echo UNPINNED"))
+    script.write_text(
+        script.read_text().replace(
+            "export COMMANDCORE_RELEASE_PUBLIC_KEY_B64", "echo UNPINNED"
+        )
+    )
     with pytest.raises(ValueError, match="installer_pins_mismatch"):
         validate(fixture)
 
@@ -189,7 +197,9 @@ def test_unknown_feed_files_rejected(tmp_path):
         validate(fixture)
 
 
-@pytest.mark.skipif(__import__("os").name == "nt", reason="unprivileged symlink Windows")
+@pytest.mark.skipif(
+    __import__("os").name == "nt", reason="unprivileged symlink Windows"
+)
 def test_symlinked_binary_rejected(tmp_path):
     fixture = signed_fixture(tmp_path)
     binary = fixture[0] / VERSION / "commandcore-agent-linux-x86_64"
