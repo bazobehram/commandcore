@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
 
-from scripts import package_windows_vm_acceptance as bundle
+_SPEC = importlib.util.spec_from_file_location(
+    "package_windows_vm_acceptance",
+    Path(__file__).resolve().parents[1] / "scripts" / "package_windows_vm_acceptance.py",
+)
+assert _SPEC is not None and _SPEC.loader is not None
+bundle = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(bundle)
 
 SHA = "a" * 40
 
