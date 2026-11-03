@@ -54,15 +54,20 @@ $logonSids = @($identity.Groups | ForEach-Object { $_.Value } | Where-Object { $
 if ($logonSids.Count -ne 1) { Deny 'unique_logon_identity_unavailable' }
 $currentLogonSid = [string]$logonSids[0]
 
-# Require a virtualized environment as an additional safeguard against running
-# this task fixture on the maintainer's own PC. These are not production hosts.
+# Reject Windows Server/10, ARM64 emulation and physical machines before
+# importing Scheduler or touching any owned fixture. This is the M3 x64 gate.
+. (Join-Path $PSScriptRoot 'windows_interactive_vm_platform_validation.ps1')
 $system = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-$model = [string]$system.Model + ' ' + [string]$system.Manufacturer
-if ($model -notmatch '(?i)virtual.machine|vmware|virtualbox|qemu|kvm|parallels|hyper-v|virtual.platform|bochs|hvm domu') {
-    Deny 'virtual_machine_not_detected'
-}
+$os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+$cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+$platform = Test-CommandCoreVmPlatform -OperatingSystem $env:OS `
+    -BuildNumber ([string]$os.BuildNumber) -ProductType ([string]$os.ProductType) `
+    -CpuArchitecture ([string]$cpu.Architecture) `
+    -Manufacturer ([string]$system.Manufacturer) -Model ([string]$system.Model) `
+    -Native64Bit ([Environment]::Is64BitOperatingSystem -and [Environment]::Is64BitProcess)
+if ($platform -cne 'valid') { Deny $platform }
 Import-Module ScheduledTasks -ErrorAction Stop
-# Only pure task-shape code is imported; no Scheduler mutations here.
+# Only pure task-shape/proof code is imported; no Scheduler mutations here.
 . (Join-Path $PSScriptRoot 'windows_interactive_vm_task_shape.ps1')
 . (Join-Path $PSScriptRoot 'windows_interactive_vm_proof_validation.ps1')
 
