@@ -62,6 +62,11 @@ jobs:
       - name: Agent-initiated enrollment and reconnect
         if: matrix.python-version == '3.13'
         run: PYTHONPATH=apps/server:agent python scripts/enrollment_smoke.py
+      - name: Offline Windows VM acceptance bundle integrity
+        if: matrix.python-version == '3.13'
+        run: |
+          python scripts/package_windows_vm_acceptance.py --output /tmp/windows-m3-vm-acceptance.zip --source-sha "${{ github.sha }}"
+          python scripts/package_windows_vm_acceptance.py --verify /tmp/windows-m3-vm-acceptance.zip
       - name: Release archive safety test
         if: matrix.python-version == '3.13'
         run: |
