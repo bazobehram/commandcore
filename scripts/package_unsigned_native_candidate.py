@@ -183,6 +183,11 @@ def verify(directory: Path, source_sha: str) -> None:
     ).encode("ascii")
     if hash_file != expected_hashes:
         raise ValueError("candidate_hash_manifest_mismatch")
+    # The checksum covers metadata, but does not prove its glibc claim is true.
+    # Re-read the ELF version requirements during independent review.
+    required_glibc = glibc_max_required(directory / BINARY_NAME)
+    if data["max_required_glibc"] != f"{required_glibc[0]}.{required_glibc[1]}":
+        raise ValueError("candidate_glibc_evidence_mismatch")
 
 
 def main() -> int:

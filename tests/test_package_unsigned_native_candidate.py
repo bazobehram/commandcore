@@ -138,3 +138,19 @@ def test_source_sha_must_match_reviewed_commit(tmp_path, monkeypatch):
     output = setup_candidate(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="invalid_candidate_metadata"):
         MODULE.verify(output, "b" * 40)
+
+
+def test_candidate_rechecks_real_glibc_requirement(tmp_path, monkeypatch):
+    output = setup_candidate(tmp_path, monkeypatch)
+    # A perfectly consistent metadata and checksum bundle can still lie
+    # about which glibc versions the binary actually needs.
+    monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 36))
+    with pytest.raises(ValueError, match="candidate_glibc_evidence_mismatch"):
+        MODULE.verify(output, SHA)
+
+
+def test_candidate_rejects_binary_requiring_newer_glibc(tmp_path, monkeypatch):
+    output = setup_candidate(tmp_path, monkeypatch)
+    monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 39))
+    with pytest.raises(ValueError, match="candidate_glibc_evidence_mismatch"):
+        MODULE.verify(output, SHA)
