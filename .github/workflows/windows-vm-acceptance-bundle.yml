@@ -1,0 +1,35 @@
+name: Windows M3 disposable VM acceptance bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-acceptance-bundle:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build offline Windows VM acceptance scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/package_windows_vm_acceptance.py \
+            --output dist/windows-m3-vm-acceptance.zip \
+            --source-sha "$GITHUB_SHA"
+          python scripts/package_windows_vm_acceptance.py \
+            --verify dist/windows-m3-vm-acceptance.zip
+          cd dist
+          sha256sum windows-m3-vm-acceptance.zip > windows-m3-vm-acceptance.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-m3-disposable-vm-acceptance
+          path: |
+            dist/windows-m3-vm-acceptance.zip
+            dist/windows-m3-vm-acceptance.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
