@@ -65,7 +65,9 @@ try {
         $workerProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Credential $credential -LoadUserProfile -PassThru -ErrorAction Stop
     }
     $stage = 'read_worker_report'
-    $deadlineSeconds = if ($OnlyTask -or $OnlyCredential) { 20 } else { 110 }
+    # Allow slow hosted-runner profile initialization while keeping the
+    # worker bounded; the caller's outer watchdog must exceed this deadline.
+    $deadlineSeconds = if ($OnlyTask -or $OnlyCredential) { 60 } else { 110 }
     $deadline = (Get-Date).AddSeconds($deadlineSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $result -PathType Leaf) {
