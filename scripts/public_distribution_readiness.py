@@ -129,7 +129,9 @@ def _manifest_status(response: Response) -> str:
     return "http_content_present_unverified_signature"
 
 
-def assess(responses: dict[str, Response], require_helper: bool = False) -> tuple[dict[str, str], bool]:
+def assess(
+    responses: dict[str, Response], require_helper: bool = False
+) -> tuple[dict[str, str], bool]:
     linux = _script_status(responses["linux"])
     manifest = _manifest_status(responses["manifest"])
     helper = _script_status(responses["helper"])
@@ -147,7 +149,10 @@ def assess(responses: dict[str, Response], require_helper: bool = False) -> tupl
         "linux_helper": helper,
         "windows_preview": windows_state,
     }
-    good = linux == "http_content_present" and manifest == "http_content_present_unverified_signature"
+    good = (
+        linux == "http_content_present"
+        and manifest == "http_content_present_unverified_signature"
+    )
     if require_helper:
         good = good and helper == "http_content_present"
     return statuses, good
