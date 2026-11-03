@@ -108,10 +108,15 @@ def verify(
         _reject("invalid_feed_directory")
     key_text = _safe_file(trusted_public_key_file, 256).decode("ascii").strip()
     public_bytes = base64.b64decode(key_text, validate=True)
-    if len(public_bytes) != 32 or hashlib.sha256(public_bytes).hexdigest() != expected_key_sha256:
+    if (
+        len(public_bytes) != 32
+        or hashlib.sha256(public_bytes).hexdigest() != expected_key_sha256
+    ):
         _reject("untrusted_release_key")
-    if (trusted_public_key_file.resolve() == feed.resolve()
-            or feed.resolve() in trusted_public_key_file.resolve().parents):
+    if (
+        trusted_public_key_file.resolve() == feed.resolve()
+        or feed.resolve() in trusted_public_key_file.resolve().parents
+    ):
         _reject("key_must_be_independent_of_feed")
 
     raw = _safe_file(feed / "manifest.json", MAX_MANIFEST)
@@ -123,13 +128,17 @@ def verify(
         _reject("invalid_signature")
     canonical = json.dumps(
         {key: value for key, value in manifest.items() if key != "signature"},
-        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     ).encode()
     Ed25519PublicKey.from_public_bytes(public_bytes).verify(signature, canonical)
-    if (manifest.get("schema_version") != 1
-            or manifest.get("product") != "commandcore-agent"
-            or manifest.get("version") != expected_version
-            or manifest.get("signing_key_id") != expected_key_sha256[:16]):
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("product") != "commandcore-agent"
+        or manifest.get("version") != expected_version
+        or manifest.get("signing_key_id") != expected_key_sha256[:16]
+    ):
         _reject("invalid_signed_release_identity")
 
     artifacts = manifest.get("artifacts")
@@ -149,10 +158,12 @@ def verify(
         seen.add(arch)
         name = ARCH_BINARY[arch]
         expected_names.add(name)
-        if (item.get("platform") != "linux"
-                or item.get("kind") != "executable"
-                or item.get("filename") != name
-                or item.get("url") != f"{origin}/releases/agent/{expected_version}/{name}"):
+        if (
+            item.get("platform") != "linux"
+            or item.get("kind") != "executable"
+            or item.get("filename") != name
+            or item.get("url") != f"{origin}/releases/agent/{expected_version}/{name}"
+        ):
             _reject("unapproved_artifact_url_or_type")
         size = item.get("size")
         digest = item.get("sha256")
@@ -165,16 +176,22 @@ def verify(
         _reject("missing_linux_x86_64")
 
     script = _safe_file(feed / "linux.sh", MAX_INSTALLER).decode("utf-8")
-    if (not script.startswith("#!/bin/sh\n")
-            or script.count(f"COMMANDCORE_RELEASE_PUBLIC_KEY_B64='{key_text}'") != 1
-            or script.count("export COMMANDCORE_RELEASE_PUBLIC_KEY_B64") != 1
-            or script.count(f"manifest='{origin}/releases/agent/manifest.json'") != 1
-            or script.count(f"server={origin}\n") != 1
-            or "__COMMANDCORE_" in script):
+    if (
+        not script.startswith("#!/bin/sh\n")
+        or script.count(f"COMMANDCORE_RELEASE_PUBLIC_KEY_B64='{key_text}'") != 1
+        or script.count("export COMMANDCORE_RELEASE_PUBLIC_KEY_B64") != 1
+        or script.count(f"manifest='{origin}/releases/agent/manifest.json'") != 1
+        or script.count(f"server={origin}\n") != 1
+        or "__COMMANDCORE_" in script
+    ):
         _reject("installer_pins_mismatch")
     # A staging candidate is intentionally minimal. No helper pins, executable
     # scripts other than the installer, hidden state, old releases or secrets.
-    if {x.name for x in feed.iterdir()} != {"linux.sh", "manifest.json", expected_version}:
+    if {x.name for x in feed.iterdir()} != {
+        "linux.sh",
+        "manifest.json",
+        expected_version,
+    }:
         _reject("unexpected_root_file")
     if {x.name for x in version_root.iterdir()} != expected_names:
         _reject("unexpected_version_file")
