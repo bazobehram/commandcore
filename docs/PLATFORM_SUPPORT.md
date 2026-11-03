@@ -59,6 +59,18 @@ occurs; those remain separate external interactive-VM acceptance gates.
 Real Task Scheduler logon/startup, live revocation and reboot still require
 external interactive VM acceptance.
 
+The hosted Windows standard-user CI preflight uses a **bounded PowerShell
+credential worker** with a longer outer watchdog to accommodate slow temporary
+account-profile initialization. If that watchdog fires, the runner terminates
+the driver process tree and attempts removal of only the newly generated CI
+account and its recognized, limited test task. Cleanup refuses accounts with
+an unrelated description and tasks with an unexpected owner/action; a separate
+Windows CI probe checks both rejection and successful disposable-account
+removal. The local HTTPS fixtures likewise attempt to remove their temporary
+root CA even if certificate installation times out; cleanup failures fail CI.
+These safeguards reduce CI flakiness and residue but do **not** substitute
+for real Windows desktop login/reboot acceptance.
+
 Disposable Windows CI also tests the **positive signed version-selection upgrade**
 on the actual packaged installer and a freshly signed newer manifest. The existing
 version must remain intact; the new version is activated, runnable and represented
