@@ -176,6 +176,8 @@ jobs:
             'scripts/windows_uninstall_acceptance_probe.ps1',
             'scripts/windows_signed_upgrade_success_probe.ps1',
             'scripts/windows_real_task_uninstall_probe.ps1',
+            'scripts/windows_ci_timeout_cleanup.ps1',
+            'scripts/windows_ci_timeout_cleanup_probe.ps1',
             'install/uninstall-windows.ps1'
           )) {
             $tokens = $null
@@ -190,6 +192,9 @@ jobs:
           Write-Output 'PASS: Windows installer and rollback PowerShell syntax'
       - name: Disposable standard-user account and HTTPS transport preflight
         run: python scripts/windows_account_preflight.py
+      - name: Timeout cleanup refuses unrelated Windows accounts
+        shell: pwsh
+        run: ./scripts/windows_ci_timeout_cleanup_probe.ps1
       - name: Offline interactive-VM task ownership denial matrix
         shell: pwsh
         run: |
