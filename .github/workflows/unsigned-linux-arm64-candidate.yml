@@ -1,0 +1,80 @@
+name: Unsigned Linux ARM64 Agent review candidate
+
+on:
+  workflow_dispatch:
+  # A one-time source-pinned build when the reviewed packaging workflow lands.
+  # Subsequent commits do NOT rebuild this expensive native candidate unless
+  # its packaging logic changes; operator can explicitly dispatch from main.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/unsigned-linux-arm64-candidate.yml'
+      - 'scripts/package_unsigned_native_candidate.py'
+      - 'tests/test_package_unsigned_native_candidate.py'
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-linux-candidate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate source identity and package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python - <<'PY'
+          import pathlib, tomllib
+          root = pathlib.Path(".")
+          package = tomllib.loads((root / "agent/rust/Cargo.toml").read_text())
+          assert (root / "VERSION").read_text().strip() == package["package"]["version"]
+          PY
+      - name: Rust toolchain and native locked release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "aarch64"
+          rustc --version
+          cargo --version
+          cargo test --locked --manifest-path agent/rust/Cargo.toml
+          cargo build --locked --release --manifest-path agent/rust/Cargo.toml
+      - name: Native Agent black-box core acceptance (ephemeral localhost)
+        shell: bash
+        env:
+          PYTHONPATH: apps/server:agent
+          COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-dev.txt . ./agent
+          python scripts/rust_agent_smoke.py
+      - name: Produce and independently verify unsigned build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/package_unsigned_native_candidate.py prepare \
+            --binary agent/rust/target/release/commandcore-agent-rust \
+            --cargo-lock agent/rust/Cargo.lock \
+            --output dist/unsigned-native-agent-candidate \
+            --source-sha "$GITHUB_SHA" \
+            --architecture arm64 \
+            --version "$(cat VERSION)" \
+            --rustc-version "$(rustc --version)" \
+            --cargo-version "$(cargo --version)"
+          python scripts/package_unsigned_native_candidate.py verify \
+            --output dist/unsigned-native-agent-candidate \
+            --source-sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-linux-arm64-agent-review-candidate
+          path: dist/unsigned-native-agent-candidate/
+          if-no-files-found: error
+          retention-days: 14
