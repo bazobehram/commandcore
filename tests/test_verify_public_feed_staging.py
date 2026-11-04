@@ -171,7 +171,8 @@ def test_wrong_signed_release_scope_rejected(tmp_path, kind):
     manifest = json.loads((fixture[0] / "manifest.json").read_text())
     if kind == "foreign_origin":
         manifest["artifacts"][0]["url"] = (
-            "https://unrelated.example.net/releases/agent/0.9.0-rc8/commandcore-agent-linux-x86_64"
+            "https://unrelated.example.net/releases/agent/0.9.0-rc8/"
+            "commandcore-agent-linux-x86_64"
         )
         expected = "unapproved_artifact_url_or_type"
     elif kind == "duplicate_arch":
