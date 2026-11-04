@@ -179,6 +179,30 @@ jobs:
           PYTHONPATH: apps/server:agent
         run: python scripts/enrollment_smoke.py
 
+      - name: Native Agent systemd user service restart and reconnect
+        env:
+          COMMANDCORE_ENROLLMENT_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
+          COMMANDCORE_ENROLLMENT_SYSTEMD: 'true'
+          PYTHONPATH: apps/server:agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Hosted runner only. Never point systemctl at an enrolled device.
+          user_id="$(id -u)"
+          sudo loginctl enable-linger "$(id -un)"
+          trap 'sudo loginctl disable-linger "$(id -un)" || true' EXIT
+          sudo systemctl start "user@${user_id}.service"
+          export XDG_RUNTIME_DIR="/run/user/${user_id}"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if systemctl --user is-system-running >/dev/null 2>&1 || systemctl --user list-units >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          systemctl --user list-units >/dev/null
+          python scripts/enrollment_smoke.py
+
   windows-account-preflight:
     runs-on: windows-latest
     steps:
