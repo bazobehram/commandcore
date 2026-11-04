@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make/verify an unsigned, source-pinned Linux x64 native Agent review bundle.
+"""Make/verify an unsigned, source-pinned Linux native Agent review bundle.
 
 No signing keys or network operations. Does NOT approve installation or release.
 """
@@ -16,7 +16,8 @@ import struct
 import subprocess
 from pathlib import Path
 
-BINARY_NAME = "commandcore-agent-linux-x86_64"
+BINARY_NAMES = {"x86_64": "commandcore-agent-linux-x86_64", "arm64": "commandcore-agent-linux-arm64"}
+BINARY_NAME = BINARY_NAMES["x86_64"]  # compatibility for existing x64 consumers
 MANIFEST_NAME = "UNSIGNED_BUILD_METADATA.json"
 SOURCE_NAME = "SOURCE_COMMIT.txt"
 HASH_NAME = "SHA256SUMS.txt"
@@ -36,7 +37,9 @@ def file_bytes(path: Path, max_size: int) -> bytes:
     return path.read_bytes()
 
 
-def elf_linux_amd64(raw: bytes) -> None:
+def elf_linux(raw: bytes, architecture: str = "x86_64") -> None:
+    if architecture not in BINARY_NAMES:
+        raise ValueError("unsupported_candidate_architecture")
     if (
         len(raw) < 64
         or raw[:4] != b"\x7fELF"
@@ -44,9 +47,14 @@ def elf_linux_amd64(raw: bytes) -> None:
         or raw[5] != 1  # little endian
         or raw[6] != 1  # ELF current version
         or struct.unpack_from("<H", raw, 16)[0] != 3  # ET_DYN (PIE)
-        or struct.unpack_from("<H", raw, 18)[0] != 62  # EM_X86_64
+        or struct.unpack_from("<H", raw, 18)[0] != (62 if architecture == "x86_64" else 183)
     ):
-        raise ValueError("not_linux_x86_64_pie_elf")
+        raise ValueError("not_linux_expected_architecture_pie_elf")
+
+
+def elf_linux_amd64(raw: bytes) -> None:
+    """Legacy public validator for x86_64 fixtures."""
+    elf_linux(raw, "x86_64")
 
 
 def glibc_max_required(binary: Path) -> tuple[int, int]:
@@ -76,13 +84,17 @@ def prepare(
     cargo_lock: Path,
     rustc_version: str,
     cargo_version: str,
+    architecture: str = "x86_64",
 ) -> None:
+    if architecture not in BINARY_NAMES:
+        raise ValueError("unsupported_candidate_architecture")
+    binary_name = BINARY_NAMES[architecture]
     if not COMMIT_RE.fullmatch(source_sha) or not VERSION_RE.fullmatch(version):
         raise ValueError("invalid_build_identity")
     if output.exists() or output.is_symlink():
         raise ValueError("refuse_existing_output")
     raw = file_bytes(binary, MAX_BINARY_SIZE)
-    elf_linux_amd64(raw)
+    elf_linux(raw, architecture)
     glibc_max = glibc_max_required(binary)
     lock = file_bytes(cargo_lock, 10 * 1024 * 1024)
     metadata = {
@@ -92,8 +104,8 @@ def prepare(
         "source_commit": source_sha,
         "package_version": version,
         "platform": "linux",
-        "architecture": "x86_64",
-        "filename": BINARY_NAME,
+        "architecture": architecture,
+        "filename": binary_name,
         "sha256": hashlib.sha256(raw).hexdigest(),
         "size": len(raw),
         "cargo_lock_sha256": hashlib.sha256(lock).hexdigest(),
@@ -105,12 +117,12 @@ def prepare(
         "device_lifecycle": "NOT_VERIFIED",
     }
     output.mkdir(parents=True)
-    shutil.copyfile(binary, output / BINARY_NAME)
+    shutil.copyfile(binary, output / binary_name)
     (output / MANIFEST_NAME).write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     (output / SOURCE_NAME).write_text(source_sha + "\n", encoding="ascii")
-    entries = [BINARY_NAME, MANIFEST_NAME, SOURCE_NAME]
+    entries = [binary_name, MANIFEST_NAME, SOURCE_NAME]
     (output / HASH_NAME).write_text(
         "".join(
             f"{hashlib.sha256((output / name).read_bytes()).hexdigest()}  {name}\n"
@@ -120,20 +132,23 @@ def prepare(
     )
 
 
-def verify(directory: Path, source_sha: str) -> None:
+def verify(directory: Path, source_sha: str, architecture: str = "x86_64") -> None:
+    if architecture not in BINARY_NAMES:
+        raise ValueError("unsupported_candidate_architecture")
+    binary_name = BINARY_NAMES[architecture]
     if not COMMIT_RE.fullmatch(source_sha):
         raise ValueError("invalid_source_sha")
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("invalid_candidate_directory")
     if {item.name for item in directory.iterdir()} != {
-        BINARY_NAME,
+        binary_name,
         MANIFEST_NAME,
         SOURCE_NAME,
         HASH_NAME,
     }:
         raise ValueError("unexpected_candidate_file")
-    raw = file_bytes(directory / BINARY_NAME, MAX_BINARY_SIZE)
-    elf_linux_amd64(raw)
+    raw = file_bytes(directory / binary_name, MAX_BINARY_SIZE)
+    elf_linux(raw, architecture)
     manifest_bytes = file_bytes(directory / MANIFEST_NAME, 8_192)
     marker = file_bytes(directory / SOURCE_NAME, 128)
     hash_file = file_bytes(directory / HASH_NAME, 1024)
@@ -166,8 +181,8 @@ def verify(directory: Path, source_sha: str) -> None:
         or data["source_commit"] != source_sha
         or marker != (source_sha + "\n").encode("ascii")
         or data["platform"] != "linux"
-        or data["architecture"] != "x86_64"
-        or data["filename"] != BINARY_NAME
+        or data["architecture"] != architecture
+        or data["filename"] != binary_name
         or data["size"] != len(raw)
         or data["sha256"] != hashlib.sha256(raw).hexdigest()
         or not SHA256_RE.fullmatch(data["cargo_lock_sha256"])
@@ -179,13 +194,13 @@ def verify(directory: Path, source_sha: str) -> None:
         raise ValueError("invalid_candidate_metadata")
     expected_hashes = "".join(
         f"{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n"
-        for name in [BINARY_NAME, MANIFEST_NAME, SOURCE_NAME]
+        for name in [binary_name, MANIFEST_NAME, SOURCE_NAME]
     ).encode("ascii")
     if hash_file != expected_hashes:
         raise ValueError("candidate_hash_manifest_mismatch")
     # The checksum covers metadata, but does not prove its glibc claim is true.
     # Re-read the ELF version requirements during independent review.
-    required_glibc = glibc_max_required(directory / BINARY_NAME)
+    required_glibc = glibc_max_required(directory / binary_name)
     if data["max_required_glibc"] != f"{required_glibc[0]}.{required_glibc[1]}":
         raise ValueError("candidate_glibc_evidence_mismatch")
 
@@ -195,6 +210,7 @@ def main() -> int:
     parser.add_argument("action", choices=("prepare", "verify"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--architecture", choices=tuple(BINARY_NAMES), default="x86_64")
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--version")
     parser.add_argument("--cargo-lock", type=Path)
@@ -212,9 +228,10 @@ def main() -> int:
             args.cargo_lock,
             args.rustc_version,
             args.cargo_version,
+            args.architecture,
         )
     else:
-        verify(args.output, args.source_sha)
+        verify(args.output, args.source_sha, args.architecture)
     print("UNSIGNED_NATIVE_CANDIDATE=INTEGRITY_VERIFIED")
     print("SIGNATURES=NONE")
     print("SOURCE_PROVENANCE=CI_RECORD_ONLY")
