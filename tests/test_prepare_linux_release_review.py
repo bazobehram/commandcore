@@ -40,8 +40,14 @@ def fixtures(tmp_path, monkeypatch):
         binary.write_bytes(elf)
         folder = tmp_path / f"candidate-{arch}"
         candidate.prepare(
-            binary, folder, SOURCE, "0.9.0-rc7", lock, "rustc fixture",
-            "cargo fixture", arch
+            binary,
+            folder,
+            SOURCE,
+            "0.9.0-rc7",
+            lock,
+            "rustc fixture",
+            "cargo fixture",
+            arch,
         )
         result[arch] = folder
     return result
@@ -54,7 +60,10 @@ def test_dual_architecture_unsigned_review_manifest(tmp_path, monkeypatch):
     assert manifest["version"] == VERSION
     assert len(manifest["artifacts"]) == 2
     assert {a["architecture"] for a in manifest["artifacts"]} == {"x86_64", "arm64"}
-    assert all(a["url"].startswith(f"{ORIGIN}/releases/agent/{VERSION}/") for a in manifest["artifacts"])
+    assert all(
+        a["url"].startswith(f"{ORIGIN}/releases/agent/{VERSION}/")
+        for a in manifest["artifacts"]
+    )
     assert "signature" not in manifest
     assert "signing_key_id" not in manifest
     assert json.loads(output.read_text()) == manifest
@@ -77,12 +86,15 @@ def test_reject_tampered_candidate_without_output(tmp_path, monkeypatch):
     assert not output.exists()
 
 
-@pytest.mark.parametrize("origin", [
-    "http://commandcore.example.com",
-    "https://other.example.com/release",
-    "https://u:p@commandcore.example.com",
-    "https://commandcore.example.com:8443",
-])
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://commandcore.example.com",
+        "https://other.example.com/release",
+        "https://u:p@commandcore.example.com",
+        "https://commandcore.example.com:8443",
+    ],
+)
 def test_invalid_origin_rejected(tmp_path, monkeypatch, origin):
     folders = fixtures(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="invalid_release_origin"):
@@ -96,4 +108,10 @@ def test_refuse_overwrite_and_partial_architecture(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="output_already_exists"):
         module.prepare(folders, SOURCE, VERSION, ORIGIN, output)
     with pytest.raises(ValueError, match="both_linux_architectures_required"):
-        module.prepare({"x86_64": folders["x86_64"]}, SOURCE, VERSION, ORIGIN, tmp_path / "new.json")
+        module.prepare(
+            {"x86_64": folders["x86_64"]},
+            SOURCE,
+            VERSION,
+            ORIGIN,
+            tmp_path / "new.json",
+        )
