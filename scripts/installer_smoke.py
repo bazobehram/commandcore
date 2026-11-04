@@ -200,6 +200,42 @@ def main():
             assert (
                 isolated_identity.read_text() == '{"fixture":"preserved-on-uninstall"}'
             )
+            native_checks = []
+            native_path = os.environ.get("COMMANDCORE_TEST_NATIVE_BINARY")
+            if native_path:
+                # Use the actual compiled Agent rather than a fixture executable.
+                # The installer runs in the same isolated non-enrolling environment.
+                binary = Path(native_path).read_bytes()
+                version = (root / "VERSION").read_text().strip()
+                assert binary.startswith(b"\x7fELF")
+                assert version
+                (web / "agent").write_bytes(binary)
+                manifest(version)
+                native_home = home("native-signed-install")
+                run(native_home, "--no-service")
+                current_native = (
+                    native_home
+                    / ".local/share/commandcore-agent/current/commandcore-agent"
+                )
+                assert current_native.is_file()
+                assert hashlib.sha256(current_native.read_bytes()).digest() == (
+                    hashlib.sha256(binary).digest()
+                )
+                native_version = subprocess.run(
+                    [str(current_native), "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                assert version in native_version.stdout
+                run(native_home, uninstall=True)
+                assert not (native_home / ".local/share/commandcore-agent").exists()
+                native_checks = [
+                    "real-native-agent-signed-install",
+                    "real-native-agent-version-and-digest",
+                    "real-native-agent-uninstall",
+                ]
             print(
                 json.dumps(
                     {
@@ -215,8 +251,13 @@ def main():
                             "isolated-namespace",
                             "numeric-prerelease-order",
                             "uninstall-preserves-identity",
-                        ],
-                        "scope": "installer integrity; fixture executable and service, no enrollment claim",
+                        ]
+                        + native_checks,
+                        "scope": (
+                            "installer integrity and native packaging; no enrollment"
+                            if native_checks
+                            else "installer integrity; fixture executable and service, no enrollment claim"
+                        ),
                     }
                 )
             )
