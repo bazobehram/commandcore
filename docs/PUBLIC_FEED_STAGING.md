@@ -66,9 +66,9 @@ checks, requires matching source commits and both Linux architectures, pins
 immutable HTTPS artifact URLs and refuses to overwrite an existing output.
 The resulting JSON deliberately has **no** `signature` or `signing_key_id`.
 It is **not** a signed release manifest, publication approval, or a release
-version assignment. If the candidate Cargo package version differs from the
-approved release version, the operator must resolve and approve that mismatch
-before signing; never silently relabel code from a previous tag.
+version assignment. The handoff now **rejects** any candidate whose Cargo package version differs
+from the approved release version. A fresh build from a reviewed version-bumped
+source commit is required; the operator cannot silently relabel an older binary.
 
 The offline authorized signer must separately establish trusted key custody,
 record the independent public-key fingerprint, add the exact `signing_key_id`,
