@@ -8,7 +8,6 @@ The reviewer must still approve provenance, release version and lifecycle tests.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from pathlib import Path
