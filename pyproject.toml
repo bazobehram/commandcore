@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "commandcore-server"
-version = "0.9.0-rc7"
+version = "0.9.0-rc8"
 description = "Vendor-neutral self-hosted remote computer control plane for MCP clients"
 license = "AGPL-3.0-or-later"
 readme = "README.md"
