@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-import package_unsigned_native_candidate as candidate  # noqa: E402
+import package_unsigned_native_candidate as candidate
 
 spec = importlib.util.spec_from_file_location(
     "prepare_linux_release_review", ROOT / "scripts/prepare_linux_release_review.py"
