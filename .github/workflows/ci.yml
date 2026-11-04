@@ -142,6 +142,11 @@ jobs:
           COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
           PYTHONPATH: apps/server:agent
         run: python scripts/rust_agent_smoke.py
+      - name: Signed native Rust activation and rollback (ephemeral)
+        env:
+          COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
+          PYTHONPATH: apps/server:agent
+        run: python scripts/signed_rust_canary.py
       - name: Rust Agent FULL_CONTROL helper parity
         env:
           COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
