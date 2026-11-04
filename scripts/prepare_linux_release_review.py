@@ -60,6 +60,8 @@ def prepare(
             or metadata["signatures"] != "NONE"
         ):
             raise ValueError("unapproved_candidate")
+        if metadata["package_version"] != release_version:
+            raise ValueError("candidate_release_version_mismatch")
         name = BINARY_NAMES[arch]
         artifacts.append(
             {
