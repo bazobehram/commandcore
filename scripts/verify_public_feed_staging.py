@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline pre-publication validation of a deployment's Linux Agent feed.
 
 This is a read-only integrity gate, NOT signing, publishing, provenance
@@ -19,6 +18,7 @@ import struct
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 MAX_MANIFEST = 1_048_576
@@ -235,7 +235,7 @@ def main() -> int:
         print("PUBLIC_FEED_STAGING=REJECTED")
         print("REJECTION_TYPE=" + type(error).__name__)
         return 2
-    except Exception:
+    except InvalidSignature:
         print("PUBLIC_FEED_STAGING=REJECTED")
         print("REJECTION_TYPE=signature_or_integrity_error")
         return 2
