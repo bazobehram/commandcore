@@ -157,7 +157,9 @@ def test_candidate_rejects_binary_requiring_newer_glibc(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("architecture,machine", [("x86_64", 62), ("arm64", 183)])
-def test_architecture_pinned_unsigned_candidate(tmp_path, monkeypatch, architecture, machine):
+def test_architecture_pinned_unsigned_candidate(
+    tmp_path, monkeypatch, architecture, machine
+):
     binary = tmp_path / "agent"
     raw = bytearray(elf_fixture())
     struct.pack_into("<H", raw, 18, machine)
@@ -180,7 +182,9 @@ def test_arm64_candidate_rejects_wrong_elf_machine(tmp_path, monkeypatch):
     lock.write_text("locked fixture")
     monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 35))
     with pytest.raises(ValueError, match="not_linux_expected_architecture_pie_elf"):
-        MODULE.prepare(binary, tmp_path / "candidate", SHA, VERSION, lock, "", "", "arm64")
+        MODULE.prepare(
+            binary, tmp_path / "candidate", SHA, VERSION, lock, "", "", "arm64"
+        )
 
 
 def test_candidate_rejects_unknown_architecture(tmp_path):
