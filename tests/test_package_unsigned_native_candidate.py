@@ -101,7 +101,7 @@ def test_candidate_rejects_arm64_and_executable_type(tmp_path, monkeypatch):
     arm = bytearray(elf_fixture())
     struct.pack_into("<H", arm, 18, 183)
     binary.write_bytes(arm)
-    with pytest.raises(ValueError, match="not_linux_x86_64_pie_elf"):
+    with pytest.raises(ValueError, match="not_linux_expected_architecture_pie_elf"):
         MODULE.prepare(
             binary, tmp_path / "out", SHA, VERSION, tmp_path / "Cargo.lock", "", ""
         )
@@ -154,3 +154,39 @@ def test_candidate_rejects_binary_requiring_newer_glibc(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 39))
     with pytest.raises(ValueError, match="candidate_glibc_evidence_mismatch"):
         MODULE.verify(output, SHA)
+
+
+@pytest.mark.parametrize("architecture,machine", [("x86_64", 62), ("arm64", 183)])
+def test_architecture_pinned_unsigned_candidate(
+    tmp_path, monkeypatch, architecture, machine
+):
+    binary = tmp_path / "agent"
+    raw = bytearray(elf_fixture())
+    struct.pack_into("<H", raw, 18, machine)
+    binary.write_bytes(raw)
+    lock = tmp_path / "Cargo.lock"
+    lock.write_text("locked fixture")
+    monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 35))
+    output = tmp_path / "candidate"
+    MODULE.prepare(binary, output, SHA, VERSION, lock, "rustc", "cargo", architecture)
+    MODULE.verify(output, SHA, architecture)
+    assert (output / MODULE.BINARY_NAMES[architecture]).exists()
+    with pytest.raises(ValueError):
+        MODULE.verify(output, SHA, "arm64" if architecture == "x86_64" else "x86_64")
+
+
+def test_arm64_candidate_rejects_wrong_elf_machine(tmp_path, monkeypatch):
+    binary = tmp_path / "agent"
+    binary.write_bytes(elf_fixture())
+    lock = tmp_path / "Cargo.lock"
+    lock.write_text("locked fixture")
+    monkeypatch.setattr(MODULE, "glibc_max_required", lambda _: (2, 35))
+    with pytest.raises(ValueError, match="not_linux_expected_architecture_pie_elf"):
+        MODULE.prepare(
+            binary, tmp_path / "candidate", SHA, VERSION, lock, "", "", "arm64"
+        )
+
+
+def test_candidate_rejects_unknown_architecture(tmp_path):
+    with pytest.raises(ValueError, match="unsupported_candidate_architecture"):
+        MODULE.verify(tmp_path, SHA, "mips")
