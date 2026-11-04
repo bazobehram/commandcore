@@ -3,14 +3,17 @@ name: Unsigned Linux ARM64 Agent review candidate
 on:
   workflow_dispatch:
   # A one-time source-pinned build when the reviewed packaging workflow lands.
-  # Subsequent commits do NOT rebuild this expensive native candidate unless
-  # its packaging logic changes; operator can explicitly dispatch from main.
+  # Rebuild after version/package or packaging changes; other commits do not
+  # create expensive native candidates. Manual dispatch remains available.
   push:
     branches: [main]
     paths:
       - '.github/workflows/unsigned-linux-arm64-candidate.yml'
       - 'scripts/package_unsigned_native_candidate.py'
       - 'tests/test_package_unsigned_native_candidate.py'
+      - 'VERSION'
+      - 'agent/rust/Cargo.toml'
+      - 'agent/rust/Cargo.lock'
 
 permissions:
   contents: read
