@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline pre-publication validation of a deployment's Linux Agent feed.
 
 This is a read-only integrity gate, NOT signing, publishing, provenance
@@ -15,9 +14,11 @@ import hashlib
 import json
 import re
 import stat
+import struct
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 MAX_MANIFEST = 1_048_576
@@ -27,6 +28,7 @@ ARCH_BINARY = {
     "x86_64": "commandcore-agent-linux-x86_64",
     "arm64": "commandcore-agent-linux-arm64",
 }
+ELF_MACHINE = {"x86_64": 62, "arm64": 183}
 VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?")
 FINGERPRINT_RE = re.compile(r"[a-f0-9]{64}")
 
@@ -74,7 +76,9 @@ def _origin(value: str) -> str:
     return "https://" + url.hostname.lower()
 
 
-def _read_binary(path: Path, expected_size: int, expected_sha: str) -> None:
+def _read_binary(
+    path: Path, expected_size: int, expected_sha: str, architecture: str
+) -> None:
     if path.is_symlink():
         _reject("symlink_artifact")
     try:
@@ -85,6 +89,18 @@ def _read_binary(path: Path, expected_size: int, expected_sha: str) -> None:
         _reject("artifact_size_mismatch")
     hashed = hashlib.sha256()
     with path.open("rb") as file:
+        header = file.read(20)
+        # Linux native review binaries are PIE ELF64 little-endian executables.
+        # Signature and SHA alone cannot detect a signer accidentally associating
+        # a valid ARM64 executable with the x86_64 manifest entry (or vice versa).
+        if (
+            len(header) != 20
+            or header[:7] != b"\x7fELF\x02\x01\x01"
+            or struct.unpack_from("<H", header, 16)[0] != 3
+            or struct.unpack_from("<H", header, 18)[0] != ELF_MACHINE[architecture]
+        ):
+            _reject("artifact_elf_architecture_mismatch")
+        hashed.update(header)
         while chunk := file.read(1024 * 1024):
             hashed.update(chunk)
     if hashed.hexdigest() != expected_sha:
@@ -171,7 +187,7 @@ def verify(
             _reject("invalid_artifact_size")
         if not isinstance(digest, str) or not FINGERPRINT_RE.fullmatch(digest):
             _reject("invalid_artifact_digest")
-        _read_binary(version_root / name, size, digest)
+        _read_binary(version_root / name, size, digest, arch)
     if "x86_64" not in seen:
         _reject("missing_linux_x86_64")
 
@@ -219,7 +235,7 @@ def main() -> int:
         print("PUBLIC_FEED_STAGING=REJECTED")
         print("REJECTION_TYPE=" + type(error).__name__)
         return 2
-    except Exception:
+    except InvalidSignature:
         print("PUBLIC_FEED_STAGING=REJECTED")
         print("REJECTION_TYPE=signature_or_integrity_error")
         return 2

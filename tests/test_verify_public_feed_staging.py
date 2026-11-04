@@ -6,9 +6,11 @@ import base64
 import hashlib
 import importlib.util
 import json
+import struct
 from pathlib import Path
 
 import pytest
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -31,6 +33,14 @@ ORIGIN = "https://commandcore.example.com"
 VERSION = "0.9.0-rc8"
 
 
+def elf_fixture(arch: str) -> bytes:
+    header = bytearray(64)
+    header[:7] = b"\x7fELF\x02\x01\x01"
+    struct.pack_into("<H", header, 16, 3)  # PIE ET_DYN
+    struct.pack_into("<H", header, 18, MODULE.ELF_MACHINE[arch])
+    return bytes(header)
+
+
 def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
     signer = Ed25519PrivateKey.generate()
     public = signer.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
@@ -42,7 +52,7 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
     docs = []
     for arch in architectures:
         name = MODULE.ARCH_BINARY[arch]
-        body = ("native-" + arch).encode()
+        body = elf_fixture(arch)
         docs.append(
             {
                 "platform": "linux",
@@ -81,7 +91,7 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
     versioned = release / VERSION
     versioned.mkdir()
     for arch in architectures:
-        (versioned / MODULE.ARCH_BINARY[arch]).write_bytes(("native-" + arch).encode())
+        (versioned / MODULE.ARCH_BINARY[arch]).write_bytes(elf_fixture(arch))
     return release, outside_key, fingerprint, manifest, signer
 
 
@@ -139,7 +149,7 @@ def test_binary_tampering_rejected(tmp_path, mutation):
             validate(fixture)
     else:
         body = binary.read_bytes()
-        binary.write_bytes(b"X" + body[1:])
+        binary.write_bytes(body[:-1] + b"X")
         with pytest.raises(ValueError, match="artifact_sha256_mismatch"):
             validate(fixture)
 
@@ -149,7 +159,7 @@ def test_unsigned_manifest_mutation_fails_signature(tmp_path):
     manifest = json.loads((fixture[0] / "manifest.json").read_text())
     manifest["version"] = "0.9.0-rc9"
     (fixture[0] / "manifest.json").write_text(json.dumps(manifest))
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidSignature):
         validate(fixture)
 
 
@@ -161,7 +171,8 @@ def test_wrong_signed_release_scope_rejected(tmp_path, kind):
     manifest = json.loads((fixture[0] / "manifest.json").read_text())
     if kind == "foreign_origin":
         manifest["artifacts"][0]["url"] = (
-            "https://unrelated.example.net/releases/agent/0.9.0-rc8/commandcore-agent-linux-x86_64"
+            "https://unrelated.example.net/releases/agent/0.9.0-rc8/"
+            "commandcore-agent-linux-x86_64"
         )
         expected = "unapproved_artifact_url_or_type"
     elif kind == "duplicate_arch":
@@ -225,3 +236,41 @@ def test_unexpected_origins_failing_closed(tmp_path, origin):
     fixture = signed_fixture(tmp_path)
     with pytest.raises(ValueError, match="invalid_expected_origin"):
         validate(fixture, origin=origin)
+
+
+@pytest.mark.parametrize("wrong_arch", ["arm64", "x86_64"])
+def test_signed_wrong_elf_architecture_rejected(tmp_path, wrong_arch):
+    fixture = signed_fixture(tmp_path)
+    feed = fixture[0]
+    binary = feed / VERSION / MODULE.ARCH_BINARY["x86_64"]
+    body = elf_fixture(wrong_arch)
+    binary.write_bytes(body)
+    manifest = json.loads((feed / "manifest.json").read_text())
+    manifest["artifacts"][0]["size"] = len(body)
+    manifest["artifacts"][0]["sha256"] = hashlib.sha256(body).hexdigest()
+    rewrite_signed(fixture, manifest)
+    if wrong_arch == "x86_64":
+        assert validate(fixture)["architecture_count"] == 1
+    else:
+        with pytest.raises(ValueError, match="artifact_elf_architecture_mismatch"):
+            validate(fixture)
+
+
+@pytest.mark.parametrize("mutation", ["non_elf", "non_pie", "elf32"])
+def test_signed_non_native_binary_rejected(tmp_path, mutation):
+    fixture = signed_fixture(tmp_path)
+    feed = fixture[0]
+    binary = feed / VERSION / MODULE.ARCH_BINARY["x86_64"]
+    body = bytearray(elf_fixture("x86_64"))
+    if mutation == "non_elf":
+        body[:4] = b"NOPE"
+    elif mutation == "non_pie":
+        struct.pack_into("<H", body, 16, 2)
+    else:
+        body[4] = 1
+    binary.write_bytes(body)
+    manifest = json.loads((feed / "manifest.json").read_text())
+    manifest["artifacts"][0]["sha256"] = hashlib.sha256(body).hexdigest()
+    rewrite_signed(fixture, manifest)
+    with pytest.raises(ValueError, match="artifact_elf_architecture_mismatch"):
+        validate(fixture)
