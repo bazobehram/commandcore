@@ -1,0 +1,52 @@
+name: Isolated Linux installer integrity and rollback
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/linux-installer-isolated.yml'
+      - 'scripts/installer_smoke.py'
+      - 'install/linux.sh'
+      - 'install/uninstall-linux.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/linux-installer-isolated.yml'
+      - 'scripts/installer_smoke.py'
+      - 'install/linux.sh'
+      - 'install/uninstall-linux.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-linux-installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build isolated acceptance environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/Dockerfile.commandcore-installer-test" <<'DOCKERFILE'
+          FROM python:3.12-slim
+          RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+          RUN python -m pip install --no-cache-dir cryptography==50.0.1
+          WORKDIR /review
+          ENTRYPOINT ["python", "scripts/installer_smoke.py"]
+          DOCKERFILE
+          docker build --tag commandcore-installer-smoke:ci --file "${RUNNER_TEMP}/Dockerfile.commandcore-installer-test" .
+      - name: Verify signed fixture install and rollback (no host changes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --network none \
+            --read-only \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,size=96m,mode=1777 \
+            --volume "${GITHUB_WORKSPACE}:/review:ro" \
+            commandcore-installer-smoke:ci
