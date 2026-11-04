@@ -10,6 +10,7 @@ import struct
 from pathlib import Path
 
 import pytest
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -158,7 +159,7 @@ def test_unsigned_manifest_mutation_fails_signature(tmp_path):
     manifest = json.loads((fixture[0] / "manifest.json").read_text())
     manifest["version"] = "0.9.0-rc9"
     (fixture[0] / "manifest.json").write_text(json.dumps(manifest))
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidSignature):
         validate(fixture)
 
 
