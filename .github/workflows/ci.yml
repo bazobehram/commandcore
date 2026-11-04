@@ -163,7 +163,7 @@ jobs:
             --network none \
             --read-only \
             --security-opt no-new-privileges \
-            --tmpfs /tmp:rw,nosuid,size=96m,mode=1777 \
+            --tmpfs /tmp:rw,nosuid,exec,size=96m,mode=1777 \
             --env COMMANDCORE_TEST_NATIVE_BINARY=/review/agent/rust/target/release/commandcore-agent-rust \
             --volume "${GITHUB_WORKSPACE}:/review:ro" \
             commandcore-native-installer:ci
