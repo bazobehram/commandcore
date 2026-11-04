@@ -147,6 +147,26 @@ jobs:
           COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
           PYTHONPATH: apps/server:agent
         run: python scripts/signed_rust_canary.py
+      - name: Real native Agent signed installer in disposable Linux container
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/Dockerfile.native-installer" <<'DOCKERFILE'
+          FROM python:3.12-slim
+          RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+          RUN python -m pip install --no-cache-dir cryptography==50.0.1
+          WORKDIR /review
+          ENTRYPOINT ["python", "scripts/installer_smoke.py"]
+          DOCKERFILE
+          docker build --tag commandcore-native-installer:ci --file "${RUNNER_TEMP}/Dockerfile.native-installer" "${RUNNER_TEMP}"
+          docker run --rm \
+            --network none \
+            --read-only \
+            --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,size=96m,mode=1777 \
+            --env COMMANDCORE_TEST_NATIVE_BINARY=/review/agent/rust/target/release/commandcore-agent-rust \
+            --volume "${GITHUB_WORKSPACE}:/review:ro" \
+            commandcore-native-installer:ci
       - name: Rust Agent FULL_CONTROL helper parity
         env:
           COMMANDCORE_RUST_AGENT_BIN: ${{ github.workspace }}/agent/rust/target/release/commandcore-agent-rust
