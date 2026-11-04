@@ -95,7 +95,7 @@ def _read_binary(
         # a valid ARM64 executable with the x86_64 manifest entry (or vice versa).
         if (
             len(header) != 20
-            or header[:7] != b"\\x7fELF\\x02\\x01\\x01"
+            or header[:7] != b"\x7fELF\x02\x01\x01"
             or struct.unpack_from("<H", header, 16)[0] != 3
             or struct.unpack_from("<H", header, 18)[0] != ELF_MACHINE[architecture]
         ):
