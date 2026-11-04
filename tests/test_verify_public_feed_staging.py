@@ -34,7 +34,7 @@ VERSION = "0.9.0-rc8"
 
 def elf_fixture(arch: str) -> bytes:
     header = bytearray(64)
-    header[:7] = b"\\x7fELF\\x02\\x01\\x01"
+    header[:7] = b"\x7fELF\x02\x01\x01"
     struct.pack_into("<H", header, 16, 3)  # PIE ET_DYN
     struct.pack_into("<H", header, 18, MODULE.ELF_MACHINE[arch])
     return bytes(header)
@@ -148,7 +148,7 @@ def test_binary_tampering_rejected(tmp_path, mutation):
             validate(fixture)
     else:
         body = binary.read_bytes()
-        binary.write_bytes(b"X" + body[1:])
+        binary.write_bytes(body[:-1] + b"X")
         with pytest.raises(ValueError, match="artifact_sha256_mismatch"):
             validate(fixture)
 
