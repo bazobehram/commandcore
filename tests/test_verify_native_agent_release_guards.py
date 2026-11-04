@@ -33,15 +33,17 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
         filename = module.NAMES[arch]
         payload = f"fake test executable for {arch}".encode()
         (tmp_path / filename).write_bytes(payload)
-        artifacts.append({
-            "architecture": arch,
-            "platform": "linux",
-            "kind": "executable",
-            "filename": filename,
-            "url": f"https://github.com/{REPO}/releases/download/agent-v{VERSION}/{filename}",
-            "size": len(payload),
-            "sha256": hashlib.sha256(payload).hexdigest(),
-        })
+        artifacts.append(
+            {
+                "architecture": arch,
+                "platform": "linux",
+                "kind": "executable",
+                "filename": filename,
+                "url": f"https://github.com/{REPO}/releases/download/agent-v{VERSION}/{filename}",
+                "size": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        )
     manifest = {
         "schema_version": 1,
         "product": "commandcore-agent",
@@ -49,16 +51,21 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
         "signing_key_id": hashlib.sha256(public).hexdigest()[:16],
         "artifacts": artifacts,
     }
-    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    canonical = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
     manifest["signature"] = base64.b64encode(key.sign(canonical)).decode()
     (tmp_path / "manifest.signed.json").write_text(json.dumps(manifest))
     return base64.b64encode(public).decode()
 
 
-@pytest.mark.parametrize("architectures,requested", [
-    (("x86_64",), "x86_64"),
-    (("x86_64", "aarch64"), "aarch64"),
-])
+@pytest.mark.parametrize(
+    "architectures,requested",
+    [
+        (("x86_64",), "x86_64"),
+        (("x86_64", "aarch64"), "aarch64"),
+    ],
+)
 def test_valid_signed_release_accepted(tmp_path, architectures, requested):
     key = signed_fixture(tmp_path, architectures)
     module.verify(tmp_path, key, VERSION, REPO, requested)
