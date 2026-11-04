@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import struct
@@ -43,7 +44,7 @@ def fixtures(tmp_path, monkeypatch):
             binary,
             folder,
             SOURCE,
-            "0.9.0-rc7",
+            VERSION,
             lock,
             "rustc fixture",
             "cargo fixture",
@@ -115,3 +116,26 @@ def test_refuse_overwrite_and_partial_architecture(tmp_path, monkeypatch):
             ORIGIN,
             tmp_path / "new.json",
         )
+
+def test_reject_candidate_release_version_mismatch(tmp_path, monkeypatch):
+    folders = fixtures(tmp_path, monkeypatch)
+    folder = folders["arm64"]
+    metadata_path = folder / candidate.MANIFEST_NAME
+    metadata = json.loads(metadata_path.read_text())
+    metadata["package_version"] = "0.9.0-rc7"
+    metadata_path.write_text(json.dumps(metadata))
+    entries = (
+        candidate.BINARY_NAMES["arm64"],
+        candidate.MANIFEST_NAME,
+        candidate.SOURCE_NAME,
+    )
+    (folder / candidate.HASH_NAME).write_text(
+        "".join(
+            f"{hashlib.sha256((folder / name).read_bytes()).hexdigest()}  {name}\n"
+            for name in entries
+        )
+    )
+    output = tmp_path / "review.json"
+    with pytest.raises(ValueError, match="candidate_release_version_mismatch"):
+        module.prepare(folders, SOURCE, VERSION, ORIGIN, output)
+    assert not output.exists()
