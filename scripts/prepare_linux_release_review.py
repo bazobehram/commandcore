@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Prepare an UNSIGNED Linux Agent release manifest from verified CI candidates.
 
 Offline, fail-closed review handoff. No key generation, signing or publication.
@@ -13,11 +12,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from package_unsigned_native_candidate import (
-    BINARY_NAMES,
-    file_bytes,
-    verify as verify_candidate,
-)
+from package_unsigned_native_candidate import BINARY_NAMES, file_bytes
+from package_unsigned_native_candidate import verify as verify_candidate
 
 SHA = re.compile(r"[a-f0-9]{40}")
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?")
