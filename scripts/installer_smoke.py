@@ -230,9 +230,7 @@ def main():
                 )
                 assert version in native_version.stdout
                 run(native_home, uninstall=True)
-                assert not (
-                    native_home / ".local/share/commandcore-agent"
-                ).exists()
+                assert not (native_home / ".local/share/commandcore-agent").exists()
                 native_checks = [
                     "real-native-agent-signed-install",
                     "real-native-agent-version-and-digest",
@@ -253,7 +251,8 @@ def main():
                             "isolated-namespace",
                             "numeric-prerelease-order",
                             "uninstall-preserves-identity",
-                        ] + native_checks,
+                        ]
+                        + native_checks,
                         "scope": (
                             "installer integrity and native packaging; no enrollment"
                             if native_checks
