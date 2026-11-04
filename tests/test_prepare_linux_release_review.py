@@ -117,6 +117,7 @@ def test_refuse_overwrite_and_partial_architecture(tmp_path, monkeypatch):
             tmp_path / "new.json",
         )
 
+
 def test_reject_candidate_release_version_mismatch(tmp_path, monkeypatch):
     folders = fixtures(tmp_path, monkeypatch)
     folder = folders["arm64"]
