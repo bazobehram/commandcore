@@ -71,7 +71,8 @@ jobs:
             --cargo-version "$(cargo --version)"
           python scripts/package_unsigned_native_candidate.py verify \
             --output dist/unsigned-native-agent-candidate \
-            --source-sha "$GITHUB_SHA"
+            --source-sha "$GITHUB_SHA" \
+            --architecture arm64
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-linux-arm64-agent-review-candidate
