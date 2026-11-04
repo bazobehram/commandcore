@@ -48,7 +48,7 @@ jobs:
           test -s dist/public-site/docs/index.html
           test -s dist/public-site/docs/SELF_HOSTING.html
           test -n "$(find dist/public-site/app -name 'main-*.js' -print -quit)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: commandcore-public-site
           path: dist/public-site/
