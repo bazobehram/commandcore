@@ -45,6 +45,37 @@ candidate. The later signed-feed staging verifier below works only with a
 **separately signed** release manifest and an independently trusted public
 verification key.
 
+## Dual-architecture signing review handoff (no key material)
+
+After both unsigned CI review bundles have been independently checked and the
+operator has selected a **new, approved** release version, this read-only-input
+helper can prepare a draft *without a signer or release key*:
+
+~~~bash
+python scripts/prepare_linux_release_review.py \
+  --x86-candidate /review/x86_64 \
+  --arm64-candidate /review/arm64 \
+  --source-sha <exact-review-commit-sha> \
+  --release-version <operator-approved-release-version> \
+  --origin https://commandcore.example.com \
+  --output /review/manifest.UNSIGNED.json
+~~~
+
+It independently reruns each bundle's source, hash, architecture and glibc
+checks, requires matching source commits and both Linux architectures, pins
+immutable HTTPS artifact URLs and refuses to overwrite an existing output.
+The resulting JSON deliberately has **no** `signature` or `signing_key_id`.
+It is **not** a signed release manifest, publication approval, or a release
+version assignment. The handoff now **rejects** any candidate whose Cargo package version differs
+from the approved release version. A fresh build from a reviewed version-bumped
+source commit is required; the operator cannot silently relabel an older binary.
+
+The offline authorized signer must separately establish trusted key custody,
+record the independent public-key fingerprint, add the exact `signing_key_id`,
+sign the canonical manifest, and run all signed-feed and lifecycle acceptance
+gates. The signing key must never be introduced to CI, the public server, this
+review command, or the candidate directories.
+
 ## Inputs and custody
 
 The reviewer obtains independently from the signed-release process:
