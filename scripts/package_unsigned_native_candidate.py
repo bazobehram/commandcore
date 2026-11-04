@@ -16,7 +16,10 @@ import struct
 import subprocess
 from pathlib import Path
 
-BINARY_NAMES = {"x86_64": "commandcore-agent-linux-x86_64", "arm64": "commandcore-agent-linux-arm64"}
+BINARY_NAMES = {
+    "x86_64": "commandcore-agent-linux-x86_64",
+    "arm64": "commandcore-agent-linux-arm64",
+}
 BINARY_NAME = BINARY_NAMES["x86_64"]  # compatibility for existing x64 consumers
 MANIFEST_NAME = "UNSIGNED_BUILD_METADATA.json"
 SOURCE_NAME = "SOURCE_COMMIT.txt"
@@ -47,7 +50,8 @@ def elf_linux(raw: bytes, architecture: str = "x86_64") -> None:
         or raw[5] != 1  # little endian
         or raw[6] != 1  # ELF current version
         or struct.unpack_from("<H", raw, 16)[0] != 3  # ET_DYN (PIE)
-        or struct.unpack_from("<H", raw, 18)[0] != (62 if architecture == "x86_64" else 183)
+        or struct.unpack_from("<H", raw, 18)[0]
+        != (62 if architecture == "x86_64" else 183)
     ):
         raise ValueError("not_linux_expected_architecture_pie_elf")
 
