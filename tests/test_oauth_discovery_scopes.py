@@ -123,3 +123,10 @@ def test_real_protected_resource_metadata_uses_configured_scopes(
     assert metadata["resource"] == "https://mcp.example/mcp"
     assert metadata["authorization_servers"] == ["https://issuer.example/"]
     assert metadata["scopes_supported"] == expected
+
+
+def test_live_readiness_expected_scopes_match_public_defaults():
+    from scripts.public_oauth_readiness import EXPECTED_SCOPES
+
+    assert EXPECTED_SCOPES == (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
+    assert ADMIN_SCOPE not in EXPECTED_SCOPES
