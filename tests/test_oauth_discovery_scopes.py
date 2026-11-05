@@ -130,3 +130,43 @@ def test_live_readiness_expected_scopes_match_public_defaults():
 
     assert EXPECTED_SCOPES == (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
     assert ADMIN_SCOPE not in EXPECTED_SCOPES
+
+
+@pytest.mark.parametrize("include_admin", [False, True])
+def test_live_readiness_accepts_only_expected_public_scopes(monkeypatch, include_admin):
+    from io import BytesIO
+
+    from scripts.public_oauth_readiness import verify_discovery
+
+    class Response:
+        status = 200
+        url = "https://test.example/.well-known/oauth-protected-resource/mcp"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, size):
+            scopes = [READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE]
+            if include_admin:
+                scopes.append(ADMIN_SCOPE)
+            return json.dumps(
+                {
+                    "resource": "https://test.example/mcp",
+                    "authorization_servers": ["https://id.example/"],
+                    "scopes_supported": scopes,
+                    "bearer_methods_supported": ["header"],
+                }
+            ).encode()
+
+    monkeypatch.setattr(
+        "scripts.public_oauth_readiness.urlopen",
+        lambda request, timeout: Response(),
+    )
+    if include_admin:
+        with pytest.raises(ValueError, match="Unexpected public OAuth scopes"):
+            verify_discovery("https://test.example")
+    else:
+        assert verify_discovery("https://test.example")["status"] == "PASS"
