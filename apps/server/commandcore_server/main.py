@@ -489,7 +489,7 @@ async def oauth_protected_resource() -> JSONResponse:
             "scopes_supported": list(
                 settings.oauth_discovery_scopes
                 if settings.oauth_discovery_scopes is not None
-                else (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
+                else tuple(scope for scope in ALL_SCOPES if scope != ADMIN_SCOPE)
             ),
             "bearer_methods_supported": ["header"],
             "resource_name": "CommandCore MCP",
