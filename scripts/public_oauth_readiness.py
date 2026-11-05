@@ -32,7 +32,13 @@ def verify_discovery(base_url: str, *, timeout: float = 10) -> dict[str, object]
     origin = base_url.rstrip("/")
     endpoint = origin + "/.well-known/oauth-protected-resource/mcp"
     # No Authorization header; this is public resource metadata only.
-    request = Request(endpoint, headers={"Accept": "application/json", "User-Agent": "CommandCore-Readiness/1.0"})
+    request = Request(
+        endpoint,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "CommandCore-Readiness/1.0",
+        },
+    )
     try:
         with urlopen(request, timeout=timeout) as response:
             if response.url != endpoint:
