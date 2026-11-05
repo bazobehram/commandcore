@@ -12,11 +12,6 @@ from types import SimpleNamespace
 
 import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
-
 from commandcore_server.auth import (
     FULL_SCOPE,
     READ_SCOPE,
@@ -28,6 +23,10 @@ from commandcore_server.db import Database
 from commandcore_server.mcp import MCPHandler
 from commandcore_server.metrics import Metrics
 from commandcore_server.tools import CORE_TOOL_DEFINITIONS, ToolService
+from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.testclient import TestClient
 
 
 ISSUER = "https://idp.fixture.invalid/"
@@ -275,7 +274,6 @@ def test_read_only_scope_cannot_enable_activity_details(context):
     allowed = c.call("alice", "activity.feed", {"limit": 10}, token)
     assert allowed.json()["result"]["isError"] is False
     denied = c.call(
-        "alice", "activity.feed",
-        {"limit": 10, "include_details": True}, token,
+        "alice", "activity.feed", {"limit": 10, "include_details": True}, token
     )
     assert denied.json()["result"]["structuredContent"]["error"] == "insufficient_scope"
