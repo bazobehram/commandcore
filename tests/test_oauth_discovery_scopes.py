@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-
 from commandcore_server.auth import (
-    ALL_SCOPES,
     ADMIN_SCOPE,
+    ALL_SCOPES,
     FULL_SCOPE,
     READ_SCOPE,
     STANDARD_SCOPE,
@@ -29,7 +28,7 @@ def _settings(scopes):
     )
 
 
-def test_default_discovery_preserves_known_scope_list():
+def test_default_discovery_uses_user_scopes_without_admin():
     settings = _settings(None)
     settings.validate()
     assert settings.oauth_discovery_scopes is None
@@ -65,10 +64,14 @@ def test_discovery_scope_filter_does_not_grant_admin_or_full_authority():
 @pytest.mark.parametrize(
     "scope_value,expected",
     [
-        (None, list(ALL_SCOPES)),
+        (None, [READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE]),
         (
             "commandcore:read, commandcore:standard,commandcore:full",
             [READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE],
+        ),
+        (
+            "commandcore:read,commandcore:admin",
+            [READ_SCOPE, ADMIN_SCOPE],
         ),
     ],
 )
