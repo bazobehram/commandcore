@@ -28,7 +28,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-
 ISSUER = "https://idp.fixture.invalid/"
 AUDIENCE = "https://control.fixture.invalid/mcp"
 
