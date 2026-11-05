@@ -50,7 +50,7 @@ def verify_discovery(base_url: str, *, timeout: float = 10) -> dict[str, object]
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError("Invalid OAuth metadata JSON") from exc
     if not isinstance(metadata, dict):
-        raise ValueError("OAuth metadata must be an object")
+        raise TypeError("OAuth metadata must be an object")
     if metadata.get("resource") != origin + "/mcp":
         raise ValueError("OAuth resource identifier does not match public MCP origin")
     providers = metadata.get("authorization_servers")
@@ -86,7 +86,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         result = verify_discovery(args.base_url)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         print(json.dumps({"status": "FAIL", "reason": str(exc)}))
         return 1
     print(json.dumps(result, sort_keys=True))
