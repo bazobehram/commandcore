@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -123,3 +124,59 @@ def test_real_protected_resource_metadata_uses_configured_scopes(
     assert metadata["resource"] == "https://mcp.example/mcp"
     assert metadata["authorization_servers"] == ["https://issuer.example/"]
     assert metadata["scopes_supported"] == expected
+
+
+def _live_probe_module():
+    path = Path(__file__).resolve().parents[1] / "scripts/public_oauth_readiness.py"
+    spec = importlib.util.spec_from_file_location(
+        "commandcore_public_oauth_probe", path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_live_readiness_expected_scopes_match_public_defaults():
+    expected_scopes = _live_probe_module().EXPECTED_SCOPES
+    assert expected_scopes == (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
+    assert ADMIN_SCOPE not in expected_scopes
+
+
+@pytest.mark.parametrize("include_admin", [False, True])
+def test_live_readiness_accepts_only_expected_public_scopes(monkeypatch, include_admin):
+    probe = _live_probe_module()
+
+    class Response:
+        status = 200
+        url = "https://test.example/.well-known/oauth-protected-resource/mcp"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, size):
+            scopes = [READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE]
+            if include_admin:
+                scopes.append(ADMIN_SCOPE)
+            return json.dumps(
+                {
+                    "resource": "https://test.example/mcp",
+                    "authorization_servers": ["https://id.example/"],
+                    "scopes_supported": scopes,
+                    "bearer_methods_supported": ["header"],
+                }
+            ).encode()
+
+    monkeypatch.setattr(
+        probe,
+        "urlopen",
+        lambda request, timeout: Response(),
+    )
+    if include_admin:
+        with pytest.raises(ValueError, match="Unexpected public OAuth scopes"):
+            probe.verify_discovery("https://test.example")
+    else:
+        assert probe.verify_discovery("https://test.example")["status"] == "PASS"
