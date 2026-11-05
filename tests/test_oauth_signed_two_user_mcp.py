@@ -251,11 +251,16 @@ def test_signed_activity_feed_scopes_to_account(context, requester, other):
     c = context
     for owner in ("alice", "bob"):
         c.db.add_audit(
-            user_id=owner, client_id="fixture-client",
-            device_id=c.ids[owner], tool="shell.exec",
+            user_id=owner,
+            client_id="fixture-client",
+            device_id=c.ids[owner],
+            tool="shell.exec",
             args_summary="audit-marker-" + owner,
-            execution_id="event-" + owner, status="ok",
-            duration_ms=1, exit_code=0, risk_class="standard",
+            execution_id="event-" + owner,
+            status="ok",
+            duration_ms=1,
+            exit_code=0,
+            risk_class="standard",
         )
     for arguments in ({"limit": 50}, {"limit": 50, "device_id": c.ids[other]}):
         response = c.call(requester, "activity.feed", arguments)
