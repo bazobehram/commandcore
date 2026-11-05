@@ -1,9 +1,8 @@
 """Fail-closed checks for operator-approved policy pages."""
 
+from commandcore_server.legal_pages import MAX_POLICY_BYTES, install_legal_pages
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from commandcore_server.legal_pages import MAX_POLICY_BYTES, install_legal_pages
 
 
 def client_for(directory: str):
