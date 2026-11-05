@@ -451,8 +451,10 @@ async def browser_security(request: Request, call_next):
 
 
 from .distribution import install_distribution_routes
+from .legal_pages import install_legal_pages
 
 install_distribution_routes(app, os.getenv("COMMANDCORE_DISTRIBUTION_DIR", ""))
+install_legal_pages(app, os.getenv("COMMANDCORE_LEGAL_PAGES_DIR", ""))
 
 from .onboarding_routes import install_routes
 
