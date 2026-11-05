@@ -246,3 +246,36 @@ def test_invalid_jwt_is_rejected_before_dispatch(context, invalid):
     )
     assert result.status_code == 401
     assert c.agents.calls == []
+
+
+@pytest.mark.parametrize("requester,other", [("alice", "bob"), ("bob", "alice")])
+def test_signed_activity_feed_scopes_to_account(context, requester, other):
+    c = context
+    for owner in ("alice", "bob"):
+        c.db.add_audit(
+            user_id=owner, client_id="fixture-client",
+            device_id=c.ids[owner], tool="shell.exec",
+            args_summary="audit-marker-" + owner,
+            execution_id="event-" + owner, status="ok",
+            duration_ms=1, exit_code=0, risk_class="standard",
+        )
+    for arguments in ({"limit": 50}, {"limit": 50, "device_id": c.ids[other]}):
+        response = c.call(requester, "activity.feed", arguments)
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["isError"] is False
+        visible = str(result["structuredContent"])
+        assert "audit-marker-" + other not in visible
+        assert "event-" + other not in visible
+
+
+def test_read_only_scope_cannot_enable_activity_details(context):
+    c = context
+    token = c.sign("alice", scopes=(READ_SCOPE,))
+    allowed = c.call("alice", "activity.feed", {"limit": 10}, token)
+    assert allowed.json()["result"]["isError"] is False
+    denied = c.call(
+        "alice", "activity.feed",
+        {"limit": 10, "include_details": True}, token,
+    )
+    assert denied.json()["result"]["structuredContent"]["error"] == "insufficient_scope"
