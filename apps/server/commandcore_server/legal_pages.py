@@ -28,7 +28,9 @@ def install_legal_pages(app: FastAPI, directory: str) -> None:
                 raise ValueError("Policy file size is outside allowed bounds")
             content = document.read_text(encoding="utf-8")
         except (OSError, UnicodeError, ValueError):
-            raise HTTPException(404, "Approved public policy is not published") from None
+            raise HTTPException(
+                404, "Approved public policy is not published"
+            ) from None
         return Response(
             content=content,
             media_type="text/html",
