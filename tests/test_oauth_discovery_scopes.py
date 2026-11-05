@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -125,16 +126,24 @@ def test_real_protected_resource_metadata_uses_configured_scopes(
     assert metadata["scopes_supported"] == expected
 
 
-def test_live_readiness_expected_scopes_match_public_defaults():
-    from scripts.public_oauth_readiness import EXPECTED_SCOPES
+def _live_probe_module():
+    path = Path(__file__).resolve().parents[1] / "scripts/public_oauth_readiness.py"
+    spec = importlib.util.spec_from_file_location("commandcore_public_oauth_probe", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    assert EXPECTED_SCOPES == (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
-    assert ADMIN_SCOPE not in EXPECTED_SCOPES
+
+def test_live_readiness_expected_scopes_match_public_defaults():
+    expected_scopes = _live_probe_module().EXPECTED_SCOPES
+    assert expected_scopes == (READ_SCOPE, STANDARD_SCOPE, FULL_SCOPE)
+    assert ADMIN_SCOPE not in expected_scopes
 
 
 @pytest.mark.parametrize("include_admin", [False, True])
 def test_live_readiness_accepts_only_expected_public_scopes(monkeypatch, include_admin):
-    from scripts.public_oauth_readiness import verify_discovery
+    probe = _live_probe_module()
 
     class Response:
         status = 200
@@ -160,11 +169,12 @@ def test_live_readiness_accepts_only_expected_public_scopes(monkeypatch, include
             ).encode()
 
     monkeypatch.setattr(
-        "scripts.public_oauth_readiness.urlopen",
+        probe,
+        "urlopen",
         lambda request, timeout: Response(),
     )
     if include_admin:
         with pytest.raises(ValueError, match="Unexpected public OAuth scopes"):
-            verify_discovery("https://test.example")
+            probe.verify_discovery("https://test.example")
     else:
-        assert verify_discovery("https://test.example")["status"] == "PASS"
+        assert probe.verify_discovery("https://test.example")["status"] == "PASS"
