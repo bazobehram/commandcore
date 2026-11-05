@@ -134,8 +134,6 @@ def test_live_readiness_expected_scopes_match_public_defaults():
 
 @pytest.mark.parametrize("include_admin", [False, True])
 def test_live_readiness_accepts_only_expected_public_scopes(monkeypatch, include_admin):
-    from io import BytesIO
-
     from scripts.public_oauth_readiness import verify_discovery
 
     class Response:
