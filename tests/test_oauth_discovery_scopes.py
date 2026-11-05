@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from commandcore_server.auth import (
     ADMIN_SCOPE,
     ALL_SCOPES,
