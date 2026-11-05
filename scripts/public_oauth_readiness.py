@@ -82,7 +82,9 @@ def verify_discovery(base_url: str, *, timeout: float = 10) -> dict[str, object]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("base_url", help="Public HTTPS origin, e.g. https://example.org")
+    parser.add_argument(
+        "base_url", help="Public HTTPS origin, e.g. https://example.org"
+    )
     args = parser.parse_args()
     try:
         result = verify_discovery(args.base_url)
