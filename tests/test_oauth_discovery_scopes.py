@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from commandcore_server.auth import (
-    ALL_SCOPES,
     ADMIN_SCOPE,
+    ALL_SCOPES,
     FULL_SCOPE,
     READ_SCOPE,
     STANDARD_SCOPE,
