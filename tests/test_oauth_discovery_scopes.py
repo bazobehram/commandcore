@@ -128,7 +128,9 @@ def test_real_protected_resource_metadata_uses_configured_scopes(
 
 def _live_probe_module():
     path = Path(__file__).resolve().parents[1] / "scripts/public_oauth_readiness.py"
-    spec = importlib.util.spec_from_file_location("commandcore_public_oauth_probe", path)
+    spec = importlib.util.spec_from_file_location(
+        "commandcore_public_oauth_probe", path
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
