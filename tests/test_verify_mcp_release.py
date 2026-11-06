@@ -27,9 +27,13 @@ def test_request_sets_release_verifier_user_agent():
         "urllib.request.urlopen",
         return_value=io.BytesIO(b'{"status":"ok","version":"1.2"}'),
     ) as opener:
-        assert verifier().verify("https://example.test/healthz", "1.2")["status"] == "pass"
+        assert (
+            verifier().verify("https://example.test/healthz", "1.2")["status"] == "pass"
+        )
         request = opener.call_args.args[0]
-        assert request.get_header("User-agent") == "CommandCore-Release-Verification/1.0"
+        assert (
+            request.get_header("User-agent") == "CommandCore-Release-Verification/1.0"
+        )
 
 
 def test_version_mismatch_fails_closed():
