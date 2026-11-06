@@ -21,7 +21,6 @@ def test_version_match():
         assert verifier().verify("http://localhost/healthz", "1.2")["status"] == "pass"
 
 
-
 def test_request_sets_release_verifier_user_agent():
     with patch(
         "urllib.request.urlopen",
