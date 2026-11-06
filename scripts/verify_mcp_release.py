@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def verify(url: str, expected: str, timeout: float = 5.0) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as response:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "CommandCore-Release-Verification/1.0"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         data = json.load(response)
     if not isinstance(data, dict) or data.get("status") != "ok":
         raise ValueError("Unhealthy or malformed server response")
