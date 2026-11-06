@@ -71,10 +71,13 @@ https://commandcore.example.com/mcp
 
 The configured audience/resource must match the token issued by the provider.
 
-The scopes_supported list describes the permissions advertised by the
-authorization server; it does **not** grant them. By default CommandCore
-advertises all four known scopes for compatibility. If the deployment
-provider exposes only the three execution scopes, explicitly set:
+The `scopes_supported` list advertises the resource's supported OAuth scopes;
+it does **not** grant permissions. By default CommandCore advertises only the
+three user-facing scopes `commandcore:read`, `commandcore:standard`, and
+`commandcore:full`. The privileged `commandcore:admin` scope is **not** included
+in public discovery by default.
+
+Operators may explicitly override the advertised set using, for example:
 
 ~~~env
 COMMANDCORE_OAUTH_DISCOVERY_SCOPES=commandcore:read,commandcore:standard,commandcore:full
@@ -83,8 +86,9 @@ COMMANDCORE_OAUTH_DISCOVERY_SCOPES=commandcore:read,commandcore:standard,command
 This optional setting changes **only** protected-resource discovery metadata.
 Startup rejects unknown, duplicate or empty configured values. It never changes
 JWT scope checks, management API authorization, device ownership, grants or
-device-local FULL_CONTROL. Omitting admin from discovery does not prove the
-identity provider cannot issue admin: audit its real RBAC configuration.
+device-local FULL_CONTROL. An operator must explicitly configure admin to
+advertise it. Omitting admin from discovery does not prove the identity
+provider cannot issue admin: audit its real RBAC configuration.
 
 
 ## Browser/operator panel
