@@ -17,6 +17,8 @@ from .models import JobResult
 from .security import token_hash, verify_device_signature
 
 AGENT_PROTOCOL_VERSION = "1"
+SHORT_SHELL_SEND_SECONDS = 3.0
+SHORT_SHELL_CANCEL_SECONDS = 2.0
 
 
 @dataclass
@@ -573,16 +575,23 @@ class AgentManager:
         }
         result = None
         try:
-            try:
+            # Time budget includes waiting for the shared socket send lock.
+            # Otherwise a busy connection can hold a short synchronous MCP
+            # request beyond the ChatGPT host's response deadline.
+            short_shell = tool == "shell.exec" and timeout_ms <= 10_000
+            send_budget = SHORT_SHELL_SEND_SECONDS if short_shell else 15.0
+
+            async def send_request() -> None:
                 async with conn.send_lock:
                     async with self._lock:
                         if self.connections.get(device_id) is not conn:
                             raise RuntimeError(
                                 "agent connection replaced before dispatch"
                             )
-                    await asyncio.wait_for(
-                        conn.websocket.send_json(payload), timeout=15
-                    )
+                    await conn.websocket.send_json(payload)
+
+            try:
+                await asyncio.wait_for(send_request(), timeout=send_budget)
             except Exception:  # noqa: BLE001 - fail-closed boundary or best-effort cleanup
                 # The connection can disappear after lookup but before the frame
                 # is written. Convert that transport race into the same durable
@@ -607,14 +616,18 @@ class AgentManager:
                     pending.future, timeout=max(1.0, timeout_ms / 1000 + 5.0)
                 )
             except TimeoutError:
-                try:
+
+                async def request_cancel() -> None:
                     async with conn.send_lock:
-                        await asyncio.wait_for(
-                            conn.websocket.send_json(
-                                {"type": "job.cancel", "execution_id": execution_id}
-                            ),
-                            timeout=5,
+                        await conn.websocket.send_json(
+                            {"type": "job.cancel", "execution_id": execution_id}
                         )
+
+                try:
+                    await asyncio.wait_for(
+                        request_cancel(),
+                        timeout=SHORT_SHELL_CANCEL_SECONDS if short_shell else 5.0,
+                    )
                 except Exception:  # noqa: BLE001, S110 - fail-closed boundary or best-effort cleanup
                     pass
                 result = JobResult(

@@ -1175,7 +1175,7 @@
     "title": "Capture screen"
   },
   "shell.exec": {
-    "description": "Execute a command through the device's default shell. This is intentionally powerful and requires STANDARD/FULL_CONTROL. Output is bounded and audited; secrets should not be passed in command text.",
+    "description": "Run SHORT synchronous commands only. OAuth/MCP shell calls default to 8 seconds and cannot request more than 10 seconds; longer commands must use process.start, then process.status/process.output. A rejected long request is not executed. Requires STANDARD/FULL_CONTROL. Never pass secrets in command text.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
