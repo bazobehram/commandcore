@@ -176,3 +176,31 @@ contains no signing key ID, does not authorize deployment, and does not pass
 reboot, update or rollback acceptance. It must be independently signed and
 verified before publication; the x86-only option must not be used to advertise
 Linux ARM64 support.
+
+### Choosing the signed artifact destination before offline signing
+
+For the self-hosted CommandCore release feed, use `--origin https://commandcore.app`
+so each artifact URL points to `https://commandcore.app/releases/agent/<version>/<filename>`.
+
+For the **GitHub native Agent release publishing workflow**, use
+`--github-repo bazobehram/commandcore` instead of `--origin`. This produces
+`https://github.com/bazobehram/commandcore/releases/download/agent-v<version>/<filename>`
+URLs required by `scripts/verify_native_agent_release.py`. These two destinations
+are mutually exclusive and cannot share one signed manifest because the artifact
+URLs are covered by its Ed25519 signature.
+
+Example x86_64-only GitHub release review (still unsigned):
+
+~~~bash
+python scripts/prepare_linux_release_review.py \
+  --x86-only \
+  --x86-candidate /review/x86_64 \
+  --source-sha <reviewed-source-sha> \
+  --release-version <approved-version> \
+  --github-repo bazobehram/commandcore \
+  --output /review/github-release.UNSIGNED.json
+~~~
+
+Neither option signs or publishes anything. After independent signing, the
+corresponding trusted-key verifier, artifact checks, lifecycle acceptance and
+operator approval must pass. Never replace signed URLs after signing.
