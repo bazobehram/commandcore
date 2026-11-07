@@ -26,6 +26,7 @@ def prepare(
     release_version: str,
     origin: str,
     output: Path,
+    x86_only: bool = False,
 ) -> dict:
     if not SHA.fullmatch(source_sha) or not VERSION.fullmatch(release_version):
         raise ValueError("invalid_release_identity")
@@ -42,13 +43,16 @@ def prepare(
         or any(ord(c) <= 32 or ord(c) == 127 for c in origin)
     ):
         raise ValueError("invalid_release_origin")
-    if set(candidates) != set(BINARY_NAMES):
-        raise ValueError("both_linux_architectures_required")
+    expected_architectures = {"x86_64"} if x86_only else set(BINARY_NAMES)
+    if set(candidates) != expected_architectures:
+        raise ValueError(
+            "x86_only_required" if x86_only else "both_linux_architectures_required"
+        )
     if output.exists() or output.is_symlink():
         raise ValueError("output_already_exists")
     origin = "https://" + parsed.hostname.lower()
     artifacts = []
-    for arch in ("x86_64", "arm64"):
+    for arch in ("x86_64",) if x86_only else ("x86_64", "arm64"):
         folder = candidates[arch]
         verify_candidate(folder, source_sha, arch)
         raw = file_bytes(folder / "UNSIGNED_BUILD_METADATA.json", MAX_META)
@@ -89,18 +93,29 @@ def prepare(
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--x86-candidate", type=Path, required=True)
-    p.add_argument("--arm64-candidate", type=Path, required=True)
+    p.add_argument("--arm64-candidate", type=Path)
+    p.add_argument(
+        "--x86-only",
+        action="store_true",
+        help="Explicit x86_64-only unsigned review; does not approve publication",
+    )
     p.add_argument("--source-sha", required=True)
     p.add_argument("--release-version", required=True)
     p.add_argument("--origin", required=True)
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
+    if a.x86_only == (a.arm64_candidate is not None):
+        p.error("choose --x86-only OR supply --arm64-candidate")
+    candidates = {"x86_64": a.x86_candidate}
+    if a.arm64_candidate is not None:
+        candidates["arm64"] = a.arm64_candidate
     prepare(
-        {"x86_64": a.x86_candidate, "arm64": a.arm64_candidate},
+        candidates,
         a.source_sha,
         a.release_version,
         a.origin,
         a.output,
+        x86_only=a.x86_only,
     )
     print("LINUX_RELEASE_MANIFEST=UNSIGNED_REVIEW_DRAFT")
     print("SIGNING_KEY_ID=NOT_ASSIGNED")

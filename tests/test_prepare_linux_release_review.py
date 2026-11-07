@@ -140,3 +140,44 @@ def test_reject_candidate_release_version_mismatch(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="candidate_release_version_mismatch"):
         module.prepare(folders, SOURCE, VERSION, ORIGIN, output)
     assert not output.exists()
+
+
+def test_explicit_x86_only_unsigned_review(tmp_path, monkeypatch):
+    folders = fixtures(tmp_path, monkeypatch)
+    output = tmp_path / "x86-only.json"
+    manifest = module.prepare(
+        {"x86_64": folders["x86_64"]},
+        SOURCE,
+        VERSION,
+        ORIGIN,
+        output,
+        x86_only=True,
+    )
+    assert [item["architecture"] for item in manifest["artifacts"]] == ["x86_64"]
+    assert "signature" not in manifest
+    assert "signing_key_id" not in manifest
+    assert json.loads(output.read_text()) == manifest
+
+
+def test_x86_only_rejects_arm_candidate(tmp_path, monkeypatch):
+    folders = fixtures(tmp_path, monkeypatch)
+    output = tmp_path / "unexpected-arm.json"
+    with pytest.raises(ValueError, match="x86_only_required"):
+        module.prepare(folders, SOURCE, VERSION, ORIGIN, output, x86_only=True)
+    assert not output.exists()
+
+
+def test_x86_only_rejects_tampered_build(tmp_path, monkeypatch):
+    folders = fixtures(tmp_path, monkeypatch)
+    (folders["x86_64"] / "SHA256SUMS.txt").write_text("tampered")
+    output = tmp_path / "tampered.json"
+    with pytest.raises(ValueError):
+        module.prepare(
+            {"x86_64": folders["x86_64"]},
+            SOURCE,
+            VERSION,
+            ORIGIN,
+            output,
+            x86_only=True,
+        )
+    assert not output.exists()
