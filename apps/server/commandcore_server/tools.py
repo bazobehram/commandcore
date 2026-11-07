@@ -228,7 +228,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "shell.exec",
         "title": "Execute shell command",
-        "description": "Execute a command through the device's default shell. This is intentionally powerful and requires STANDARD/FULL_CONTROL. Output is bounded and audited; secrets should not be passed in command text.",
+        "description": "Run SHORT synchronous commands only. OAuth/MCP shell calls default to 8 seconds and cannot request more than 10 seconds; longer commands must use process.start, then process.status/process.output. A rejected long request is not executed. Requires STANDARD/FULL_CONTROL. Never pass secrets in command text.",
         "inputSchema": _obj(
             {
                 **_device_ref_schema(),
@@ -1142,6 +1142,9 @@ DEVICE_TOOLS = (
     - ACTIVITY_TOOL_NAMES
     - {"agents.approval.inbox"}
 )
+OAUTH_SHELL_DEFAULT_TIMEOUT_MS = 8_000
+OAUTH_SHELL_MAX_TIMEOUT_MS = 10_000
+
 DEFAULT_TIMEOUT_MS = {
     "services.manage": 120000,
     "package.install": 3600000,
@@ -1849,6 +1852,23 @@ class ToolService:
                     "unsupported_argument",
                     "This Agent does not support search exclusions or size selection.",
                 )
+            # The ChatGPT MCP host can stop waiting before an Agent completes a
+            # long synchronous command. Reject these calls BEFORE dispatch so
+            # a host timeout cannot masquerade as a failed (but executed) write.
+            # process.start/status/output are the durable long-work interface.
+            if name == "shell.exec" and principal.auth_kind == "oauth2":
+                requested = forwarded.get("timeout_ms", OAUTH_SHELL_DEFAULT_TIMEOUT_MS)
+                if (
+                    type(requested) is not int
+                    or not 100 <= requested <= OAUTH_SHELL_MAX_TIMEOUT_MS
+                ):
+                    raise ToolError(
+                        "use_managed_process",
+                        "Long shell command not started. Use process.start, "
+                        "then process.status and process.output; "
+                        "shell.exec supports at most 10000 ms in ChatGPT.",
+                    )
+                forwarded["timeout_ms"] = requested
             timeout_ms = int(
                 forwarded.get("timeout_ms", DEFAULT_TIMEOUT_MS.get(name, 30000))
             )

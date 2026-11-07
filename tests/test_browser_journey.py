@@ -336,6 +336,10 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         # device dispatch. Device ownership, selection, permission enforcement,
         # audit and agent dispatch remain in their existing call paths.
         # See test_tool_service.py for scope and ceiling regression coverage.
+        # ChatGPT shell timeout guard modifies only the short OAuth shell
+        # dispatch branch. See test_tool_service.py and
+        # test_agent_gateway_isolation.py for explicit non-dispatch and
+        # bounded transport regressions. Browser permissions are unchanged.
         import hashlib
 
         path = (
@@ -351,7 +355,7 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         segment = ast.get_source_segment(source, cls)
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "00282fd182bb10c508f9633d5cd0a3a483b3db3ea20d49755d5acacb11b0334a",
+            "5a632426c8d2bda18fe431ed7a45496aed7b82df88ea11d7c5d5d99c921b2f93",
         )
 
 

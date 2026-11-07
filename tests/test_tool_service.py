@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-
 import pytest
-
 from commandcore_server.db import Database
 from commandcore_server.models import JobResult, Principal
 from commandcore_server.tools import ToolService
@@ -11,9 +9,11 @@ from commandcore_server.tools import ToolService
 class FakeAgents:
     def __init__(self):
         self.last_device = None
+        self.calls = []
 
     async def dispatch(self, *, owner_id, device, tool, arguments, timeout_ms):
         self.last_device = device["id"]
+        self.calls.append((tool, timeout_ms, arguments))
         return JobResult(
             execution_id="exec-1", status="ok", result={"ok": True}, exit_code=0
         )
@@ -138,3 +138,59 @@ def test_effective_profile_honors_all_permission_ceiling_layers():
     device["access_max_permission_profile"] = "FULL_CONTROL"
     device["capabilities"]["local_max_permission_profile"] = "READ_ONLY"
     assert ToolService._effective_device_profile(principal, device) == "READ_ONLY"
+
+
+@pytest.mark.asyncio
+async def test_oauth_shell_short_default_and_explicit_limit(tmp_path):
+    from commandcore_server.auth import FULL_SCOPE
+    from commandcore_server.tools import ToolError
+
+    db = Database(str(tmp_path / "db.sqlite3"))
+    agents = FakeAgents()
+    svc = ToolService(db, agents, 60)
+    device = create_device(db, "shell-target")
+    principal = Principal(
+        "owner", "chatgpt", auth_kind="oauth2", scopes=frozenset({FULL_SCOPE})
+    )
+    await svc.call(principal, "shell.exec", {"device_id": device, "command": "id"})
+    assert agents.calls[-1] == (
+        "shell.exec",
+        8000,
+        {"command": "id", "timeout_ms": 8000},
+    )
+    await svc.call(
+        principal,
+        "shell.exec",
+        {"device_id": device, "command": "id", "timeout_ms": 10000},
+    )
+    assert agents.calls[-1][1] == 10000
+
+    before = len(agents.calls)
+    for invalid in (10001, 30000, 3600000, True, "9000", 99):
+        with pytest.raises(ToolError, match="Long shell command not started") as error:
+            await svc.call(
+                principal,
+                "shell.exec",
+                {
+                    "device_id": device,
+                    "command": "echo must-not-run",
+                    "timeout_ms": invalid,
+                },
+            )
+        assert error.value.code == "use_managed_process"
+        assert len(agents.calls) == before
+
+
+@pytest.mark.asyncio
+async def test_legacy_non_oauth_shell_contract_unmodified(tmp_path):
+    db = Database(str(tmp_path / "db.sqlite3"))
+    agents = FakeAgents()
+    svc = ToolService(db, agents, 60)
+    device = create_device(db, "legacy-target")
+    principal = Principal("owner", "local-cli")
+    await svc.call(
+        principal,
+        "shell.exec",
+        {"device_id": device, "command": "id", "timeout_ms": 30000},
+    )
+    assert agents.calls[-1][1] == 30000
