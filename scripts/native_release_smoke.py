@@ -29,6 +29,7 @@ def main() -> None:
         artifact.write_bytes(b"signed fixture")
         data = {
             "schema_version": 1,
+            "signing_key_id": hashlib.sha256(base64.b64decode(public)).hexdigest()[:16],
             "product": "commandcore-agent",
             "version": "0.9.0-rc1",
             "description": "Unicode release metadata — Ελληνικά",

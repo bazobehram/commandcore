@@ -1,6 +1,7 @@
 """Retained signed 0.9.0-rc7 installer feed compatibility, without widening trust."""
 
 import base64
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -76,3 +77,65 @@ def test_other_unknown_identity_always_rejected(tmp_path):
     manifest, key = signed_manifest(tmp_path, "0.9.0-rc7", "malicious-replacement")
     with pytest.raises(ValueError, match="wrong_release_product"):
         MODULE.package(manifest, key, tmp_path / "out", linux_only=True)
+
+
+def test_modern_signed_manifest_requires_matching_key_id(tmp_path):
+    signer = Ed25519PrivateKey.generate()
+    public_raw = signer.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    public = base64.b64encode(public_raw).decode()
+    doc = {
+        "schema_version": 1,
+        "product": "commandcore-agent",
+        "version": "0.9.0-rc8",
+        "artifacts": [
+            {
+                "platform": "linux",
+                "architecture": "x86_64",
+                "kind": "executable",
+                "url": "https://example.org/releases/agent/0.9.0-rc8/commandcore-agent-linux-x86_64",
+                "size": 10,
+                "sha256": "a" * 64,
+            }
+        ],
+    }
+
+    def write_signed():
+        body = json.dumps(
+            doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()
+        path = tmp_path / "signed.json"
+        path.write_text(
+            json.dumps(
+                {**doc, "signature": base64.b64encode(signer.sign(body)).decode()}
+            )
+        )
+        return path
+
+    valid = hashlib.sha256(public_raw).hexdigest()[:16]
+    doc["signing_key_id"] = valid
+    MODULE.package(write_signed(), public, tmp_path / "accepted", linux_only=True)
+    assert (tmp_path / "accepted/linux.sh").exists()
+    for wrong in ("f" * 16 if valid != "f" * 16 else "e" * 16, None):
+        if wrong is None:
+            del doc["signing_key_id"]
+        else:
+            doc["signing_key_id"] = wrong
+        with pytest.raises(ValueError, match="signing_key_id_mismatch"):
+            MODULE.package(
+                write_signed(), public, tmp_path / "rejected", linux_only=True
+            )
+        assert not (tmp_path / "rejected").exists()
+
+
+def test_duplicate_manifest_keys_fail_closed(tmp_path):
+    manifest, key = signed_manifest(tmp_path, "0.9.0-rc7")
+    original = manifest.read_text()
+    # Duplicate a top-level key; previously json.loads silently kept the last.
+    manifest.write_text(
+        original.replace(
+            '"schema_version": 1,', '"schema_version": 1, "schema_version": 1,', 1
+        )
+    )
+    with pytest.raises(ValueError, match="duplicate_release_manifest_key"):
+        MODULE.package(manifest, key, tmp_path / "rejected", linux_only=True)
+    assert not (tmp_path / "rejected").exists()

@@ -18,6 +18,15 @@ from urllib.parse import urlsplit
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 
+def _unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate_release_manifest_key")
+        result[key] = value
+    return result
+
+
 def package(
     manifest: Path,
     public: str,
@@ -28,7 +37,7 @@ def package(
     raw = manifest.read_bytes()
     if len(raw) > 1_048_576:
         raise ValueError("manifest_too_large")
-    data = json.loads(raw)
+    data = json.loads(raw, object_pairs_hook=_unique_keys)
     canonical = json.dumps(
         {k: v for k, v in data.items() if k != "signature"},
         sort_keys=True,
@@ -52,6 +61,13 @@ def package(
         product == "commandcore-agent" or legacy
     ):
         raise ValueError("wrong_release_product")
+    # New signed releases must bind the manifest key identity to the independently
+    # supplied verification key. Only retained legacy rc7 lacks this field.
+    expected_key_id = hashlib.sha256(
+        base64.b64decode(public, validate=True)
+    ).hexdigest()[:16]
+    if not legacy and data.get("signing_key_id") != expected_key_id:
+        raise ValueError("signing_key_id_mismatch")
     matches = [
         a
         for a in data["artifacts"]
