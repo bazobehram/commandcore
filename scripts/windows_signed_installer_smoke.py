@@ -26,7 +26,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cryptography import x509
@@ -41,7 +41,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def create_tls_files(
     directory: Path, *, crl_url: str | None = None
 ) -> tuple[Path, Path, Path]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     ca_name = x509.Name(
         [x509.NameAttribute(NameOID.COMMON_NAME, "Disposable CommandCore CI Root")]
@@ -160,6 +160,7 @@ def create_release(feed: Path, output: Path, native: Path, origin: str) -> None:
     ).decode()
     manifest = {
         "schema_version": 1,
+        "signing_key_id": hashlib.sha256(base64.b64decode(public)).hexdigest()[:16],
         "product": "commandcore-agent",
         "version": "0.9.0-rc1",
         "artifacts": [
