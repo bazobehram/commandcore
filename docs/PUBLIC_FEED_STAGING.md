@@ -149,3 +149,30 @@ and [public release checklist](PUBLIC_RELEASE_CHECKLIST.md) acceptance gates
 pass should an authorized operator prepare immutable, read-only deployment
 mounts and separately verify the actual served endpoint bytes. Onboarding
 remains stop-ship until that approval occurs.
+
+### Explicit Linux x86_64-only closed-beta review
+
+When the operator intentionally limits an **unpublished** closed-beta review to
+Linux x86_64, a verified x86 candidate can be converted into an unsigned
+single-architecture manifest draft without pretending an ARM64 build exists:
+
+~~~bash
+python scripts/prepare_linux_release_review.py \
+  --x86-only \
+  --x86-candidate /review/x86_64 \
+  --source-sha <exact-reviewed-source-sha> \
+  --release-version <actual-version-in-Cargo.toml> \
+  --origin https://commandcore.app \
+  --output /review/manifest.UNSIGNED.x86-only.json
+~~~
+
+The original mode, which requires both `--x86-candidate` and
+`--arm64-candidate`, remains the default. `--x86-only` cannot be combined
+with an ARM64 candidate. Both modes verify source identity, version, checksums
+and executable architecture, and refuse to overwrite the review file.
+
+This is a **signing-review handoff only**. The output is deliberately unsigned,
+contains no signing key ID, does not authorize deployment, and does not pass
+reboot, update or rollback acceptance. It must be independently signed and
+verified before publication; the x86-only option must not be used to advertise
+Linux ARM64 support.
