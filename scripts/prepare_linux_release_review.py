@@ -18,31 +18,46 @@ from package_unsigned_native_candidate import verify as verify_candidate
 SHA = re.compile(r"[a-f0-9]{40}")
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?")
 MAX_META = 8192
+REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 
 def prepare(
     candidates: dict[str, Path],
     source_sha: str,
     release_version: str,
-    origin: str,
+    origin: str | None,
     output: Path,
     x86_only: bool = False,
+    github_repo: str | None = None,
 ) -> dict:
     if not SHA.fullmatch(source_sha) or not VERSION.fullmatch(release_version):
         raise ValueError("invalid_release_identity")
-    parsed = urlsplit(origin)
-    if (
-        parsed.scheme != "https"
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.path not in ("", "/")
-        or parsed.query
-        or parsed.fragment
-        or parsed.port not in (None, 443)
-        or any(ord(c) <= 32 or ord(c) == 127 for c in origin)
-    ):
-        raise ValueError("invalid_release_origin")
+    if (origin is None) == (github_repo is None):
+        raise ValueError("choose_exactly_one_release_destination")
+    if github_repo is not None:
+        if not REPOSITORY.fullmatch(github_repo) or any(
+            part in (".", "..") for part in github_repo.split("/")
+        ):
+            raise ValueError("invalid_github_repository")
+        artifact_base = f"https://github.com/{github_repo}/releases/download/agent-v{release_version}"
+    else:
+        assert origin is not None
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+            or parsed.port not in (None, 443)
+            or any(ord(c) <= 32 or ord(c) == 127 for c in origin)
+        ):
+            raise ValueError("invalid_release_origin")
+        artifact_base = (
+            f"https://{parsed.hostname.lower()}/releases/agent/{release_version}"
+        )
     expected_architectures = {"x86_64"} if x86_only else set(BINARY_NAMES)
     if set(candidates) != expected_architectures:
         raise ValueError(
@@ -50,7 +65,6 @@ def prepare(
         )
     if output.exists() or output.is_symlink():
         raise ValueError("output_already_exists")
-    origin = "https://" + parsed.hostname.lower()
     artifacts = []
     for arch in ("x86_64",) if x86_only else ("x86_64", "arm64"):
         folder = candidates[arch]
@@ -73,7 +87,7 @@ def prepare(
                 "architecture": arch,
                 "kind": "executable",
                 "filename": name,
-                "url": f"{origin}/releases/agent/{release_version}/{name}",
+                "url": f"{artifact_base}/{name}",
                 "size": metadata["size"],
                 "sha256": metadata["sha256"],
             }
@@ -101,7 +115,11 @@ def main() -> int:
     )
     p.add_argument("--source-sha", required=True)
     p.add_argument("--release-version", required=True)
-    p.add_argument("--origin", required=True)
+    destination = p.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--origin")
+    destination.add_argument(
+        "--github-repo", help="Owner/repo for GitHub release assets"
+    )
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
     if a.x86_only == (a.arm64_candidate is not None):
@@ -116,6 +134,7 @@ def main() -> int:
         a.origin,
         a.output,
         x86_only=a.x86_only,
+        github_repo=a.github_repo,
     )
     print("LINUX_RELEASE_MANIFEST=UNSIGNED_REVIEW_DRAFT")
     print("SIGNING_KEY_ID=NOT_ASSIGNED")

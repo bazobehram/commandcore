@@ -181,3 +181,61 @@ def test_x86_only_rejects_tampered_build(tmp_path, monkeypatch):
             x86_only=True,
         )
     assert not output.exists()
+
+
+def test_github_release_handoff_matches_publisher_url(tmp_path, monkeypatch):
+    folders = fixtures(tmp_path, monkeypatch)
+    output = tmp_path / "github-review.json"
+    manifest = module.prepare(
+        {"x86_64": folders["x86_64"]},
+        SOURCE,
+        VERSION,
+        None,
+        output,
+        x86_only=True,
+        github_repo="bazobehram/commandcore",
+    )
+    assert manifest["artifacts"][0]["url"] == (
+        f"https://github.com/bazobehram/commandcore/releases/download/"
+        f"agent-v{VERSION}/commandcore-agent-linux-x86_64"
+    )
+    assert "signature" not in manifest
+    assert "signing_key_id" not in manifest
+    assert json.loads(output.read_text()) == manifest
+
+
+@pytest.mark.parametrize(
+    "repo", ["", "org", "org/repo/extra", "../repo", "org/..", "org/r?x", "org/r%2Fbad"]
+)
+def test_invalid_github_repository_rejected(tmp_path, monkeypatch, repo):
+    folders = fixtures(tmp_path, monkeypatch)
+    output = tmp_path / "invalid-repo.json"
+    with pytest.raises(ValueError, match="invalid_github_repository"):
+        module.prepare(
+            {"x86_64": folders["x86_64"]},
+            SOURCE,
+            VERSION,
+            None,
+            output,
+            x86_only=True,
+            github_repo=repo,
+        )
+    assert not output.exists()
+
+
+def test_release_destinations_are_mutually_exclusive(tmp_path, monkeypatch):
+    folders = fixtures(tmp_path, monkeypatch)
+    candidate = {"x86_64": folders["x86_64"]}
+    for origin, repo in ((ORIGIN, "bazobehram/commandcore"), (None, None)):
+        output = tmp_path / ("both.json" if origin else "neither.json")
+        with pytest.raises(ValueError, match="choose_exactly_one_release_destination"):
+            module.prepare(
+                candidate,
+                SOURCE,
+                VERSION,
+                origin,
+                output,
+                x86_only=True,
+                github_repo=repo,
+            )
+        assert not output.exists()
