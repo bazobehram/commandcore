@@ -45,6 +45,28 @@ candidate. The later signed-feed staging verifier below works only with a
 **separately signed** release manifest and an independently trusted public
 verification key.
 
+## Disposable clean-install acceptance for each unsigned CI candidate
+
+The `unsigned-linux-native-candidate` workflow now includes a dependent
+Ubuntu 24.04 job to test the **exact uploaded candidate bytes** using the
+real `install/linux.sh` script. Ubuntu 24.04 is needed because the public
+installer requires curl 8.4+ and glibc 2.36+, while the build stays on
+Ubuntu 22.04 to enforce conservative glibc symbol requirements.
+
+`scripts/native_linux_disposable_install.py` verifies candidate source and
+SHA256SUMS, creates a temporary **test-only** Ed25519 key, and serves the
+candidate over loopback for a no-service, no-enrollment clean install in a
+fresh temporary HOME. It checks the installed binary/version, refuses a
+wrong trust key, and refuses a tampered binary without installation. The
+key, served bundle and installed files are deleted with the temporary test
+workspace. This check neither needs nor handles a production signing key,
+controller identity, user account, or external hostname.
+
+The gate is **not** a real signed production installation: it does not
+exercise Agent enrollment, reboot persistence, connected-service health,
+version upgrade or rollback. These remain stop-ship operator acceptance
+requirements. A test-only key cannot satisfy the release signer/trust pin.
+
 ## Dual-architecture signing review handoff (no key material)
 
 After both unsigned CI review bundles have been independently checked and the

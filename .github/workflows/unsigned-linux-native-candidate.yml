@@ -79,3 +79,28 @@ jobs:
           path: dist/unsigned-native-agent-candidate/
           if-no-files-found: error
           retention-days: 14
+
+  unsigned-linux-disposable-install:
+    # Ubuntu 22.04 builds binaries with a GLIBC <=2.36 compatibility ceiling;
+    # use Ubuntu 24.04 for the real installer (curl >=8.4, glibc >=2.36).
+    needs: unsigned-linux-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned-linux-x86_64-agent-review-candidate
+          path: dist/unsigned-native-agent-candidate
+      - name: Clean install exact CI binary with an ephemeral test-only key
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/native_linux_disposable_install.py \
+            --candidate dist/unsigned-native-agent-candidate \
+            --expected-source-sha "$GITHUB_SHA"
+          echo 'CLEAN_INSTALL_TEST_KEY_ONLY=PASS'
+          echo 'SIGNED_PRODUCTION_INSTALL_UPDATE_ROLLBACK=NOT_VERIFIED'
+          echo 'PUBLICATION=NOT_PERFORMED'
