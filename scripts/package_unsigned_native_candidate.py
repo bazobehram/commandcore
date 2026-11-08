@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Make/verify an unsigned, source-pinned Linux native Agent review bundle.
 
 No signing keys or network operations. Does NOT approve installation or release.
@@ -9,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import stat
@@ -32,12 +32,32 @@ GLIBC_RE = re.compile(r"GLIBC_([0-9]+)\.([0-9]+)")
 
 
 def file_bytes(path: Path, max_size: int) -> bytes:
-    if path.is_symlink():
-        raise ValueError("candidate_symlink")
-    info = path.stat()
-    if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= max_size:
+    """Read bounded regular-file bytes through one no-follow file descriptor.
+
+    Checking a pathname before opening it is vulnerable to a symlink swap
+    between ``is_symlink``/``stat`` and ``read_bytes``. Verify the *opened*
+    object instead; do not trust a later pathname lookup.
+    """
+    if max_size <= 0:
         raise ValueError("candidate_file_type_or_size")
-    return path.read_bytes()
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        if path.is_symlink():
+            raise ValueError("candidate_symlink") from exc
+        raise
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= max_size:
+            raise ValueError("candidate_file_type_or_size")
+        # Read the exact inode checked by fstat, with a strict byte ceiling.
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            raw = stream.read(max_size + 1)
+        if len(raw) != info.st_size or not 0 < len(raw) <= max_size:
+            raise ValueError("candidate_file_changed_or_oversized")
+        return raw
+    finally:
+        os.close(fd)
 
 
 def elf_linux(raw: bytes, architecture: str = "x86_64") -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import struct
 import subprocess
 from pathlib import Path
@@ -190,3 +191,64 @@ def test_arm64_candidate_rejects_wrong_elf_machine(tmp_path, monkeypatch):
 def test_candidate_rejects_unknown_architecture(tmp_path):
     with pytest.raises(ValueError, match="unsupported_candidate_architecture"):
         MODULE.verify(tmp_path, SHA, "mips")
+
+
+def test_candidate_file_reader_rejects_symlink(tmp_path):
+    target = tmp_path / "actual"
+    target.write_bytes(b"valid")
+    linked = tmp_path / "candidate"
+    linked.symlink_to(target)
+    with pytest.raises(ValueError, match="candidate_symlink"):
+        MODULE.file_bytes(linked, 32)
+
+
+def test_candidate_file_reader_rejects_fifo(tmp_path):
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    with pytest.raises(ValueError, match="candidate_file_type_or_size"):
+        MODULE.file_bytes(fifo, 32)
+
+
+def test_candidate_file_reader_detects_growth_during_read(tmp_path, monkeypatch):
+    original = MODULE.os.fdopen
+    file = tmp_path / "candidate"
+    file.write_bytes(b"expected")
+
+    class GrowingStream:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self, limit):
+            return b"expected-surprise"
+
+    def opened(fd, mode):
+        os.close(fd)
+        return GrowingStream()
+
+    monkeypatch.setattr(MODULE.os, "fdopen", opened)
+    try:
+        with pytest.raises(ValueError, match="candidate_file_changed_or_oversized"):
+            MODULE.file_bytes(file, 64)
+    finally:
+        monkeypatch.setattr(MODULE.os, "fdopen", original)
+
+
+def test_candidate_file_reader_checks_open_fd_not_path_stat(tmp_path, monkeypatch):
+    candidate = tmp_path / "candidate"
+    candidate.write_bytes(b"original")
+    replacement = tmp_path / "replacement"
+    replacement.write_bytes(b"different")
+    real_open = MODULE.os.open
+
+    def swap_after_open(path, flags, *args, **kwargs):
+        fd = real_open(path, flags, *args, **kwargs)
+        if Path(path) == candidate:
+            candidate.unlink()
+            candidate.symlink_to(replacement)
+        return fd
+
+    monkeypatch.setattr(MODULE.os, "open", swap_after_open)
+    assert MODULE.file_bytes(candidate, 100) == b"original"
