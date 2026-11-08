@@ -25,7 +25,7 @@ postflight. It reports only the tool count and policy constants; no credentials,
 Agent output, database records, or environment variables are printed.
 
 ```bash
-# On the private homeserver (currently 50 core tools):
+# On the private controller host (currently 50 core tools):
 python3 scripts/verify_shell_timeout_deployment.py \
   --container commandcore-commandcore-1 --expected-tools 50
 
