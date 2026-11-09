@@ -104,3 +104,25 @@ jobs:
           echo 'CLEAN_INSTALL_TEST_KEY_ONLY=PASS'
           echo 'SIGNED_PRODUCTION_INSTALL_UPDATE_ROLLBACK=NOT_VERIFIED'
           echo 'PUBLICATION=NOT_PERFORMED'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Native Agent installer rollback and identity preservation (disposable)
+        shell: bash
+        env:
+          COMMANDCORE_TEST_NATIVE_BINARY: ${{ github.workspace }}/dist/unsigned-native-agent-candidate/commandcore-agent-linux-x86_64
+        run: |
+          set -euo pipefail
+          python -m pip install 'cryptography>=42,<51'
+          python scripts/package_unsigned_native_candidate.py verify \
+            --output dist/unsigned-native-agent-candidate \
+            --source-sha "$GITHUB_SHA"
+          # Runs as root only on an ephemeral GitHub runner. The harness drops
+          # the installer to uid 65534 and uses fixture systemctl/loginctl.
+          # It does not contact production, enroll, start services, or sign a
+          # production release. No root operation on enrolled user devices.
+          sudo --preserve-env=COMMANDCORE_TEST_NATIVE_BINARY \
+            "$(command -v python)" scripts/installer_smoke.py
+          echo 'FIXTURE_SERVICE_FAILURE_ROLLBACK_AND_IDENTITY=PASS'
+          echo 'REAL_NATIVE_INSTALL_VERSION_UNINSTALL=PASS'
+          echo 'CONNECTED_SERVICE_UPGRADE_ROLLBACK=NOT_VERIFIED'

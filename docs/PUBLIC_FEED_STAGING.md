@@ -62,6 +62,18 @@ key, served bundle and installed files are deleted with the temporary test
 workspace. This check neither needs nor handles a production signing key,
 controller identity, user account, or external hostname.
 
+The dependent CI job also runs the existing `scripts/installer_smoke.py`
+with `COMMANDCORE_TEST_NATIVE_BINARY` pointing to the exact downloaded CI
+candidate, after rechecking the source SHA. That disposable fixture-based
+suite covers wrong signing key, tampering, unrelated-service protection,
+same-version install, injected `systemctl daemon-reload` failure with rollback,
+existing Agent identity preservation, isolated install namespace, version
+ordering, uninstall identity preservation, and real Rust Agent install,
+version/digest validation and uninstall. It uses an ephemeral test Ed25519 key
+and a fixture system manager, not the host's actual user systemd service.
+The CI runner is disposable; the test must never be executed as root on an
+enrolled production workstation.
+
 The gate is **not** a real signed production installation: it does not
 exercise Agent enrollment, reboot persistence, connected-service health,
 version upgrade or rollback. These remain stop-ship operator acceptance
