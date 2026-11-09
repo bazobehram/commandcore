@@ -14,6 +14,7 @@ on:
       - 'VERSION'
       - 'agent/rust/Cargo.toml'
       - 'agent/rust/Cargo.lock'
+      - 'scripts/rust_agent_smoke.py'
 
 permissions:
   contents: read

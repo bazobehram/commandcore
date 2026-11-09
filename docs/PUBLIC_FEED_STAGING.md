@@ -45,6 +45,24 @@ candidate. The later signed-feed staging verifier below works only with a
 **separately signed** release manifest and an independently trusted public
 verification key.
 
+## Rust Agent reconnection and local-controller restart acceptance
+
+The native CI candidate builder runs `scripts/rust_agent_smoke.py` against its
+compiled Rust executable and an ephemeral localhost CommandCore controller,
+not any production device. Besides enrollment, core tools, managed processes,
+permission ceiling and key rotation, the smoke now requires the Agent to
+**become offline** after an actual process stop, then reconnect with its
+rotated key. It also restarts the local controller while keeping the same
+Agent process running, and verifies a fresh MCP device selection and a shell
+round trip after the controller returns. An online status alone is **not**
+accepted as proof of reconnection.
+
+The source file is a watched CI workflow path, so changes to this connection
+acceptance test trigger an updated build/check. This does not exercise an
+actual systemd unit, a hardware restart, a full binary upgrade/rollback,
+external Auth0 accounts, or production signing. Keep those as stop-ship
+requirements until independently verified.
+
 ## Disposable clean-install acceptance for each unsigned CI candidate
 
 The `unsigned-linux-native-candidate` workflow now includes a dependent
