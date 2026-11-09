@@ -39,6 +39,7 @@ def wait_http(url, timeout=20):
             if r.status_code < 500:
                 return
         except httpx.RequestError:
+            time.sleep(0.2)
             continue
         time.sleep(0.2)
     raise RuntimeError("server not ready")
