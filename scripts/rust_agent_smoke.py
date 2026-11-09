@@ -1,7 +1,15 @@
-#!/usr/bin/env python3
 from __future__ import annotations
-import json, os, socket, subprocess, sys, tempfile, time, tomllib
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import tomllib
 from pathlib import Path
+
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,8 +38,8 @@ def wait_http(url, timeout=20):
             r = httpx.get(url, timeout=1)
             if r.status_code < 500:
                 return
-        except Exception:
-            pass
+        except httpx.RequestError:
+            continue
         time.sleep(0.2)
     raise RuntimeError("server not ready")
 
@@ -66,6 +74,23 @@ def wait_online(base, token, did, implementation="rust", timeout=25):
                 return d
         time.sleep(0.2)
     raise RuntimeError("Rust Agent did not become online")
+
+
+def wait_offline(base, token, did, timeout=25):
+    """Ensure the server sees a real disconnect before claiming a reconnect."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        r = httpx.get(
+            base + "/api/devices",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=2,
+        )
+        r.raise_for_status()
+        devices = [d for d in r.json()["devices"] if d["id"] == did]
+        if len(devices) == 1 and devices[0]["status"] == "offline":
+            return
+        time.sleep(0.2)
+    raise RuntimeError("Rust Agent did not become offline after stop")
 
 
 def meta():
@@ -170,6 +195,7 @@ def main():
                 ],
                 cwd=ROOT,
                 env=env,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=20,
@@ -181,6 +207,7 @@ def main():
                 [str(BIN), "status", "--json", "--state", str(state)],
                 cwd=ROOT,
                 env=env,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -280,10 +307,12 @@ def main():
             assert ps["result"].get("running") is False, ps
             stop(agent)
             agent = None
+            wait_offline(base, token, did)
             rr = subprocess.run(
                 [str(BIN), "rotate-key", "--state", str(state)],
                 cwd=ROOT,
                 env=env,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=25,
@@ -311,15 +340,52 @@ def main():
                 12,
             )
             assert again["stdout"].strip() == socket.gethostname(), again
+            # Simulate an actual controller crash/restart, not a fixture status
+            # flip. Leave the same enrolled Rust Agent running and preserve
+            # its process ID and durable device identity across the restart.
+            agent_pid_before = agent.pid
+            assert agent.poll() is None
+            stop(server)
+            server = None
+            server = subprocess.Popen(
+                [sys.executable, "-m", "commandcore_server.main"],
+                cwd=ROOT,
+                env=env,
+                stdout=slog,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            wait_http(base + "/healthz")
+            wait_online(base, token, did, timeout=60)
+            assert agent.poll() is None and agent.pid == agent_pid_before
+            sid_after_server_restart = mcp(
+                base, token, "devices.select", {"device": did}, 14
+            )["selection_id"]
+            after_restart = mcp(
+                base,
+                token,
+                "shell.exec",
+                {
+                    "selection_id": sid_after_server_restart,
+                    "command": "hostname",
+                    "timeout_ms": 5000,
+                },
+                15,
+            )
+            assert after_restart["stdout"].strip() == socket.gethostname(), (
+                after_restart
+            )
+            assert sid_after_server_restart
+            sid = sid_after_server_restart
             (td / "policy.json").write_text(
                 json.dumps({"configured_max_permission_profile": "READ_ONLY"})
             )
             denied = mcp(
-                base, token, "shell.exec", {"selection_id": sid, "command": "id"}, 13
+                base, token, "shell.exec", {"selection_id": sid, "command": "id"}, 16
             )
             assert "error" in denied, denied
             readonly = mcp(
-                base, token, "fs.read", {"selection_id": sid, "path": str(probe)}, 14
+                base, token, "fs.read", {"selection_id": sid, "path": str(probe)}, 17
             )
             assert readonly["result"]["data"] == "rust-parity", readonly
             print(
@@ -335,6 +401,9 @@ def main():
                         "process_list": True,
                         "managed_process_stream_and_cancel": True,
                         "local_read_only_ceiling": True,
+                        "agent_disconnect_observed": True,
+                        "controller_restart_same_agent_pid": True,
+                        "controller_restart_mcp_reconnect": True,
                         "round_trip": "MCP -> CommandCore -> Rust Agent -> OS -> MCP",
                     },
                     indent=2,
