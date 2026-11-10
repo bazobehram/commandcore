@@ -46,7 +46,8 @@ class SystemdAgent:
         return (
             None
             if subprocess.run(
-                ["systemctl", "--user", "is-active", "--quiet", self.unit]
+                ["systemctl", "--user", "is-active", "--quiet", self.unit],
+                check=False,
             ).returncode
             == 0
             else 0
@@ -724,6 +725,39 @@ def main():
                     stop(agent)
                     agent = start_agent()
                     eventually(online)
+                    if systemd:
+                        # A panel "online" marker can be stale. Require the
+                        # actual user systemd unit to replace its main process,
+                        # then prove transport recovery with a fresh MCP call.
+                        old_pid = agent.pid
+                        assert old_pid > 0 and psutil.pid_exists(old_pid)
+                        subprocess.run(
+                            ["systemctl", "--user", "restart", systemd_unit.name],
+                            check=True,
+                        )
+                        agent = SystemdAgent(systemd_unit.name)
+                        assert agent.pid > 0 and agent.pid != old_pid, (
+                            old_pid,
+                            agent.pid,
+                        )
+                        eventually(online)
+
+                        def fresh_systemd_mcp_shell():
+                            try:
+                                return (
+                                    call(
+                                        "shell.exec",
+                                        {
+                                            "selection_id": selection,
+                                            "command": "hostname",
+                                        },
+                                    )["stdout"].strip()
+                                    == socket.gethostname()
+                                )
+                            except (AssertionError, RuntimeError, httpx.HTTPError):
+                                return False
+
+                        eventually(fresh_systemd_mcp_shell)
                     disconnect_probe = call(
                         "process.start",
                         {
@@ -854,6 +888,7 @@ def main():
                             "git": git_tested,
                             "agent_restart": True,
                             "real_systemd_restart": systemd,
+                            "systemd_main_pid_replaced_and_mcp_reconnected": systemd,
                             "server_restart": True,
                             "managed_process_survives_transport_reconnect": True,
                             "managed_process_survives_agent_restart": bool(

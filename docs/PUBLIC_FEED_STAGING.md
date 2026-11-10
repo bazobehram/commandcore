@@ -45,6 +45,18 @@ candidate. The later signed-feed staging verifier below works only with a
 **separately signed** release manifest and an independently trusted public
 verification key.
 
+## Real systemd service restart verification
+
+The native Linux GitHub CI `rust-agent-parity` job already starts the real
+unprivileged Rust Agent under a disposable **user systemd manager**. The
+`COMMANDCORE_ENROLLMENT_SYSTEMD=true` acceptance mode now additionally
+runs `systemctl --user restart` on its own randomly named test service,
+checks that `MainPID` changed, and executes a fresh MCP shell command after
+reconnection. It preserves and tests the same enrolled device identity and
+is completely separate from production services. This tests a real service
+restart, **not** a version upgrade or real signed-release rollback. Those
+remain blocked until a two-version systemd lifecycle test passes.
+
 ## Rust Agent reconnection and local-controller restart acceptance
 
 The native CI candidate builder runs `scripts/rust_agent_smoke.py` against its
