@@ -63,7 +63,7 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
     "architectures,requested",
     [
         (("x86_64",), "x86_64"),
-        (("x86_64", "aarch64"), "aarch64"),
+        (("x86_64", "arm64"), "arm64"),
     ],
 )
 def test_valid_signed_release_accepted(tmp_path, architectures, requested):
@@ -131,3 +131,10 @@ def test_reject_directory_symlink(tmp_path):
     linked.symlink_to(feed, target_is_directory=True)
     with pytest.raises(ValueError, match="invalid_release_directory"):
         module.verify(linked, key, VERSION, REPO)
+
+
+def test_reject_legacy_aarch64_architecture_request(tmp_path):
+    """The signed-release verifier requires canonical manifest arch: arm64."""
+    key = signed_fixture(tmp_path, ("x86_64", "arm64"))
+    with pytest.raises(ValueError, match="unsupported_release_architecture"):
+        module.verify(tmp_path, key, VERSION, REPO, "aarch64")
