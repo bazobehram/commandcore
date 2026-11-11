@@ -109,6 +109,45 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
 
 
 @pytest.mark.asyncio
+async def test_oauth_discovery_preserves_browser_close_safety_contract():
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+            ).encode(),
+            "more_body": False,
+        }
+
+    request = Request(
+        {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+        receive,
+    )
+    principal = Principal(
+        "owner", "client", "oauth2", ("commandcore:standard",), "https://idp.test"
+    )
+    response = await handler.handle(request, principal)
+    tools = json.loads(response.body)["result"]["tools"]
+    close = next(tool for tool in tools if tool["name"] == "browser.close")
+    assert close["inputSchema"] == {
+        "type": "object",
+        "properties": {
+            "session_ref": {"type": "string", "maxLength": 128},
+            "expected_session_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        },
+        "required": [],
+        "additionalProperties": False,
+    }
+    assert {"type": "oauth2", "scopes": ["commandcore:standard"]} in close[
+        "securitySchemes"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_supported_progress_uses_standard_sse_and_final_rpc_result():
     from commandcore_server.activity import notify
 
