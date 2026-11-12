@@ -144,10 +144,17 @@ async def main():
     defs = {x["name"]: x for x in h.definitions}
     for name in m.OPERATION_TOOLS:
         if name in defs:
-            assert not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri"), (
-                name
-            )
-            assert not defs[name].get("_meta", {}).get("openai/outputTemplate"), name
+            if name == "shell.exec":
+                # Shell gets one isolated, request-local terminal receipt.
+                assert defs[name]["_meta"]["ui"]["resourceUri"] == m.SHELL_UI_URI
+                assert defs[name]["_meta"]["openai/outputTemplate"] == m.SHELL_UI_URI
+            else:
+                assert (
+                    not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri")
+                ), name
+                assert not defs[name].get("_meta", {}).get("openai/outputTemplate"), (
+                    name
+                )
     assert defs["commandcore.watch"]["_meta"]["ui"]["resourceUri"] == m.TASK_UI_URI
     assert (
         defs["commandcore.workspace"]["_meta"]["ui"]["resourceUri"]
