@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -44,6 +45,7 @@ COMMANDCORE_UI_URI = WORKSPACE_UI_URI
 COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
 TASK_UI_URI = "ui://commandcore/task-0.12.0-b18.html"
+RECEIPT_UI_URI = "ui://commandcore/operation-receipt-v1-20261112.html"
 TASK_UI_URIS = {
     "ui://commandcore/task-0.12.0-b17.html",
     "ui://commandcore/task-0.12.0-b16.html",
@@ -91,6 +93,30 @@ OPERATION_TOOLS = (
         )
     }
 )
+# One small per-invocation view. No screenshots, raw input/output or polling.
+RECEIPT_TOOLS = (OPERATION_TOOLS | {"devices.list", "devices.select", "devices.info", "auth.whoami"}) - {
+    "shell.exec", "shell.native", "browser.frame", "browser.watch",
+    "activity.feed", "agents.observe", "process.output",
+}
+def _cc_receipt(tool, payload):
+    """Return metadata only. Never copy credentials, shell stdout or raw args."""
+    step = payload.get("activity_step") if isinstance(payload, dict) else None
+    if not isinstance(step, dict):
+        step = payload.get("_ui_operation") if isinstance(payload, dict) else None
+    if not isinstance(step, dict): step = {}
+    status = step.get("status") or (payload.get("status") if isinstance(payload, dict) else None)
+    status = status if status in {"ok","completed","returned","running","started","error","failed","timeout","canceled"} else "returned"
+    device = step.get("device")
+    if not isinstance(device, str): device = ""
+    if not device and isinstance(payload, dict):
+        summary = payload.get("summary")
+        prefix = tool + " on "
+        if isinstance(summary, str) and summary.startswith(prefix):
+            label = summary[len(prefix):].rsplit(": ", 1)[0]
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,69}", label):
+                device = label
+    return {"tool": tool, "status": status, "device": device[:70]}
+
 TASK_ACTION_TOOLS = OPERATION_TOOLS - {
     "process.output",
     "process.status",
@@ -442,6 +468,13 @@ class MCPHandler:
             "commandcore-widget.html",
             "CommandCore workspace",
         )
+        # Isolated per-operation receipts; preserve specialized viewer resources.
+        for tool in RECEIPT_TOOLS:
+            self.ui_specs.setdefault(
+                tool,
+                (RECEIPT_UI_URI, COMMANDCORE_UI_MIME,
+                 "operation-receipt.html", "CommandCore operation receipt"),
+            )
         raw_definitions = [dict(x) for x in raw_definitions]
         browser_open = next(
             (x for x in raw_definitions if x["name"] == "browser.open"), None
@@ -732,7 +765,8 @@ class MCPHandler:
                                     "openai/widgetHeightHint": 112,
                                 }
                                 if uri in TASK_UI_URIS
-                                else {}
+                                else {"openai/widgetMinFrameHeight": 1, "openai/widgetHeightHint": 92}
+                                if uri == RECEIPT_UI_URI else {}
                             ),
                             "ui": {
                                 "prefersBorder": True,
@@ -771,7 +805,8 @@ class MCPHandler:
                                     "openai/widgetHeightHint": 112,
                                 }
                                 if uri in TASK_UI_URIS
-                                else {}
+                                else {"openai/widgetMinFrameHeight": 1, "openai/widgetHeightHint": 92}
+                                if uri == RECEIPT_UI_URI else {}
                             ),
                             "ui": {
                                 "prefersBorder": True,
@@ -779,7 +814,7 @@ class MCPHandler:
                             },
                             "openai/ui": {
                                 "availableDisplayModes": ["inline"]
-                                if uri in TASK_UI_URIS
+                                if uri in TASK_UI_URIS or uri == RECEIPT_UI_URI
                                 else ["inline", "fullscreen"]
                             },
                         },
@@ -858,6 +893,9 @@ class MCPHandler:
                     payload = dict(payload)
                     payload["ui_build"] = "0.12.0+b18"
                     payload["ui_resource_uri"] = spec[0] if spec else None
+                if name in RECEIPT_TOOLS and isinstance(payload, dict):
+                    payload = dict(payload)
+                    payload["_ui_receipt"] = _cc_receipt(name, payload)
                 result = _tool_result(payload, modern)
                 spec = self.ui_specs.get(name)
                 if spec and spec[0] in self.ui_resources:
@@ -874,6 +912,8 @@ class MCPHandler:
                                 principal, host_session
                             )
                         )
+                    if name in RECEIPT_TOOLS:
+                        meta["commandcore/receipt"] = _cc_receipt(name, payload)
                     result["_meta"] = meta
                 return _rpc_result(
                     req_id,
@@ -906,6 +946,19 @@ class MCPHandler:
                     result["_meta"] = {
                         "mcp/www_authenticate": [self.scope_challenge(required)]
                     }
+                if name in RECEIPT_TOOLS:
+                    meta = dict(result.get("_meta") or {})
+                    meta.update({
+                        "ui": {"resourceUri": RECEIPT_UI_URI},
+                        "ui/resourceUri": RECEIPT_UI_URI,
+                        "openai/outputTemplate": RECEIPT_UI_URI,
+                        "commandcore/receipt": _cc_receipt(name, {"status": "error"}),
+                    })
+                    result["_meta"] = meta
+                    if isinstance(result.get("structuredContent"), dict):
+                        result["structuredContent"]["_ui_receipt"] = _cc_receipt(
+                            name, {"status": "error"}
+                        )
                 return _rpc_result(
                     req_id,
                     _with_server_info(
@@ -1264,6 +1317,9 @@ class MCPHandler:
                             payload = dict(payload)
                             payload["ui_build"] = "0.12.0+b18"
                             payload["ui_resource_uri"] = spec[0] if spec else None
+                        if name in RECEIPT_TOOLS and isinstance(payload, dict):
+                            payload = dict(payload)
+                            payload["_ui_receipt"] = _cc_receipt(name, payload)
                         result = _tool_result(payload, modern)
                         spec = self.ui_specs.get(name)
                         if spec and spec[0] in self.ui_resources:
@@ -1277,6 +1333,8 @@ class MCPHandler:
                                         principal, host_session
                                     )
                                 )
+                            if name in RECEIPT_TOOLS:
+                                meta["commandcore/receipt"] = _cc_receipt(name, payload)
                             result["_meta"] = meta
                         if modern:
                             result = _with_server_info(
@@ -1306,6 +1364,19 @@ class MCPHandler:
                                     )
                                 ]
                             }
+                        if name in RECEIPT_TOOLS:
+                            meta = dict(result.get("_meta") or {})
+                            meta.update({
+                                "ui": {"resourceUri": RECEIPT_UI_URI},
+                                "ui/resourceUri": RECEIPT_UI_URI,
+                                "openai/outputTemplate": RECEIPT_UI_URI,
+                                "commandcore/receipt": _cc_receipt(name, {"status": "error"}),
+                            })
+                            result["_meta"] = meta
+                            if isinstance(result.get("structuredContent"), dict):
+                                result["structuredContent"]["_ui_receipt"] = _cc_receipt(
+                                    name, {"status": "error"}
+                                )
                     await queue.put({"jsonrpc": "2.0", "id": req_id, "result": result})
                 finally:
                     observer.reset(token)
