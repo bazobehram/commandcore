@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CommandCore · Operation receipt</title>
+<style>
+:root{font:12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:light dark}
+*{box-sizing:border-box}
+body{margin:0;padding:10px 12px;background:var(--color-background-primary,#fff);color:var(--color-text-primary,#202127)}
+main{display:grid;gap:6px;max-width:100%;min-width:0}
+header{display:flex;align-items:center;gap:8px;min-width:0}
+#mark{height:21px;width:21px;display:grid;place-items:center;background:var(--color-background-secondary,#f2f4f7);border:1px solid var(--color-border-primary,#dadde3);border-radius:6px}
+strong{font-size:12px;overflow-wrap:anywhere}
+#state{margin-left:auto;white-space:nowrap;color:var(--color-text-secondary,#727782);font-size:11px}
+#description{font:11px/1.5 ui-monospace,Consolas,monospace;color:var(--color-text-secondary,#656b76);overflow-wrap:anywhere}
+#target,#timing{font-size:11px;color:var(--color-text-secondary,#656b76);overflow-wrap:anywhere}
+#details{margin-top:3px;border-top:1px solid var(--color-border-primary,#e1e4e8);padding-top:6px}
+#details summary{cursor:pointer;user-select:none;color:var(--color-text-secondary,#596878);font-size:11px}
+#lines{padding:5px 0 0;margin:0;list-style:none;display:grid;gap:5px;overflow-wrap:anywhere}
+#lines li{border-left:2px solid var(--color-border-primary,#d1d5dc);padding-left:7px;font-size:11px;word-break:break-word}
+[hidden]{display:none!important}
+</style></head>
+<body>
+<main>
+<header><span id="mark" aria-hidden="true">🐙</span><strong id="heading">CommandCore operation</strong><span id="state" role="status">Connecting</span></header>
+<div id="description">Receiving this operation's result…</div>
+<div id="target" hidden></div>
+<div id="timing" hidden></div>
+<details id="details" hidden><summary>Safe output</summary><ul id="lines"></ul></details>
+</main>
+<script>
+(()=>{
+"use strict";
+// No tool calls, network requests, storage, raw shell stdout, clipboard or credentials.
+// This view can render ONLY the result belonging to the invoking tool card.
+const by=id=>document.getElementById(id);
+const clean=(value,max=95)=>typeof value==="string"?value.replace(/[\x00-\x1f\x7f]/g," ").slice(0,max):"";
+const fmt=n=>typeof n==="number"&&Number.isFinite(n)?String(Math.round(n*10)/10):null;
+const text=(id,v)=>{by(id).textContent=String(v)};
+let shown=false;
+function unwrap(raw){
+ let v=raw||{};
+ for(let i=0;i<5;i++){
+  const next=v.call_tool_result||v.mcp_tool_result||(v.result&&v.result.structuredContent?v.result:null);
+  if(!next)break;v=next;
+ }
+ return {v,p:v.structuredContent||v};
+}
+function line(lines,name,value){
+ if(lines.length>=14)return;
+ const t=typeof value==="number"?fmt(value):clean(value);
+ if(t!==null&&t!=="")lines.push(name+": "+t);
+}
+function safeLines(tool,p){
+ const lines=[],r=p?.result&&typeof p.result==="object"?p.result:p;
+ if(tool==="devices.list"&&Array.isArray(p?.devices)){
+  const list=p.devices.slice(0,12);
+  for(const d of list){
+   if(!d||typeof d!=="object")continue;
+   const name=clean(d.display_name||d.hostname,44)||"Device";
+   const os=clean(d.platform,26),arch=clean(d.architecture,25),status=clean(d.status,18);
+   line(lines,name,[os,arch,status].filter(Boolean).join(" · "));
+  }
+  if(p.devices.length>list.length)line(lines,"More devices",p.devices.length-list.length);
+ }else if(tool==="devices.select"||tool==="devices.info"){
+  const d=p?.device||r||{};
+  line(lines,"Device",d.display_name||d.hostname);
+  line(lines,"OS",d.platform);
+  line(lines,"State",d.status);
+  line(lines,"Architecture",d.architecture);
+ }else if(tool==="system.info"){
+  line(lines,"Hostname",r.hostname);
+  line(lines,"OS",r.platform);
+  line(lines,"Release",r.platform_release);
+  line(lines,"Architecture",r.architecture);
+  line(lines,"Logical CPUs",r.cpu_logical);
+  line(lines,"Physical CPUs",r.cpu_physical);
+  if(typeof r.memory_total==="number")line(lines,"RAM total (GiB)",r.memory_total/(1024**3));
+ }else if(tool==="system.metrics"){
+  if(typeof r.cpu_percent==="number")line(lines,"CPU utilization (%)",r.cpu_percent);
+  if(typeof r.memory?.percent==="number")line(lines,"RAM used (%)",r.memory.percent);
+  if(typeof r.disk?.percent==="number")line(lines,"Disk used (%)",r.disk.percent);
+  if(typeof r.swap?.percent==="number")line(lines,"Swap used (%)",r.swap.percent);
+  if(Array.isArray(r.loadavg))line(lines,"System load",r.loadavg.slice(0,3).map(fmt).join(" · "));
+  const devices=Array.isArray(r.accelerators)?r.accelerators:Array.isArray(r.gpus)?r.gpus:[];
+  for(const g of devices.slice(0,3)){
+   if(!g||typeof g!=="object")continue;
+   line(lines,"GPU",g.name);
+   if(typeof g.utilization_percent==="number")line(lines,"GPU utilization (%)",g.utilization_percent);
+  }
+ }else if(tool==="process.status"||tool==="process.list"){
+  line(lines,"State",r.status||r.state);
+ }else if(tool==="fs.write"||tool==="fs.patch"){
+  line(lines,"Bytes written",r.bytes_written);
+  line(lines,"Replacements",r.replacements);
+ }else if(tool==="fs.list"&&Array.isArray(r.entries)){
+  line(lines,"Entries returned",r.entries.length);
+ }
+ // Never render raw shell output, command strings, file text, binary data,
+ // environment variables, tokens, IDs, addresses, or arbitrary server messages.
+ return lines;
+}
+function render(raw){
+ const {v,p}=unwrap(raw);
+ const receipt=p?._ui_receipt||v?._meta?.["commandcore/receipt"]||raw?._meta?.["commandcore/receipt"];
+ if(!receipt||typeof receipt.tool!=="string")return;
+ const tool=clean(receipt.tool,85);
+ const activity=p?.activity_step||p?._ui_operation||{};
+ const failed=Boolean(v?.isError||raw?.isError||p?.error||receipt.status==="error"||activity.status==="error"||activity.status==="failed");
+ text("heading",tool);
+ text("description","MCP request · "+tool);
+ text("state",failed?"Failed":activity.status==="running"?"Running":"Completed");
+ const device=clean(receipt.device||activity.device,70);
+ by("target").hidden=!device;
+ if(device)text("target","Target · "+device);
+ const ms=activity.duration_ms;
+ by("timing").hidden=!(typeof ms==="number"&&Number.isFinite(ms));
+ if(!by("timing").hidden)text("timing","Duration · "+(ms>=1000?(ms/1000).toFixed(1)+" s":Math.round(ms)+" ms"));
+ const lines=safeLines(tool,p);
+ by("lines").replaceChildren();
+ for(const value of lines){
+  const li=document.createElement("li");li.textContent=value;by("lines").append(li);
+ }
+ by("details").hidden=lines.length===0;
+ shown=true;
+}
+function accept(raw){if(raw)render(raw)}
+window.addEventListener("openai:set_globals",e=>{
+ const g=e.detail?.globals||{};
+ accept(g.toolResponseMetadata);accept(g.toolOutput);
+});
+window.addEventListener("message",e=>{
+ if(e.source!==window.parent)return;
+ if(e.data?.method==="ui/notifications/tool-result")accept(e.data.params);
+});
+accept(window.openai?.toolResponseMetadata);
+accept(window.openai?.toolOutput);
+setTimeout(()=>{if(!shown)text("description","Operation card metadata unavailable. CommandCore did not rerun this request.")},3500);
+})();
+</script>
+</body></html>

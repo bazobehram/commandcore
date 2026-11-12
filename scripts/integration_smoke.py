@@ -137,7 +137,13 @@ def verify_streaming(base: str, token: str, selection_id: str):
     assert messages[-1]["id"] == request_id
     result = messages[-1]["result"]
     assert result["isError"] is False
-    assert not result.get("_meta", {}).get("ui", {}).get("resourceUri")
+    assert (
+        result.get("_meta", {}).get("ui", {}).get("resourceUri")
+        == "ui://commandcore/operation-receipt-v3-20261112.html"
+    )
+    receipt = result["structuredContent"]["_ui_receipt"]
+    assert receipt["tool"] == "system.metrics"
+    assert receipt["status"] in {"ok", "returned", "completed"}
 
 
 def main() -> int:
