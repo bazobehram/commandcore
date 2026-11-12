@@ -19,6 +19,7 @@ from .tools import (
     operation_ui_context,
 )
 from .web_assets import web_asset
+from .shell_receipt import SHELL_UI_URI, build_shell_card
 from .mcp_protocol import (
     LEGACY_PROTOCOLS,
     MODERN_PROTOCOL,
@@ -441,6 +442,12 @@ class MCPHandler:
             COMMANDCORE_UI_MIME,
             "commandcore-widget.html",
             "CommandCore workspace",
+        )
+        self.ui_specs["shell.exec"] = (
+            SHELL_UI_URI,
+            COMMANDCORE_UI_MIME,
+            "shell-compact-v25.html",
+            "CommandCore shell terminal",
         )
         raw_definitions = [dict(x) for x in raw_definitions]
         browser_open = next(
@@ -1210,6 +1217,9 @@ class MCPHandler:
                                 operation.update(exact)
                 payload["_ui_operation"] = operation
                 payload["_ui_viewer"] = viewer
+            if name == "shell.exec" and isinstance(payload, dict):
+                payload = dict(payload)
+                payload["shell_card"] = build_shell_card(args, payload)
             return payload
         finally:
             operation_ui_context.reset(token)
