@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/commandcore-icon.png" alt="CommandCore logo" width="144">
+  <img src="assets/branding/octopus-head.svg" alt="CommandCore octopus logo" width="144">
 </p>
 
 # CommandCore
