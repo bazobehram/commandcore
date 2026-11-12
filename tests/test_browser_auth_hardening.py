@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 from dataclasses import replace
 
@@ -60,11 +61,17 @@ def test_branding_assets_are_public_and_versioned(server):
             assert response.status_code == 200
             assert response.headers["content-type"] == "image/png"
             assert response.content == web_asset(name).read_bytes()
+        svg = client.get("/commandcore-mark.svg")
+        assert svg.status_code == 200
+        assert svg.headers["content-type"] == "image/svg+xml"
+        assert svg.content == web_asset("commandcore-mark.svg").read_bytes()
         html = client.get("/").text
-        assert 'href="/commandcore-icon.png?v=' in html
-        assert 'src="/commandcore-icon.png?v=' in html
+        assert 'href="/commandcore-mark.svg?v=' in html
+        assert 'src="/commandcore-mark.svg?v=' in html
         assert 'class="brand-name">Command<span>Core</span>' in html
-        version = html.split("/commandcore-icon.png?v=")[1].split('"')[0]
+        version = hashlib.sha256(
+            web_asset("commandcore-icon.png").read_bytes()
+        ).hexdigest()[:16]
         assert server.mcp.icons == server.core_mcp.icons
         assert server.mcp.icons[0]["src"].endswith("/commandcore-icon.png?v=" + version)
 

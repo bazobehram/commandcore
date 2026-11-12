@@ -42,14 +42,14 @@ HTML = """<!doctype html>
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
 <title>Private Browser · CommandCore</title>
-<link rel="icon" href="/commandcore-icon.png" type="image/png">
+<link rel="icon" href="/commandcore-mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/browser-console.css">
 <script defer src="/browser-console.js"></script>
 </head>
 <body>
 <header class="app-header">
   <div class="brand" aria-label="CommandCore">
-    <img src="/commandcore-icon.png" width="40" height="40" alt="">
+    <img src="/commandcore-mark.svg" width="40" height="40" alt="">
     <div><strong>CommandCore</strong><small>Remote execution workspace</small></div>
   </div>
   <div class="header-context"><span class="header-divider"></span> Browser <span class="crumb">/</span> Private control</div>

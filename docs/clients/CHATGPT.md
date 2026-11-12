@@ -26,7 +26,7 @@ content version, and can be fetched without device or account access.
 Rendering or caching this icon is controlled by the client; an existing
 ChatGPT development connection is not guaranteed to update its directory icon.
 Refresh its tools after deploying, then verify the displayed icon. If publishing
-a plugin package, use `apps/web/commandcore-icon.png` for its `logo` and
+a plugin package, use the current-octopus raster icon `apps/web/commandcore-icon.png` for its `logo` and
 `composerIcon` metadata or upload it through the developer dashboard.
 
 Use one daily connection to `/mcp/core` where the daily tool surface suffices.

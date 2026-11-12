@@ -23,6 +23,7 @@ def web_asset(name: str) -> Path:
         "browser-console.css",
         "commandcore-logo.webp",
         "commandcore-icon.png",
+        "commandcore-mark.svg",
         "commandcore-wordmark.png",
     }:
         raise ValueError("unknown web asset")
@@ -45,6 +46,7 @@ def web_page(path: Path) -> str:
         "panel.js",
         "commandcore-logo.webp",
         "commandcore-icon.png",
+        "commandcore-mark.svg",
         "commandcore-wordmark.png",
         "onboarding.css",
         "onboarding.js",
