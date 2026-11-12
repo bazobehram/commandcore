@@ -590,6 +590,7 @@ async def panel_styles(request: Request) -> Response:
     )
 
 
+@app.get("/commandcore-mark.svg")
 @app.get("/commandcore-logo.webp")
 @app.get("/commandcore-icon.png")
 @app.get("/commandcore-wordmark.png")
@@ -597,7 +598,11 @@ async def commandcore_logo(request: Request) -> Response:
     path = web_asset(request.url.path.lstrip("/"))
     return Response(
         path.read_bytes(),
-        media_type="image/png" if path.suffix == ".png" else "image/webp",
+        media_type={
+            ".svg": "image/svg+xml",
+            ".png": "image/png",
+            ".webp": "image/webp",
+        }[path.suffix],
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
