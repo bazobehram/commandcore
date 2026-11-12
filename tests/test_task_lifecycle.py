@@ -445,7 +445,7 @@ async def main():
     )
     assert len(tools.live_activity.events) == count
     h.tasks.begin_call = original_begin
-    # Streaming errors also stay data-only.
+    # Streaming errors carry the same scoped receipt as successful calls.
     tools.failure = "raise"
     stream = h._stream_call(
         p, "fs.write", {}, 99, False, "progress", host_session="chat-A"
@@ -459,11 +459,11 @@ async def main():
         if x.startswith("data: ")
     ]
     error = next(x["result"] for x in messages if x.get("id") == 99)
-    assert error["isError"] and not error.get("_meta", {}).get("ui", {}).get(
-        "resourceUri"
-    )
+    assert error["isError"]
+    assert error.get("_meta", {}).get("ui", {}).get("resourceUri") == m.RECEIPT_UI_URI
+    assert error["_meta"]["commandcore/receipt"]["status"] == "error"
     print(
-        "PASS task ownership, foreign viewer rejection, durable boundaries, restart recovery, concurrent starts, 20 data-only calls, errors, scope limits, legacy views, streaming"
+        "PASS task ownership, foreign viewer rejection, durable boundaries, restart recovery, concurrent starts, 20 accounted calls, error receipts, scope limits, legacy views, streaming"
     )
 
 
