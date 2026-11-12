@@ -1,5 +1,8 @@
 # CommandCore branding
 
+The current public-site identity is `octopus-head.svg` in this directory. Prefer this canonical SVG for README and documentation. Older PNG/WebP assets are retained for compatibility with installed clients until their references are migrated and tested.
+
+
 The supplied PNG artwork is preserved without redrawing or recoloring:
 
 - `../../apps/web/commandcore-icon.png`: square symbol for client icons and favicons.
