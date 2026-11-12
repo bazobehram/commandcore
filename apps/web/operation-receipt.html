@@ -148,16 +148,16 @@ window.addEventListener("message",e=>{
 });
 accept(window.openai?.toolResponseMetadata);
 accept(window.openai?.toolOutput);
-if(!shown){
- window.parent.postMessage({
-  jsonrpc:"2.0",id:bridgeInit,method:"ui/initialize",
-  params:{
-   protocolVersion:"2026-01-26",
-   appInfo:{name:"CommandCore Operation Receipt",version:"2.0.0"},
-   appCapabilities:{availableDisplayModes:["inline"]}
-  }
- },"*");
-}
+// Always initialize, even if legacy ChatGPT globals already contain the
+// result. Otherwise the host waits forever for the iframe ready signal.
+window.parent.postMessage({
+ jsonrpc:"2.0",id:bridgeInit,method:"ui/initialize",
+ params:{
+  protocolVersion:"2026-01-26",
+  appInfo:{name:"CommandCore Operation Receipt",version:"3.0.0"},
+  appCapabilities:{}
+ }
+},"*");
 setTimeout(()=>{if(!shown)text("description","Operation receipt not delivered by host. No device request was repeated.")},3500);
 })();
 </script>

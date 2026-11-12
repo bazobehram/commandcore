@@ -46,7 +46,8 @@ COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
 TASK_UI_URI = "ui://commandcore/task-0.12.0-b18.html"
 RECEIPT_V1_URI = "ui://commandcore/operation-receipt-v1-20261112.html"
-RECEIPT_UI_URI = "ui://commandcore/operation-receipt-v2-20261112.html"
+RECEIPT_V2_URI = "ui://commandcore/operation-receipt-v2-20261112.html"
+RECEIPT_UI_URI = "ui://commandcore/operation-receipt-v3-20261112.html"
 TASK_UI_URIS = {
     "ui://commandcore/task-0.12.0-b17.html",
     "ui://commandcore/task-0.12.0-b16.html",
@@ -656,6 +657,16 @@ class MCPHandler:
                     "Previous operation receipt",
                 ),
             )
+        if any(tool["name"] in RECEIPT_TOOLS for tool in self.definitions):
+            self.ui_resources.setdefault(
+                RECEIPT_V2_URI,
+                (
+                    RECEIPT_V2_URI,
+                    COMMANDCORE_UI_MIME,
+                    "operation-receipt-v2.html",
+                    "Previous operation receipt v2",
+                ),
+            )
         self.browser_widget_available = any(
             tool["name"] == "browser.watch" for tool in self.definitions
         )
@@ -815,7 +826,8 @@ class MCPHandler:
                                     "openai/widgetMinFrameHeight": 1,
                                     "openai/widgetHeightHint": 92,
                                 }
-                                if uri in {RECEIPT_UI_URI, RECEIPT_V1_URI}
+                                if uri
+                                in {RECEIPT_UI_URI, RECEIPT_V1_URI, RECEIPT_V2_URI}
                                 else {}
                             ),
                             "ui": {
@@ -859,7 +871,8 @@ class MCPHandler:
                                     "openai/widgetMinFrameHeight": 1,
                                     "openai/widgetHeightHint": 92,
                                 }
-                                if uri in {RECEIPT_UI_URI, RECEIPT_V1_URI}
+                                if uri
+                                in {RECEIPT_UI_URI, RECEIPT_V1_URI, RECEIPT_V2_URI}
                                 else {}
                             ),
                             "ui": {
@@ -869,7 +882,8 @@ class MCPHandler:
                             "openai/ui": {
                                 "availableDisplayModes": ["inline"]
                                 if uri in TASK_UI_URIS
-                                or uri in {RECEIPT_UI_URI, RECEIPT_V1_URI}
+                                or uri
+                                in {RECEIPT_UI_URI, RECEIPT_V1_URI, RECEIPT_V2_URI}
                                 else ["inline", "fullscreen"]
                             },
                         },

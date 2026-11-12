@@ -116,6 +116,7 @@ class ReceiptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ui/initialize", c["text"])
         self.assertIn("ui/notifications/initialized", c["text"])
         self.assertIn(m.RECEIPT_V1_URI, self.h.ui_resources)
+        self.assertIn(m.RECEIPT_V2_URI, self.h.ui_resources)
 
     async def test_list_receipt_and_no_output_duplication(self):
         self.h._call_tools = AsyncMock(return_value=self.payload)

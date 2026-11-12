@@ -19,6 +19,7 @@ def web_asset(name: str) -> Path:
         "browser-widget.html",
         "operation-receipt.html",
         "operation-receipt-v1.html",
+        "operation-receipt-v2.html",
         "activity-widget.html",
         "commandcore-widget.html",
         "browser-console.js",
