@@ -453,9 +453,9 @@ class MCPHandler:
         }
         self.definitions = []
         self.ui_resources = {}
-        # Only renderer tools create a widget. Device/Browser calls update one
-        # conversation-owned task, so multi-step work cannot queue one iframe
-        # per command. Historical per-operation resource URIs remain readable.
+        # Explicit user-facing tool calls get small, read-only receipts; the
+        # specialized Browser, Activity and task viewers retain their own UIs.
+        # High-frequency polling stays data-only to avoid mounting extra cards.
         self.ui_specs["commandcore.watch"] = (
             TASK_UI_URI,
             COMMANDCORE_UI_MIME,

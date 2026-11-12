@@ -143,11 +143,17 @@ async def main():
     h = m.MCPHandler(tools, Metrics(), "test")
     defs = {x["name"]: x for x in h.definitions}
     for name in m.OPERATION_TOOLS:
-        if name in defs:
-            assert not defs[name].get("_meta", {}).get("ui", {}).get("resourceUri"), (
-                name
-            )
-            assert not defs[name].get("_meta", {}).get("openai/outputTemplate"), name
+        if name not in defs:
+            continue
+        meta = defs[name].get("_meta", {})
+        if name in m.RECEIPT_TOOLS:
+            # Explicit calls receive their own small read-only receipt.
+            assert meta.get("ui", {}).get("resourceUri") == m.RECEIPT_UI_URI, name
+            assert meta.get("openai/outputTemplate") == m.RECEIPT_UI_URI, name
+        else:
+            # Polling and specialized viewer tools must not mount extra cards.
+            assert not meta.get("ui", {}).get("resourceUri"), name
+            assert not meta.get("openai/outputTemplate"), name
     assert defs["commandcore.watch"]["_meta"]["ui"]["resourceUri"] == m.TASK_UI_URI
     assert (
         defs["commandcore.workspace"]["_meta"]["ui"]["resourceUri"]

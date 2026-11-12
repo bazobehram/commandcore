@@ -1,11 +1,9 @@
-import asyncio
 import importlib
 import json
 import types
 import unittest
 from unittest.mock import AsyncMock
 
-import commandcore_server
 m=importlib.import_module("commandcore_server.mcp")
 names=["devices.list","devices.select","devices.info","system.info","system.metrics","fs.list",
        "fs.read","fs.write","git.status","process.start","docker.ps","browser.open","browser.watch",
@@ -24,7 +22,7 @@ class Request:
         return {"jsonrpc":"2.0","id":52,"method":self.method,"params":self.params}
 class ReceiptTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.payload={"devices":[{"display_name":"homeserver","status":"online","platform":"Linux","public_key_b64":"SECRET"}]}
+        self.payload={"devices":[{"display_name":"test-node","status":"online","platform":"Linux","public_key_b64":"SECRET"}]}
         self.tool=types.SimpleNamespace(live_activity=types.SimpleNamespace(issue_viewer=lambda *args:{"session_available":False}))
         self.h=m.MCPHandler(self.tool,types.SimpleNamespace(inc=lambda *a:None),"smoke",definitions=defs)
         self.h._call_tools=AsyncMock(return_value=self.payload)
@@ -57,11 +55,11 @@ class ReceiptTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("SECRET",json.dumps(body["_meta"]))
         self.assertIn("SECRET",json.dumps(body["structuredContent"]["devices"]))  # model retains original authorized payload
     async def test_metrics_receipt_and_exact_caller(self):
-        self.h._call_tools=AsyncMock(return_value={"result":{"cpu_percent":11.3,"memory":{"percent":22.1}},"activity_step":{"device":"homeserver","duration_ms":13}})
+        self.h._call_tools=AsyncMock(return_value={"result":{"cpu_percent":11.3,"memory":{"percent":22.1}},"activity_step":{"device":"test-node","duration_ms":13}})
         r=await self.h.handle(Request("tools/call",{"name":"system.metrics","arguments":{"selection_id":"sensitive-reference"}}),self.p)
         b=json.loads(r.body)["result"]
         receipt=b["structuredContent"]["_ui_receipt"]
-        self.assertEqual(receipt["device"],"homeserver")
+        self.assertEqual(receipt["device"],"test-node")
         self.assertNotIn("sensitive-reference",json.dumps(receipt))
         self.assertEqual(b["_meta"]["ui"]["resourceUri"],m.RECEIPT_UI_URI)
     async def test_shell_preserves_own_ui(self):
@@ -94,8 +92,8 @@ class ReceiptTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("opaque",json.dumps(b["_meta"]))
 
     def test_device_target_from_safe_server_summary(self):
-        r=m._cc_receipt("system.metrics",{"status":"ok","summary":"system.metrics on homeserver: ok"})
-        self.assertEqual(r["device"],"homeserver")
+        r=m._cc_receipt("system.metrics",{"status":"ok","summary":"system.metrics on test-node: ok"})
+        self.assertEqual(r["device"],"test-node")
         bad=m._cc_receipt("system.metrics",{"status":"ok","summary":"system.metrics on a/b\\secret: ok"})
         self.assertEqual(bad["device"],"")
 
