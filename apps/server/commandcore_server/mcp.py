@@ -36,7 +36,7 @@ from .mcp_task_ledger import UITaskLedger
 # CommandCore plugin. Always retain the original v1 URI for old conversations,
 # but advertise versioned resources to avoid UI-template cache collisions.
 WORKSPACE_UI_URI = "ui://commandcore/workspace-0.12.0-b1.html"
-BROWSER_WIDGET_URI = WORKSPACE_UI_URI
+BROWSER_WIDGET_URI = "ui://commandcore/browser-live-lite-v26-20261112.html"
 BROWSER_WIDGET_MIME = "text/html;profile=mcp-app"
 ACTIVITY_UI_URI = WORKSPACE_UI_URI
 ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
@@ -409,7 +409,7 @@ class MCPHandler:
             "browser.watch": (
                 BROWSER_WIDGET_URI,
                 BROWSER_WIDGET_MIME,
-                "commandcore-widget.html",
+                "browser-live-lite.html",
                 "CommandCore Live Browser",
             ),
             "activity.watch": (
