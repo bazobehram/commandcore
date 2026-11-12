@@ -24,6 +24,21 @@ class ShellPreviewTests(unittest.TestCase):
                 p = shell_receipt._cc_safe_shell_display({"command": cmd})
                 self.assertEqual(p, {"command": cmd, "visibility": "visible"})
 
+    def test_innocuous_assignments_stay_visible(self):
+        for command in (
+            "echo foo=bar",
+            "git -c color.ui=false status",
+            "python3 -c 'print(loaded_ui=True)'",
+            "docker inspect --format 'status=healthy' container",
+        ):
+            with self.subTest(command=command):
+                preview = shell_receipt._cc_safe_shell_display({"command": command})
+                self.assertEqual(preview["visibility"], "visible")
+                self.assertEqual(preview["command"], command)
+                card = self.card(command, "ordinary output")
+                self.assertEqual(card["command_visibility"], "visible")
+                self.assertEqual(card["stdout"], "ordinary output")
+
     def test_known_secret_values_are_masked(self):
         for cmd in (
             "export API_KEY=example_fake_value",

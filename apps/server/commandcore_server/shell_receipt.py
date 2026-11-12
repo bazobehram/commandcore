@@ -47,22 +47,24 @@ _SHELL_CARD_SECRET_EXPANSION = re.compile(
 
 
 def _cc_mask_terminal_secrets(text: str) -> tuple[str, bool]:
-    """Best-effort mask credential syntax. Unknown secrets cannot be guaranteed."""
+    """Mask recognized secret forms; do not count unchanged assignments."""
     masked = text
-    masked, a = _SHELL_CARD_BEARER.subn("Bearer [REDACTED]", masked)
-    masked, b = _SHELL_CARD_SECRET_FLAG.subn(
+    masked, bearer_hits = _SHELL_CARD_BEARER.subn("Bearer [REDACTED]", masked)
+    masked, flag_hits = _SHELL_CARD_SECRET_FLAG.subn(
         lambda m: m.group("flag") + m.group("sep") + "[REDACTED]", masked
     )
-    masked, c = _SHELL_CARD_SECRET_ASSIGNMENT.subn(
-        lambda m: (
-            m.group("key") + "=[REDACTED]"
-            if _SHELL_CARD_SENSITIVE_KEY_NAME.search(m.group("key"))
-            else m.group(0)
-        ),
-        masked,
-    )
-    masked, d = _SHELL_CARD_SECRET_PREFIX.subn("[REDACTED]", masked)
-    return masked, bool(a or b or c or d)
+    assignment_redacted = False
+
+    def replace_assignment(match):
+        nonlocal assignment_redacted
+        if not _SHELL_CARD_SENSITIVE_KEY_NAME.search(match.group("key")):
+            return match.group(0)
+        assignment_redacted = True
+        return match.group("key") + "=[REDACTED]"
+
+    masked = _SHELL_CARD_SECRET_ASSIGNMENT.sub(replace_assignment, masked)
+    masked, prefix_hits = _SHELL_CARD_SECRET_PREFIX.subn("[REDACTED]", masked)
+    return masked, bool(bearer_hits or flag_hits or assignment_redacted or prefix_hits)
 
 
 def _cc_safe_shell_display(args):
