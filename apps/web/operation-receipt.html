@@ -128,13 +128,37 @@ window.addEventListener("openai:set_globals",e=>{
  const g=e.detail?.globals||{};
  accept(g.toolResponseMetadata);accept(g.toolOutput);
 });
+// MCP Apps protocol: initialize the iframe before expecting the tool result.
+// ChatGPT native globals remain a compatible, safe read-only fallback.
+let bridgeInit="cc-operation-receipt-v2-init";
+let didInitialize=false;
 window.addEventListener("message",e=>{
  if(e.source!==window.parent)return;
- if(e.data?.method==="ui/notifications/tool-result")accept(e.data.params);
+ const message=e.data;
+ if(!message||typeof message!=="object")return;
+ if(message.jsonrpc==="2.0"&&message.id===bridgeInit&&!didInitialize){
+  didInitialize=true;
+  if(!message.error){
+   window.parent.postMessage(
+    {jsonrpc:"2.0",method:"ui/notifications/initialized"},"*"
+   );
+  }
+ }
+ if(message.method==="ui/notifications/tool-result")accept(message.params);
 });
 accept(window.openai?.toolResponseMetadata);
 accept(window.openai?.toolOutput);
-setTimeout(()=>{if(!shown)text("description","Operation card metadata unavailable. CommandCore did not rerun this request.")},3500);
+if(!shown){
+ window.parent.postMessage({
+  jsonrpc:"2.0",id:bridgeInit,method:"ui/initialize",
+  params:{
+   protocolVersion:"2026-01-26",
+   appInfo:{name:"CommandCore Operation Receipt",version:"2.0.0"},
+   appCapabilities:{availableDisplayModes:["inline"]}
+  }
+ },"*");
+}
+setTimeout(()=>{if(!shown)text("description","Operation receipt not delivered by host. No device request was repeated.")},3500);
 })();
 </script>
 </body></html>

@@ -45,7 +45,8 @@ COMMANDCORE_UI_URI = WORKSPACE_UI_URI
 COMMANDCORE_UI_MIME = "text/html;profile=mcp-app"
 OPERATION_UI_URI = "ui://commandcore/operation-0.12.0-b1.html"
 TASK_UI_URI = "ui://commandcore/task-0.12.0-b18.html"
-RECEIPT_UI_URI = "ui://commandcore/operation-receipt-v1-20261112.html"
+RECEIPT_V1_URI = "ui://commandcore/operation-receipt-v1-20261112.html"
+RECEIPT_UI_URI = "ui://commandcore/operation-receipt-v2-20261112.html"
 TASK_UI_URIS = {
     "ui://commandcore/task-0.12.0-b17.html",
     "ui://commandcore/task-0.12.0-b16.html",
@@ -643,6 +644,18 @@ class MCPHandler:
                 }[asset]
                 if any(tool["name"] == current_tool for tool in self.definitions):
                     self.ui_resources.setdefault(uri, (uri, mime, asset, title))
+        # The former receipt URL is immutable and remains readable for
+        # historical tool calls; do not reload or re-run the operation.
+        if any(tool["name"] in RECEIPT_TOOLS for tool in self.definitions):
+            self.ui_resources.setdefault(
+                RECEIPT_V1_URI,
+                (
+                    RECEIPT_V1_URI,
+                    COMMANDCORE_UI_MIME,
+                    "operation-receipt-v1.html",
+                    "Previous operation receipt",
+                ),
+            )
         self.browser_widget_available = any(
             tool["name"] == "browser.watch" for tool in self.definitions
         )
@@ -802,7 +815,7 @@ class MCPHandler:
                                     "openai/widgetMinFrameHeight": 1,
                                     "openai/widgetHeightHint": 92,
                                 }
-                                if uri == RECEIPT_UI_URI
+                                if uri in {RECEIPT_UI_URI, RECEIPT_V1_URI}
                                 else {}
                             ),
                             "ui": {
@@ -846,7 +859,7 @@ class MCPHandler:
                                     "openai/widgetMinFrameHeight": 1,
                                     "openai/widgetHeightHint": 92,
                                 }
-                                if uri == RECEIPT_UI_URI
+                                if uri in {RECEIPT_UI_URI, RECEIPT_V1_URI}
                                 else {}
                             ),
                             "ui": {
@@ -855,7 +868,8 @@ class MCPHandler:
                             },
                             "openai/ui": {
                                 "availableDisplayModes": ["inline"]
-                                if uri in TASK_UI_URIS or uri == RECEIPT_UI_URI
+                                if uri in TASK_UI_URIS
+                                or uri in {RECEIPT_UI_URI, RECEIPT_V1_URI}
                                 else ["inline", "fullscreen"]
                             },
                         },
