@@ -37,7 +37,9 @@ from .mcp_task_ledger import UITaskLedger
 # CommandCore plugin. Always retain the original v1 URI for old conversations,
 # but advertise versioned resources to avoid UI-template cache collisions.
 WORKSPACE_UI_URI = "ui://commandcore/workspace-0.12.0-b1.html"
-BROWSER_WIDGET_URI = WORKSPACE_UI_URI
+BROWSER_WIDGET_V26_URI = "ui://commandcore/browser-live-lite-v26-20261112.html"
+BROWSER_WIDGET_V27_URI = "ui://commandcore/browser-live-interactive-v27-20261113.html"
+BROWSER_WIDGET_URI = "ui://commandcore/browser-live-interactive-v28-20261113.html"
 BROWSER_WIDGET_MIME = "text/html;profile=mcp-app"
 ACTIVITY_UI_URI = WORKSPACE_UI_URI
 ACTIVITY_UI_MIME = "text/html;profile=mcp-app"
@@ -410,8 +412,8 @@ class MCPHandler:
             "browser.watch": (
                 BROWSER_WIDGET_URI,
                 BROWSER_WIDGET_MIME,
-                "commandcore-widget.html",
-                "CommandCore Live Browser",
+                "browser-live-v28.html",
+                "CommandCore Interactive Browser",
             ),
             "activity.watch": (
                 ACTIVITY_UI_URI,
@@ -573,6 +575,23 @@ class MCPHandler:
                 entry["_meta"] = meta
                 self.ui_resources[uri] = spec
             self.definitions.append(entry)
+        if "browser.watch" in {x["name"] for x in self.definitions}:
+            # Keep immutable historical Browser widget URLs readable without
+            # redirecting old ChatGPT cards to different client code.
+            for previous_uri, previous_asset in (
+                (BROWSER_WIDGET_V26_URI, "browser-live-v26.html"),
+                (BROWSER_WIDGET_V27_URI, "browser-live-v27.html"),
+                (WORKSPACE_UI_URI, "commandcore-widget.html"),
+            ):
+                self.ui_resources.setdefault(
+                    previous_uri,
+                    (
+                        previous_uri,
+                        BROWSER_WIDGET_MIME,
+                        previous_asset,
+                        "Previous CommandCore Browser",
+                    ),
+                )
         if "shell.exec" in {x["name"] for x in self.definitions}:
             old_shell_uri = "ui://commandcore/shell-compact-v25-20261112.html"
             self.ui_resources.setdefault(
