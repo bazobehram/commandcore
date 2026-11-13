@@ -1,10 +1,20 @@
 (() => {
   "use strict";
-  const token = location.pathname.split("/").pop();
+  const token = location.pathname.split("/").filter(Boolean).pop();
   const base = "/browser/console/" + encodeURIComponent(token);
   const status = document.getElementById("status");
   const image = document.getElementById("viewport");
   const controls = [...document.querySelectorAll("button, input")];
+  // Do not offer remote input until a real authenticated frame is displayed.
+  const remoteIds = ["scroll-up", "scroll-down", "send-text", "enter",
+    "tab", "escape", "text", "reload-page"];
+  const remoteAvailable = available => {
+    for (const id of remoteIds) {
+      const element = document.getElementById(id);
+      if (element) element.disabled = !available;
+    }
+  };
+  remoteAvailable(false);
   const empty = document.getElementById("viewport-empty");
   const live = document.getElementById("connection-status");
   const updated = document.getElementById("frame-updated");
@@ -57,6 +67,7 @@
   const setBusy = (value) => {
     busy = value;
     controls.forEach((control) => { control.disabled = value; });
+    if (!value) remoteAvailable(!image.hidden && Boolean(image.naturalWidth));
   };
   async function boundedFetch(path, options, timeoutMs) {
     const abort = new AbortController();
@@ -68,13 +79,24 @@
     }
   }
   async function drawScreenshot(response) {
-    if (response.status === 404) {
+    if (response.status === 404 || response.status === 403) {
       humanFinished = true;
       stopStream();
-      setStatus("This private handoff expired. Return to ChatGPT for a new Take control link.", true);
-      throw new Error("Private handoff expired");
+      remoteAvailable(false);
+      const reason = response.status === 404 ? "expired or moved to another conversation"
+        : "is no longer authorized";
+      setStatus("This private browser session " + reason +
+        ". Return to ChatGPT and request a new private control session.", true);
+      throw new Error("Private session unavailable (" + response.status + ")");
     }
-    if (!response.ok) throw new Error("Browser session expired or unavailable");
+    if (response.status === 409) {
+      remoteAvailable(false);
+      throw new Error("Remote Chromium has no live frame. Reopen the Browser from ChatGPT and request private control again.");
+    }
+    if (!response.ok) {
+      remoteAvailable(false);
+      throw new Error("Browser frame failed (" + response.status + ")");
+    }
     if (address) {
       address.textContent =
         response.headers.get("X-CommandCore-Page-Address")
@@ -106,6 +128,7 @@
       throw new Error("Browser screenshot could not be displayed");
     }
     image.hidden = false;
+    remoteAvailable(true);
     if (empty) empty.hidden = true;
     if (live) live.textContent = "Live connection";
     if (updated) updated.textContent = "Frame received " + new Date().toLocaleTimeString();
@@ -147,6 +170,7 @@
         if (!stream) return;
         if (address && item.address) address.textContent = item.address;
         image.hidden = false;
+        remoteAvailable(true);
         if (empty) empty.hidden = true;
         if (streamConnectTimeout !== null) clearTimeout(streamConnectTimeout);
         streamConnectTimeout = null;
@@ -534,6 +558,7 @@
   reloadButton.textContent="↻ Reload website (retry verification)";
   document.getElementById("refresh").after(reloadButton);
   controls.push(reloadButton);
+  remoteAvailable(!image.hidden && Boolean(image.naturalWidth));
   reloadButton.addEventListener("click",()=>{
     clearKeyboard();
     setAction("Reloading the actual website with fresh resources (not just the screenshot)…");
@@ -556,6 +581,12 @@
   if(inputHint)inputHint.textContent="Click view to type · Shift+Tab to leave · Wheel to scroll";
   document.getElementById("resume").addEventListener("click",clearKeyboard);
 
-  startStream();
-  if (!stream) refresh().catch(errorStatus);
+  // SSE object creation does not prove it delivered a PNG. Show the
+  // initial authenticated screenshot first; stream subsequent frames.
+  refresh(true).then(() => {
+    if (!humanFinished) startStream();
+  }).catch(error => {
+    errorStatus(error);
+    if (!humanFinished) startStream();
+  });
 })();

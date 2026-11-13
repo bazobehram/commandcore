@@ -882,7 +882,7 @@ TOOL_DEFINITIONS.extend(
         {
             "name": "browser.watch",
             "title": "Show browser in chat",
-            "description": "After browser.open, show the remote Chromium screen INSIDE this ChatGPT conversation, with live screenshots, pointer and an expandable AI action trail (MCP Apps). The user may refresh or take private authenticated human control for sign-in and approval. This is not an external dashboard. The viewer itself is read-only.",
+            "description": "After browser.open, show the remote Chromium screen INSIDE this ChatGPT conversation, with live screenshots, pointer and an expandable AI action trail (MCP Apps). The user may refresh or take private authenticated human control for sign-in and approval. This is not an external dashboard. The user may click, scroll and enter non-sensitive text on public pages through explicit controls; private sign-in and secrets require authenticated human handoff.",
             "inputSchema": _obj({}),
         },
         {

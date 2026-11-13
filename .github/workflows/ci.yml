@@ -87,6 +87,8 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: npm ci --prefix tests/ui
       - run: npx --prefix tests/ui playwright install --with-deps chromium
+      - name: Browser in-chat host bridge and private console first-frame regressions
+        run: node tests/test_browser_embed_v28.cjs && node tests/test_browser_console_first_frame.cjs
       - name: Per-operation shell card loading and redaction regressions
         run: node tests/test_shell_widget_v25.cjs
       - name: V26 shell preview explanations and long-script regressions

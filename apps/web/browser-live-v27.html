@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommandCore Browser</title>
+<style>
+:root{color-scheme:light dark;font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--color-background-primary,#fff);color:var(--color-text-primary,#202124);min-width:230px}
+header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--color-border-primary,#dedee2)}
+header strong{font-size:14px}header small{margin-left:auto;color:var(--color-text-secondary,#6a717b)}
+main{padding:12px}
+#location{color:var(--color-text-secondary,#626b76);margin:0 0 10px;overflow-wrap:anywhere;font-size:12px}
+#stage{position:relative;min-height:160px;display:grid;place-items:center;background:var(--color-background-secondary,#f5f5f7);border-radius:10px;overflow:hidden}
+#frame{width:100%;height:auto;max-height:64vh;object-fit:contain}
+#message{padding:26px;text-align:center;color:var(--color-text-secondary,#666)}
+#status{margin:10px 0;color:var(--color-text-secondary,#626b76);font-size:12px}
+#actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;padding:7px 10px;color:inherit;border:1px solid var(--color-border-primary,#c7cbd2);background:var(--color-background-secondary,#f5f5f7);border-radius:8px;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible{outline:2px solid #568de7;outline-offset:2px}
+#manual{margin-left:auto}
+#frame.inline-mode{cursor:crosshair;outline:2px solid #5e93de;outline-offset:-2px}
+#control-panel{margin-top:10px;padding:10px;border-radius:10px;border:1px solid var(--color-border-primary,#c7cbd2)}
+#control-panel p{margin:0 0 8px;font-size:11px}
+#control-buttons{display:flex;gap:7px;flex-wrap:wrap}
+#control-input{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+#typed{flex:1;min-width:100px;font:inherit;padding:8px;border:1px solid var(--color-border-primary,#c7cbd2);border-radius:7px;background:var(--color-background-primary,#fff);color:inherit}
+#control-status{font-size:11px;margin-top:7px;color:var(--color-text-secondary,#626b76)}
+
+#trail{padding:10px 2px 0;color:var(--color-text-secondary,#626b76);font-size:11px}
+#trail summary{cursor:pointer}
+#trail ol{margin:8px 0;padding-left:23px}
+footer{border-top:1px solid var(--color-border-primary,#dedee2);font-size:10px;color:var(--color-text-secondary,#777);padding:8px 14px}
+[hidden]{display:none!important}
+@media(prefers-color-scheme:dark){body{background:var(--color-background-primary,#151519);color:var(--color-text-primary,#eee)}#stage,button{background:var(--color-background-secondary,#232329)}}
+</style></head>
+<body>
+<header><strong>🐙 CommandCore Browser</strong><small id="connection" role="status">Starting…</small></header>
+<main>
+<p id="location">Waiting for verified browser session</p>
+<div id="stage"><img id="frame" alt="Live browser screenshot" hidden><div id="message">Connecting to Browser…</div></div>
+<p id="status" role="status">Live public-page preview. Click Control here for mouse and keyboard input; sign-ins require private handoff.</p>
+<div id="actions"><button id="refresh" type="button">Refresh</button><button id="autoplay" type="button" aria-pressed="true">Pause live view</button><button id="inline" type="button" aria-pressed="false" disabled>Control here</button><button id="manual" type="button" disabled>Take private control</button></div>
+<div id="control-panel" hidden>
+ <p><strong>Public-page control</strong> · Click the browser image, or use the buttons below. Do not enter passwords, MFA codes, or secrets here: use Take private control instead.</p>
+ <div id="control-buttons"><button id="up" type="button">Scroll ↑</button><button id="down" type="button">Scroll ↓</button><button id="tab" type="button">Tab</button><button id="enter" type="button">Enter</button><button id="escape" type="button">Esc</button></div>
+ <div id="control-input"><input id="typed" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Non-sensitive text only" aria-label="Text to type into public page"><button id="send" type="button">Type text</button></div>
+ <div id="control-status" role="status">Click the live image to interact with the public page.</div>
+</div>
+<details id="trail"><summary>Recent AI actions</summary><ol id="steps"></ol></details>
+</main>
+<footer>Owner-bound session · private handoff · no browser actions replayed</footer>
+<script>
+(() => {
+"use strict";
+const el=id=>document.getElementById(id);
+const ui={connection:el("connection"),location:el("location"),frame:el("frame"),message:el("message"),status:el("status"),refresh:el("refresh"),autoplay:el("autoplay"),manual:el("manual"),inline:el("inline"),panel:el("control-panel"),typed:el("typed"),send:el("send"),controlStatus:el("control-status"),steps:el("steps")};
+let ref="",session="",sequence=-1,busy=false,live=true,paused=false,epoch=0,lastPage="",lastFailure="",timer=null,launching=false;
+let pending=new Map(),rpcId=0,bridgePromise=null,inline=false,controlBusy=false;
+function text(node,value){node.textContent=String(value??"");}
+function setInline(enabled){
+ inline=Boolean(enabled&&!paused&&ref&&session&&!ui.frame.hidden);
+ ui.inline.setAttribute("aria-pressed",String(inline));
+ text(ui.inline,inline?"Stop controlling":"Control here");
+ ui.panel.hidden=!inline;
+ ui.frame.classList.toggle("inline-mode",inline);
+ if(!inline)ui.typed.value="";
+}
+function clear(message){setInline(false);ui.frame.hidden=true;ui.frame.removeAttribute("src");ui.message.hidden=false;text(ui.message,message);ui.manual.disabled=true;ui.inline.disabled=true}
+function unwrap(raw){
+ let v=raw||{};
+ for(let i=0;i<5;i++){
+  const next=v.call_tool_result||v.mcp_tool_result||(v.result?.structuredContent?v.result:null);
+  if(!next)break;v=next;
+ }
+ return {outer:v,data:v.structuredContent||v.result?.structuredContent||v};
+}
+function accept(raw){
+ const p=unwrap(raw).data;
+ if(p?.session_available===true&&typeof p.session_ref==="string"&&p.session_ref.length>=12&&p.session_ref.length<=128){
+  if(ref!==p.session_ref){ref=p.session_ref;sequence=-1;session="";epoch++;clear("Loading this conversation's Browser preview…");ui.connection.textContent="Connected"}
+  return true;
+ }
+ return false;
+}
+function rpc(method,params){
+ return new Promise((resolve,reject)=>{
+  const id="cc-browser-lite-"+(++rpcId);
+  const timeout=setTimeout(()=>{pending.delete(id);reject(Error("Host bridge unavailable"))},10000);
+  pending.set(id,{resolve,reject,timeout});
+  window.parent.postMessage({jsonrpc:"2.0",id,method,params},"*");
+ });
+}
+window.addEventListener("message",event=>{
+ if(event.source!==window.parent)return;
+ const msg=event.data;
+ if(!msg||typeof msg!=="object")return;
+ if(msg.jsonrpc==="2.0"&&pending.has(msg.id)){
+  const p=pending.get(msg.id);pending.delete(msg.id);clearTimeout(p.timeout);
+  if(msg.error)p.reject(Error("Host request failed"));else p.resolve(msg.result);
+ }
+ if(msg.method==="ui/notifications/tool-result"){accept(msg.params);schedule(0)}
+});
+window.addEventListener("openai:set_globals",event=>{
+ const globals=event?.detail?.globals||{};
+ accept(globals.toolResponseMetadata);
+ accept(globals.toolOutput);
+ schedule(0);
+});
+function nativeCall(){return typeof window.openai?.callTool==="function"}
+function ready(){
+ // Always initialize the MCP App, including when native callTool exists.
+ // Skipping the handshake made the ChatGPT iframe time out after 5 seconds.
+ if(!bridgePromise){
+  bridgePromise=rpc("ui/initialize",{
+   protocolVersion:"2026-01-26",
+   appInfo:{name:"CommandCore Browser",version:"0.27.0"},
+   appCapabilities:{availableDisplayModes:["inline","fullscreen"]}
+  }).then(()=>{
+   window.parent.postMessage({jsonrpc:"2.0",method:"ui/notifications/initialized"},"*");
+  }).catch(error=>{
+   if(!nativeCall())throw error;
+   // Native tool calls can still work if the legacy bridge is unavailable.
+   // The host is responsible for the iframe's initialization acceptance.
+  });
+ }
+ return nativeCall()?Promise.resolve():bridgePromise;
+}
+async function tool(name,args){
+ await ready();
+ const result=nativeCall()?await window.openai.callTool(name,args):await rpc("tools/call",{name,arguments:args});
+ const v=unwrap(result);
+ if(result?.isError||v.outer?.isError||v.data?.error)throw Error("Browser request failed");
+ return v;
+}
+async function ensureRef(){
+ if(ref)return true;
+ const result=await tool("commandcore.viewer",{});
+ accept(result.outer);accept(result.data);
+ return Boolean(ref);
+}
+function schedule(ms=2500){clearTimeout(timer);if(live&&!document.hidden)timer=setTimeout(refresh,ms)}
+function markError(error){
+ lastFailure=String(error?.message||"Browser connection unavailable").slice(0,120);
+ text(ui.connection,"Retrying");
+ text(ui.status,lastFailure+" · Refresh to retry");
+ if(!session)clear("Cannot connect to this conversation's Browser yet.");
+}
+function render(v){
+ const p=v.data;
+ if(!p||typeof p!=="object")throw Error("Invalid frame data");
+ if(typeof p.session_id==="string"&&p.session_id!==session){
+  session=p.session_id;sequence=-1;clear("Waiting for first frame…");
+ }
+ if(p.state==="awaiting_human"||p.state==="awaiting_human_control"){
+  paused=true;sequence=-1;ui.frame.hidden=true;ui.frame.removeAttribute("src");
+  ui.message.hidden=false;text(ui.message,"Private human control is active. The screen is hidden from ChatGPT.");
+  ui.manual.disabled=false;text(ui.manual,p.can_renew?"Renew private control":"Open private control");
+  text(ui.location,"Private session · page hidden");
+  text(ui.status,"AI remains paused until you explicitly resume in CommandCore.");
+  text(ui.connection,"Private control");
+  return;
+ }
+ paused=false;
+ text(ui.manual,"Take private control");ui.manual.disabled=false;
+ ui.inline.disabled=false;
+ if(typeof p.url==="string"&&p.url){
+  try{const u=new URL(p.url);if(u.protocol==="https:"&&!u.username&&!u.password){lastPage=u.origin+u.pathname.slice(0,160);text(ui.location,lastPage)}}catch(_){}
+ }
+ if(Number.isSafeInteger(p.sequence))sequence=p.sequence;
+ const content=v.outer.content||[];
+ const image=content.find(x=>x&&x.type==="image"&&x.mimeType==="image/png"&&typeof x.data==="string"&&x.data.length>64&&/^[A-Za-z0-9+/=]+$/.test(x.data));
+ if(image){ui.frame.src="data:image/png;base64,"+image.data;ui.frame.hidden=false;ui.message.hidden=true}
+ else if(ui.frame.hidden){ui.message.hidden=false;text(ui.message,"Browser connected; waiting for a live frame…")}
+ ui.inline.disabled=ui.frame.hidden||paused;
+ text(ui.status,p.busy?"AI action in progress":"Read-only live preview · no private keystrokes are shared");
+ text(ui.connection,"Live");
+ if(Array.isArray(p.recent_actions)){
+  ui.steps.replaceChildren();
+  for(const row of p.recent_actions.slice(-12)){
+   const li=document.createElement("li");
+   const label=typeof row.action==="string"?row.action:typeof row.tool==="string"?row.tool:"Browser action";
+   text(li,label.slice(0,100));ui.steps.append(li);
+  }
+ }
+}
+async function refresh(){
+ if(busy||launching||document.hidden)return;
+ busy=true;ui.refresh.disabled=true;
+ try{
+  await ready();
+  if(!await ensureRef()){text(ui.connection,"Waiting");clear("No verified conversation viewer. Ask ChatGPT to reopen Browser.");return}
+  // A new viewer ref legitimately advances epoch. Snapshot only after the
+  // viewer is resolved, so the first frame is not mistaken for a stale call.
+  const current=epoch;
+  const v=await tool("browser.frame",{session_ref:ref,after_sequence:sequence});
+  if(current!==epoch)return;
+  render(v);lastFailure="";
+ }catch(error){
+  if(current===epoch)markError(error);
+ }finally{
+  busy=false;ui.refresh.disabled=false;
+  schedule(lastFailure?5000:2500);
+ }
+}
+async function openLink(url){
+ if(typeof url!=="string")throw Error("Private link unavailable");
+ const u=new URL(url);
+ if(u.protocol!=="https:"||u.username||u.password)throw Error("Unsafe private control URL");
+ if(typeof window.openai?.openExternal==="function")return window.openai.openExternal({href:u.href,redirectUrl:false});
+ await ready();return rpc("ui/open-link",{url:u.href});
+}
+async function takeControl(){
+ if(launching||!ref||!session)return;
+ setInline(false);
+ launching=true;ui.manual.disabled=true;
+ try{
+  const v=await tool("browser.handoff",{session_ref:ref,reason:"login_or_approval"});
+  const url=v.data.sign_in_url||v.data.handoff_url;
+  await openLink(url);
+  paused=true;sequence=-1;clear("AI is paused. Continue in the authenticated private CommandCore page.");
+  text(ui.connection,"Private control");
+ }catch(error){markError(error)}
+ finally{launching=false;ui.manual.disabled=false;schedule(0)}
+}
+async function controlAction(name,args){
+ if(!inline||controlBusy||paused||!ref||!session||ui.frame.hidden)return false;
+ controlBusy=true;ui.inline.disabled=true;text(ui.controlStatus,"Sending "+name+"…");
+ const expected=epoch,ownedSession=session;
+ try{
+  await tool(name,args);
+  if(expected!==epoch||ownedSession!==session)return false;
+  sequence=-1;
+  text(ui.controlStatus,name+" completed. Refreshing view…");
+  if(!busy)await refresh();else schedule(250);
+  return true;
+ }catch(error){
+  text(ui.controlStatus,"Action not confirmed. Inspect the latest frame before trying again.");
+  markError(error);
+  return false;
+ }finally{
+  controlBusy=false;ui.inline.disabled=paused||ui.frame.hidden;
+ }
+}
+function imageCoordinates(event){
+ if(ui.frame.hidden||!ui.frame.naturalWidth||!ui.frame.naturalHeight)return null;
+ const r=ui.frame.getBoundingClientRect();
+ if(!r.width||!r.height)return null;
+ const ratio=Math.min(r.width/ui.frame.naturalWidth,r.height/ui.frame.naturalHeight);
+ const w=ui.frame.naturalWidth*ratio,h=ui.frame.naturalHeight*ratio;
+ const x=event.clientX-r.left-(r.width-w)/2,y=event.clientY-r.top-(r.height-h)/2;
+ if(x<0||x>w||y<0||y>h)return null;
+ return {x:Math.max(0,Math.min(1280,Math.round(x/ratio))),
+         y:Math.max(0,Math.min(800,Math.round(y/ratio)))};
+}
+ui.inline.addEventListener("click",()=>{
+ if(inline){setInline(false);return}
+ if(!paused&&!ui.frame.hidden&&ref&&session)setInline(true);
+});
+ui.frame.addEventListener("click",event=>{
+ if(!inline)return;
+ const pos=imageCoordinates(event);
+ if(pos)controlAction("browser.click",pos);
+});
+for(const [id,name,args] of [
+ ["up","browser.scroll",{delta_y:-550}],
+ ["down","browser.scroll",{delta_y:550}],
+ ["tab","browser.keypress",{key:"Tab"}],
+ ["enter","browser.keypress",{key:"Enter"}],
+ ["escape","browser.keypress",{key:"Escape"}]
+]){
+ el(id).addEventListener("click",()=>controlAction(name,args));
+}
+ui.send.addEventListener("click",()=>{
+ const value=ui.typed.value;
+ if(!inline||!value||value.length>160)return;
+ ui.typed.value="";
+ controlAction("browser.type",{text:value});
+});
+ui.refresh.addEventListener("click",()=>{if(busy)return;refresh()});
+ui.autoplay.addEventListener("click",()=>{
+ live=!live;ui.autoplay.setAttribute("aria-pressed",String(live));
+ text(ui.autoplay,live?"Pause live view":"Resume live view");
+ if(live)schedule(0);else clearTimeout(timer)
+});
+ui.manual.addEventListener("click",takeControl);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)schedule(0);else clearTimeout(timer)});
+window.addEventListener("pagehide",()=>{clearTimeout(timer);epoch++});
+accept(window.openai?.toolResponseMetadata);
+accept(window.openai?.toolOutput);
+ready().then(()=>schedule(0)).catch(markError);
+})();
+</script></body></html>
