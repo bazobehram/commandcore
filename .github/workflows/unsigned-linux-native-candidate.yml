@@ -74,7 +74,7 @@ jobs:
           python scripts/package_unsigned_native_candidate.py verify \
             --output dist/unsigned-native-agent-candidate \
             --source-sha "$GITHUB_SHA"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: unsigned-linux-x86_64-agent-review-candidate
           path: dist/unsigned-native-agent-candidate/
