@@ -7,7 +7,7 @@ the caller must avoid sending sensitive arguments through ordinary tools.
 
 import re
 
-SHELL_UI_URI = "ui://commandcore/shell-compact-v25-20261112.html"
+SHELL_UI_URI = "ui://commandcore/shell-compact-v26-20261113.html"
 
 _SHELL_CARD_SENSITIVE_FILE = re.compile(
     r"(?i)(?:^|[/\s'\"=])(?:\.env(?:\.[A-Za-z0-9_-]+)?|"
@@ -15,12 +15,27 @@ _SHELL_CARD_SENSITIVE_FILE = re.compile(
     r"private[_-]?key(?:\.[A-Za-z0-9]+)?)(?=$|[\s/'\";\)])"
 )
 _SHELL_CARD_SENSITIVE_COMMAND = re.compile(
-    r"(?i)(?:^|[;&|\n]\s*)(?:env|printenv|set|export\s+-p)\b"
-    r"|(?:\b(?:curl|wget)\b[^\n]{0,160}(?:-H|--header)\s+)"
+    # Bare "set"/"env"/"printenv" prints environment or shell variables.
+    # "set -e", "set -euo pipefail" and "env node build" do not.
+    r"(?im)(?:^|[;&|\n])\s*(?:env|printenv|set)\s*(?=$|[;&|\n])"
+    r"|(?:^|[;&|\n])\s*export\s+-p\b"
     r"|(?:\b(?:ssh-add|gpg|pass|secret-tool)\b)"
-    r"|(?:\b(?:source|cat|head|tail|less|more)\b\s+[^\n]{0,120}"
-    r"(?:\.env|/\.ssh/|credential|private[_-]?key))"
+    r"|(?:\b(?:source|cat|head|tail|less|more|sed|grep|awk)\b"
+    r"\s+[^\n]{0,120}(?:\.env|/\.ssh/|credential|private[_-]?key))"
 )
+_SHELL_CARD_AUTH_HEADER = re.compile(
+    r"(?i)\b(?:curl|wget)\b[^\n]{0,160}(?:-H|--header)\s+"
+    r"['\"]?(?:(?:proxy-)?authorization|cookie|x-api-key)\s*:"
+)
+_SHELL_CARD_SAFE_HEREDOC_WRITE = re.compile(
+    r"(?s)^\s*cat\s*>\s*['\"]?"
+    r"(?P<path>/home/[^ \n'\"<>]*?/projects/[^\s'\"<>]+"
+    r"\.(?:html|css|js|jsx|ts|tsx|md|txt|py))['\"]?"
+    r"\s*<<\s*'(?P<marker>[A-Za-z][A-Za-z0-9_]*)'\s*\n"
+    r"(?P<body>.*?)\n(?P=marker)\s*$"
+)
+
+
 _SHELL_CARD_SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b(?P<key>[A-Za-z_][A-Za-z0-9_-]*)['\"]?\s*[:=]\s*"
     r"(?P<value>\"[^\"]*\"|'[^']*'|[^\s;,'\"]+)"
@@ -68,29 +83,87 @@ def _cc_mask_terminal_secrets(text: str) -> tuple[str, bool]:
 
 
 def _cc_safe_shell_display(args):
-    """Bounded UI-only preview; display normal commands without leaking known keys."""
-    if not isinstance(args, dict) or args.get("env"):
-        return {"command": "", "visibility": "withheld"}
+    """Provide a bounded command preview, never claiming text size is a secret."""
+    if not isinstance(args, dict):
+        return {"command": "", "visibility": "withheld", "reason": "no_arguments"}
     command = args.get("command")
-    if not isinstance(command, str) or not 1 <= len(command) <= 5000:
-        return {"command": "", "visibility": "withheld"}
+    if not isinstance(command, str) or not command:
+        return {"command": "", "visibility": "withheld", "reason": "no_command"}
+    if args.get("env"):
+        return {
+            "command": "",
+            "visibility": "withheld",
+            "reason": "environment_overrides",
+        }
     if any(ord(ch) < 32 and ch not in ("\n", "\t") for ch in command):
-        return {"command": "", "visibility": "withheld"}
-    if (
-        ("-----BEGIN " in command and "PRIVATE KEY-----" in command)
-        or _SHELL_CARD_SENSITIVE_FILE.search(command)
-        or _SHELL_CARD_SENSITIVE_COMMAND.search(command)
-        or _SHELL_CARD_SECRET_EXPANSION.search(command)
-    ):
-        return {"command": "", "visibility": "withheld"}
-    safe, redacted = _cc_mask_terminal_secrets(command)
-    if re.search(r"(?i)\b(?:authorization|set-cookie)\s*:", safe):
-        return {"command": "", "visibility": "withheld"}
+        return {"command": "", "visibility": "withheld", "reason": "control_characters"}
+    if "-----BEGIN " in command and "PRIVATE KEY-----" in command:
+        return {
+            "command": "",
+            "visibility": "withheld",
+            "reason": "private_key_material",
+        }
+    # xtrace can reveal values in subsequent shell output.
+    if re.search(r"(?m)(?:^|[;&|\n])\s*set\s+-[^\n]*x\b", command):
+        return {"command": "", "visibility": "withheld", "reason": "shell_tracing"}
+    if _SHELL_CARD_AUTH_HEADER.search(command):
+        # We do not try to interpret arbitrary HTTP headers as harmless.
+        return {
+            "command": "",
+            "visibility": "withheld",
+            "reason": "authorization_header",
+        }
+    if _SHELL_CARD_SECRET_EXPANSION.search(command):
+        return {"command": "", "visibility": "withheld", "reason": "secret_variable"}
+    # A quoted heredoc written directly to an ordinary project source file
+    # does not execute its body. References to ".env" in its documentation
+    # therefore do not imply a credential-file read.
+    safe_source_write = bool(_SHELL_CARD_SAFE_HEREDOC_WRITE.fullmatch(command))
+    if _SHELL_CARD_SENSITIVE_FILE.search(command) and not safe_source_write:
+        return {
+            "command": "",
+            "visibility": "withheld",
+            "reason": "protected_file_reference",
+        }
+    if _SHELL_CARD_SENSITIVE_COMMAND.search(command):
+        return {
+            "command": "",
+            "visibility": "withheld",
+            "reason": "environment_or_protected_command",
+        }
     if re.search(
-        r"(?i)\b(?:curl|wget)\b[^\n]{0,150}\s+--data(?:-raw|-binary)?\b", safe
+        r"(?i)\b(?:curl|wget)\b[^\n]{0,150}\s+--data(?:-raw|-binary)?\b",
+        command,
     ):
-        return {"command": "", "visibility": "withheld"}
-    return {"command": safe[:3000], "visibility": "redacted" if redacted else "visible"}
+        return {
+            "command": "",
+            "visibility": "withheld",
+            "reason": "unreviewed_http_payload",
+        }
+    # A large generated script is not evidence of credentials. Display a
+    # bounded, redacted excerpt; suppress stdout because the omitted body was
+    # not completely displayed or reviewed.
+    if len(command) > 5000:
+        safe, _ = _cc_mask_terminal_secrets(command[:2400])
+        return {
+            "command": safe + "\n… [preview shortened; full script not displayed]",
+            "visibility": "shortened",
+            "reason": "command_preview_limit",
+        }
+    safe, redacted = _cc_mask_terminal_secrets(command)
+    if redacted:
+        return {
+            "command": safe[:3000],
+            "visibility": "redacted",
+            "reason": "credential_masked",
+        }
+    if len(safe) > 3000:
+        return {
+            "command": safe[:2600] + "\n… [preview shortened]",
+            "visibility": "shortened",
+            "reason": "command_preview_limit",
+        }
+    return {"command": safe, "visibility": "visible", "reason": "none"}
 
 
 def _cc_terminal_display(value, limit):
@@ -140,6 +213,7 @@ def build_shell_card(args, payload):
         "operation_id": operation_id,
         "command": preview["command"],
         "command_visibility": visibility,
+        "preview_reason": preview["reason"],
         "stdout": stdout,
         "stderr": stderr,
         "status": status,
