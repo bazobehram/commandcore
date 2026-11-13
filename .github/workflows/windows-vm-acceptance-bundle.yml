@@ -35,7 +35,7 @@ jobs:
             --verify dist/windows-m3-vm-acceptance.zip
           cd dist
           sha256sum windows-m3-vm-acceptance.zip > windows-m3-vm-acceptance.zip.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-m3-disposable-vm-acceptance
           path: |
