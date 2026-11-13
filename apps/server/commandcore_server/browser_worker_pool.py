@@ -241,6 +241,13 @@ class OwnerBrowserWorkerPool:
         # no longer physically attested. A changed incarnation also invalidates
         # the in-memory sessions and their human handoff tokens.
         self._verify_physical_assignment(worker)
+        if name in {"browser.open", "browser.watch"} and isinstance(result, dict):
+            # This stable, token-free URL opens a direct first-party live page.
+            # It does NOT pause AI, grant input or issue a handoff token.
+            result = {
+                **result,
+                "browser_live_url": self.public_base_url.rstrip("/") + "/browser/live",
+            }
         return result
 
     def viewer_sessions(self, subject: str, issuer: str) -> list[dict[str, str]]:
