@@ -446,7 +446,7 @@ class MCPHandler:
         self.ui_specs["shell.exec"] = (
             SHELL_UI_URI,
             COMMANDCORE_UI_MIME,
-            "shell-compact-v25.html",
+            "shell-compact-v26.html",
             "CommandCore shell terminal",
         )
         raw_definitions = [dict(x) for x in raw_definitions]
@@ -573,6 +573,17 @@ class MCPHandler:
                 entry["_meta"] = meta
                 self.ui_resources[uri] = spec
             self.definitions.append(entry)
+        if "shell.exec" in {x["name"] for x in self.definitions}:
+            old_shell_uri = "ui://commandcore/shell-compact-v25-20261112.html"
+            self.ui_resources.setdefault(
+                old_shell_uri,
+                (
+                    old_shell_uri,
+                    COMMANDCORE_UI_MIME,
+                    "shell-compact-v25.html",
+                    "Previous terminal receipt",
+                ),
+            )
         if self.ui_resources:
             for uri, (mime, asset, title) in LEGACY_UI_RESOURCES.items():
                 # Only register resource types present in this instance's

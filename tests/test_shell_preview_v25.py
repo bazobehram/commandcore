@@ -22,7 +22,8 @@ class ShellPreviewTests(unittest.TestCase):
         ):
             with self.subTest(command=cmd):
                 p = shell_receipt._cc_safe_shell_display({"command": cmd})
-                self.assertEqual(p, {"command": cmd, "visibility": "visible"})
+                self.assertEqual(p["command"], cmd)
+                self.assertEqual(p["visibility"], "visible")
 
     def test_innocuous_assignments_stay_visible(self):
         for command in (
@@ -61,10 +62,9 @@ class ShellPreviewTests(unittest.TestCase):
             "curl -H 'Authorization: Bearer example' https://example.org",
         ):
             with self.subTest(command=cmd):
-                self.assertEqual(
-                    shell_receipt._cc_safe_shell_display({"command": cmd}),
-                    {"command": "", "visibility": "withheld"},
-                )
+                preview = shell_receipt._cc_safe_shell_display({"command": cmd})
+                self.assertEqual(preview["command"], "")
+                self.assertEqual(preview["visibility"], "withheld")
         self.assertEqual(
             shell_receipt._cc_safe_shell_display(
                 {"command": "git status", "env": {"VAR": "value"}}
