@@ -3,6 +3,7 @@
 Only a validated public HTTPS origin is eligible for display. Never copy URL
 paths, query strings, credentials, browser content or typed values into Activity.
 """
+
 import json
 import unittest
 
@@ -16,7 +17,9 @@ from commandcore_server.activity_visibility import (
 class BrowserOriginProjectionTests(unittest.TestCase):
     def test_public_https_origin_only(self):
         self.assertEqual(
-            visible_public_url("https://WWW.Example.org/private/report?token=fixture#password"),
+            visible_public_url(
+                "https://WWW.Example.org/private/report?token=fixture#password"
+            ),
             "https://www.example.org/",
         )
         self.assertEqual(
@@ -29,8 +32,12 @@ class BrowserOriginProjectionTests(unittest.TestCase):
         detail = safe_trace(
             "browser.open",
             {
-                "url": "https://news.example.org/hidden/" + private
-                + "?access_token=" + private + "#section-" + private,
+                "url": "https://news.example.org/hidden/"
+                + private
+                + "?access_token="
+                + private
+                + "#section-"
+                + private,
                 "text": private,
                 "password": private,
                 "data": private,
@@ -49,10 +56,13 @@ class BrowserOriginProjectionTests(unittest.TestCase):
         self.assertNotIn("public_url", detail)
 
     def test_browser_without_safe_url_is_redacted(self):
-        detail = safe_trace("browser.type", {
-            "url": "http://example.org/private?token=NOPE",
-            "text": "do-not-show",
-        })
+        detail = safe_trace(
+            "browser.type",
+            {
+                "url": "http://example.org/private?token=NOPE",
+                "text": "do-not-show",
+            },
+        )
         self.assertNotIn("public_url", detail)
         self.assertIn("omitted", detail["note"])
         self.assertNotIn("do-not-show", json.dumps(detail))
