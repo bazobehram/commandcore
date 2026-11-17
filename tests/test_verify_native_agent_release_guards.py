@@ -19,10 +19,11 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 VERSION = "0.9.0-rc9"
+SOURCE = "a" * 40
 REPO = "bazobehram/commandcore"
 
 
-def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
+def signed_fixture(tmp_path: Path, architectures=("x86_64",), *, source_commit=SOURCE):
     key = Ed25519PrivateKey.generate()
     public = key.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
@@ -48,6 +49,7 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
         "schema_version": 1,
         "product": "commandcore-agent",
         "version": VERSION,
+        "source_commit": source_commit,
         "signing_key_id": hashlib.sha256(public).hexdigest()[:16],
         "artifacts": artifacts,
     }
@@ -68,14 +70,14 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",)):
 )
 def test_valid_signed_release_accepted(tmp_path, architectures, requested):
     key = signed_fixture(tmp_path, architectures)
-    module.verify(tmp_path, key, VERSION, REPO, requested)
+    module.verify(tmp_path, key, VERSION, REPO, requested, expected_source_commit=SOURCE)
 
 
 def test_reject_extra_release_file(tmp_path):
     key = signed_fixture(tmp_path)
     (tmp_path / "private-release-key").write_text("untrusted")
     with pytest.raises(ValueError, match="unexpected_release_file"):
-        module.verify(tmp_path, key, VERSION, REPO)
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_binary_symlink(tmp_path):
@@ -85,7 +87,7 @@ def test_reject_binary_symlink(tmp_path):
     binary.rename(target)
     binary.symlink_to(target)
     with pytest.raises(OSError):
-        module.verify(tmp_path, key, VERSION, REPO)
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_manifest_symlink(tmp_path):
@@ -95,7 +97,7 @@ def test_reject_manifest_symlink(tmp_path):
     manifest.rename(outside)
     manifest.symlink_to(outside)
     with pytest.raises(OSError):
-        module.verify(tmp_path, key, VERSION, REPO)
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_oversized_manifest(tmp_path):
@@ -103,14 +105,14 @@ def test_reject_oversized_manifest(tmp_path):
     with (tmp_path / "manifest.signed.json").open("ab") as stream:
         stream.truncate(module.MAX_MANIFEST_SIZE + 1)
     with pytest.raises(ValueError, match="invalid_release_file_type_or_size"):
-        module.verify(tmp_path, key, VERSION, REPO)
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_modified_binary(tmp_path):
     key = signed_fixture(tmp_path)
     (tmp_path / module.NAMES["x86_64"]).write_bytes(b"tampered")
     with pytest.raises(ValueError, match="release_checksum_mismatch"):
-        module.verify(tmp_path, key, VERSION, REPO)
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_tampered_signature(tmp_path):
@@ -120,7 +122,7 @@ def test_reject_tampered_signature(tmp_path):
     manifest["version"] = "0.9.0-rc8"
     path.write_text(json.dumps(manifest))
     with pytest.raises(Exception):
-        module.verify(tmp_path, key, "0.9.0-rc8", REPO)
+        module.verify(tmp_path, key, "0.9.0-rc8", REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_directory_symlink(tmp_path):
@@ -130,11 +132,31 @@ def test_reject_directory_symlink(tmp_path):
     linked = tmp_path / "linked-feed"
     linked.symlink_to(feed, target_is_directory=True)
     with pytest.raises(ValueError, match="invalid_release_directory"):
-        module.verify(linked, key, VERSION, REPO)
+        module.verify(linked, key, VERSION, REPO, expected_source_commit=SOURCE)
 
 
 def test_reject_legacy_aarch64_architecture_request(tmp_path):
     """The signed-release verifier requires canonical manifest arch: arm64."""
     key = signed_fixture(tmp_path, ("x86_64", "arm64"))
     with pytest.raises(ValueError, match="unsupported_release_architecture"):
-        module.verify(tmp_path, key, VERSION, REPO, "aarch64")
+        module.verify(tmp_path, key, VERSION, REPO, "aarch64", expected_source_commit=SOURCE)
+
+
+def test_reject_unsigned_source_identity_mismatch(tmp_path):
+    key = signed_fixture(tmp_path)
+    with pytest.raises(ValueError, match="release_source_commit_mismatch"):
+        module.verify(
+            tmp_path, key, VERSION, REPO, expected_source_commit="b" * 40
+        )
+
+
+def test_reject_missing_or_malformed_signed_source_identity(tmp_path):
+    key = signed_fixture(tmp_path, source_commit="not-a-commit")
+    with pytest.raises(ValueError, match="invalid_release_source_commit"):
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit=SOURCE)
+
+
+def test_reject_invalid_expected_review_source_identity(tmp_path):
+    key = signed_fixture(tmp_path)
+    with pytest.raises(ValueError, match="invalid_expected_source_commit"):
+        module.verify(tmp_path, key, VERSION, REPO, expected_source_commit="invalid")
