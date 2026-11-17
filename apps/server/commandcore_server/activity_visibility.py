@@ -127,6 +127,170 @@ def visible_public_url(value: Any) -> str | None:
     return "https://" + host + "/"
 
 
+
+# Only a finite developer command grammar can appear in Activity hints.
+# Execution receipts use a different request-local redaction policy.
+_ACTIVITY_EXEC = frozenset({
+    "pwd", "uname", "cd", "mkdir", "ls", "stat", "df", "du",
+    "git", "python", "python3", "pytest", "npm", "cargo", "pip", "pip3",
+})
+_ACTIVITY_SENSITIVE = re.compile(
+    r"secret|credential|password|passwd|token|bearer|auth|cookie|private|"
+    r"api[_.-]?key|access[_.-]?key|session|\.env|\.ssh|\.aws|\.kube|"
+    r"\.gnupg|id_rsa|id_ed25519|-----BEGIN|AKIA[A-Z0-9]{16}|eyJ",
+    re.IGNORECASE,
+)
+_ACTIVITY_FORBIDDEN = re.compile(r"[=$\x60\\%<>\x00-\x1f\x7f]")
+_ACTIVITY_TOKEN = re.compile(
+    r"""(?P<space> +)|(?P<operator>&&|\|\||[;|])|"""
+    r"""(?P<word>'[^']*'|"[^"]*"|[^ ;&|'"]+)"""
+)
+
+
+def _activity_target(value: str) -> bool:
+    if (
+        not re.fullmatch(r"[A-Za-z0-9_./ @+-]{1,120}", value)
+        or value.startswith("-")
+    ):
+        return False
+    return safe_path(value) not in (None, "[restricted path]")
+
+
+def _approved_activity_step(words: list[str]) -> bool:
+    """Allow only known commands and bounded, non-secret argument patterns."""
+    if not words or words[0] not in _ACTIVITY_EXEC:
+        return False
+    name, *args = words
+    if name == "pwd":
+        return not args
+    if name == "uname":
+        return all(x in {"-a", "-s", "-r", "-m"} for x in args)
+    if name in {"cd", "mkdir", "ls", "stat", "df", "du"}:
+        flags = {
+            "cd": set(),
+            "mkdir": {"-p"},
+            "ls": {"-l", "-a", "-la", "-al", "-h"},
+            "stat": set(),
+            "df": {"-h"},
+            "du": {"-h", "-s", "-sh"},
+        }[name]
+        return all(x in flags or _activity_target(x) for x in args) and (
+            name != "cd" or len(args) == 1
+        )
+    if name == "git":
+        flags = {
+            "status": {"--short", "--porcelain", "-sb"},
+            "diff": {"--stat", "--name-only", "--check", "--cached", "--staged"},
+            "log": {"--oneline", "-1", "-5", "-10"},
+            "branch": {"--show-current"},
+            "rev-parse": {"--show-toplevel", "--is-inside-work-tree"},
+        }
+        return bool(args) and args[0] in flags and all(
+            x in flags[args[0]] for x in args[1:]
+        )
+    if name in {"python", "python3"}:
+        if args == ["--version"]:
+            return True
+        if args[:2] == ["-m", "pytest"]:
+            return _approved_activity_step(["pytest", *args[2:]])
+        if args[:2] == ["-m", "pip"]:
+            return _approved_activity_step(["pip", *args[2:]])
+        return False
+    if name in {"pip", "pip3"}:
+        return args in (["--version"], ["list"])
+    if name == "pytest":
+        return all(
+            x in {"-q", "-v", "-x", "--collect-only"}
+            or (_activity_target(x) and (x.endswith(".py") or x in {"tests", "tests/"}))
+            for x in args
+        )
+    if name == "npm":
+        return args in (["test"], ["ci"], ["run", "build"], ["run", "lint"])
+    if name == "cargo":
+        return args in (["test"], ["build"], ["check"], ["fmt", "--check"])
+    return False
+
+
+def command_projection(value: Any) -> dict[str, Any]:
+    """Show only validated developer commands or non-sensitive step structure.
+
+    Input strings are never copied to output unless the entire command is
+    accepted by the fixed grammar. Unsupported arguments stay withheld.
+    """
+    withheld = {
+        "command_visibility": "withheld",
+        "redaction_reason": (
+            "Command arguments withheld: credentials, code or unsupported syntax may be present."
+        ),
+    }
+    if not isinstance(value, str) or not 1 <= len(value) <= 4096:
+        return withheld
+    if _ACTIVITY_SENSITIVE.search(value) or _ACTIVITY_FORBIDDEN.search(value):
+        return withheld
+    tokens = []
+    position = 0
+    previous_word = False
+    for match in _ACTIVITY_TOKEN.finditer(value):
+        if match.start() != position:
+            return withheld
+        position = match.end()
+        if match.lastgroup == "space":
+            previous_word = False
+            continue
+        if match.lastgroup == "word":
+            if previous_word:
+                return withheld
+            try:
+                word = shlex.split(match.group())
+            except ValueError:
+                return withheld
+            if len(word) != 1:
+                return withheld
+            tokens.append(("word", word[0]))
+            previous_word = True
+        else:
+            tokens.append(("operator", match.group()))
+            previous_word = False
+    if position != len(value) or not tokens or len(tokens) > 96:
+        return withheld
+    steps: list[list[str]] = [[]]
+    operators: list[str] = []
+    for kind, token in tokens:
+        if kind == "operator":
+            if not steps[-1]:
+                return withheld
+            operators.append(token)
+            steps.append([])
+        elif any(char in token for char in ";&|"):
+            return withheld
+        else:
+            steps[-1].append(token)
+    if not steps[-1] or len(steps) > 12:
+        return withheld
+    if all(_approved_activity_step(step) for step in steps):
+        displays = [shlex.join(step) for step in steps]
+        command_display = displays[0]
+        for operator, display in zip(operators, displays[1:]):
+            command_display += " " + operator + " " + display
+        return {
+            "command_display": command_display,
+            "command_steps": displays,
+            "command_visibility": "validated",
+            "step_operators": operators,
+        }
+    structure = [
+        step[0] if step[0] in _ACTIVITY_EXEC else "unrecognized command"
+        for step in steps
+    ]
+    return {
+        **withheld,
+        "command_visibility": "structure",
+        "command_steps": [name + " (arguments withheld)" for name in structure],
+        "step_operators": operators,
+        "redaction_reason": "Only command structure shown; unsupported arguments withheld.",
+    }
+
+
 def safe_command_name(value: Any) -> str | None:
     if not isinstance(value, str) or not value or len(value) > 32768:
         return None
@@ -151,6 +315,7 @@ def safe_operation_detail(tool: str, arguments: dict[str, Any]) -> dict[str, Any
         if path is not None:
             result[key] = path
     if tool in {"shell.exec", "process.start"}:
+        result.update(command_projection(arguments.get("command") if not arguments.get("env") else None))
         result["command_name"] = (
             safe_command_name(arguments.get("command")) or "[hidden]"
         )
