@@ -22,6 +22,8 @@ from real operating-system, real OAuth provider, or real MCP-client acceptance.
 
 - [ ] No secrets, credentials, device identities, databases, backups, or private
       deployment data are included.
+- [ ] Screenshots and demo assets have been checked for private hostnames, URLs,
+      paths, user identifiers, tokens, and metadata; any edits are disclosed.
 - [ ] Authorization and permission behavior is unchanged, or the change is
       explained below.
 - [ ] Security-sensitive failure paths have negative tests.

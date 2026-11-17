@@ -37,7 +37,6 @@ htmlcov/
 .tox/
 .nox/
 .direnv/
-.envrc
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
@@ -46,9 +45,6 @@ htmlcov/
 *.db-wal
 *.db-shm
 *.pem
-*.key
-*.p12
-*.pfx
 
 *.session-key
 

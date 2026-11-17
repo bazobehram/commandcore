@@ -1,8 +1,9 @@
 # Roadmap
 
-CommandCore is preparing its first public 0.9 release-candidate line. The roadmap
-prioritizes reliability, secure self-hosting, client neutrality, and a clean
-installation experience over feature count.
+CommandCore is already published as an AGPL-3.0-or-later source repository. Work
+continues toward repeatable public 0.9 release-candidate distributions. The
+roadmap prioritizes reliability, secure self-hosting, client neutrality, and a
+clean installation experience over feature count.
 
 Roadmap items are intentions, not release promises.
 
@@ -10,7 +11,7 @@ Roadmap items are intentions, not release promises.
 
 ### Public repository and onboarding
 
-- publish the clean AGPL-3.0-or-later source tree;
+- keep the public AGPL-3.0-or-later source tree and contributor onboarding clean;
 - require pull-request review, DCO sign-off, CI, and security review for sensitive
   boundaries;
 - ship a provider-neutral self-hosting guide;

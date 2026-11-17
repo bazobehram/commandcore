@@ -27,6 +27,7 @@ cargo fmt --manifest-path agent/rust/Cargo.toml --check
 cargo clippy --locked --manifest-path agent/rust/Cargo.toml --all-targets --all-features -- -D warnings
 cargo test --locked --manifest-path agent/rust/Cargo.toml
 python scripts/public_repo_check.py
+python scripts/check_workflow_action_pins.py
 python scripts/secret_scan.py --history
 ```
 

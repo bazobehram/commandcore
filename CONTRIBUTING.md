@@ -12,6 +12,9 @@ clear test evidence are strongly preferred.
 - Keep each pull request focused on one coherent change.
 - Do not include secrets, production configuration, device identities, private
   keys, access tokens, databases, backups, or private deployment logs.
+- Review screenshots and demo videos for visible hostnames, internal paths,
+  private domains, account identifiers, keys, and tokens. Anonymize sensitive
+  labels before committing and clearly disclose any edited capture.
 - Do not weaken authorization, transport verification, update verification, or
   local privilege boundaries to make a test pass.
 - Do not claim a platform or client is supported unless the documented acceptance
@@ -19,6 +22,8 @@ clear test evidence are strongly preferred.
 - New behavior requires tests. Security-sensitive behavior requires negative tests
   as well as success-path tests.
 - Public interfaces and protocols require compatibility notes.
+- Pin external GitHub Actions to reviewed 40-character commit SHAs (retain an
+  upstream version comment); never add a mutable tag-only action to a workflow.
 
 ## First contribution: fork, test, and open a PR
 
