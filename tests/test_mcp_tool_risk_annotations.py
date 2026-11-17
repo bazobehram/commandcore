@@ -56,3 +56,23 @@ def test_all_tool_discovery_annotations_are_explicit_booleans():
         )
         # Client hints must not be accidentally promoted into authorization.
         assert tool["securitySchemes"] == tool["_meta"]["securitySchemes"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "docker.ps",
+        "docker.inspect",
+        "docker.logs",
+        "browser.observe",
+        "browser.elements",
+        "browser.links",
+        "browser.watch",
+        "browser.frame",
+    ],
+)
+def test_read_only_metadata_does_not_downgrade_oauth_scope(name):
+    # Risk hints are not an alternative to the real OAuth authorization gate.
+    assert TOOLS[name]["securitySchemes"] == [
+        {"type": "oauth2", "scopes": ["commandcore:standard"]}
+    ]
