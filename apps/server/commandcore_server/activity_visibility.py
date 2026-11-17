@@ -89,7 +89,7 @@ def visible_public_url(value: Any) -> str | None:
     """
     if not isinstance(value, str) or not 1 <= len(value) <= 2048:
         return None
-    if any(ord(char) <= 32 or ord(char) == 127 for char in value) or "\\\\" in value:
+    if any(ord(char) <= 32 or ord(char) == 127 for char in value) or chr(92) in value:
         return None
     try:
         parsed = urlsplit(value)
