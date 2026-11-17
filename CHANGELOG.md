@@ -1,5 +1,10 @@
 # Changelog
 
+This file records notable CommandCore changes. Server, native Agent, installer,
+and Browser UI versions can differ; consult [VERSION](VERSION) and the
+[platform support matrix](docs/PLATFORM_SUPPORT.md) for the source candidate
+and current support boundaries.
+
 ## Browser UI 0.12.0 build 18
 
 - One compact task card per workflow, inline live previews, natural height,
@@ -24,13 +29,20 @@ support levels remain independent. See docs/BROWSER.md for supported flows and
 remaining release gates.
 
 
-All notable public CommandCore changes are recorded here.
-
-The project is preparing its first clean public release from the 0.9
-release-candidate family. Earlier private engineering milestones are summarized
-rather than reproducing environment-specific deployment history.
+The 0.9 release-candidate lineage includes historical private milestones.
+Dated entries below describe the state *at that time*, not every feature now
+available in the repository.
 
 ## Unreleased
+
+### Documentation and security
+
+- Added a README product walkthrough using privacy-cropped captures from a
+  real CommandCore demonstration and an animated, accessible architecture graphic.
+- Updated the server dependency lock for `opentelemetry-api` 1.45.2 and the
+  Rust Agent lock for patched `quinn-proto`, `quinn-udp`, `rustix`, and `tokio`.
+- Distinguished active operator/contributor documentation from dated pre-publication
+  reviews and unapproved drafts.
 
 ### Changed
 
@@ -82,7 +94,10 @@ rather than reproducing environment-specific deployment history.
 - Windows remains a preview rather than a stable supported release.
 - macOS Agent support is planned.
 - Interactive desktop control is experimental.
-- Browser automation is not implemented.
+- At this 2026-10-05 release-candidate milestone, managed Browser support had
+  not yet been delivered. A later, optional Linux managed Browser exists in the
+  source, but remains operator-provisioned and subject to separate isolation
+  requirements; see [Managed Browser](docs/BROWSER.md).
 - A public 1.0 compatibility promise has not yet been declared.
 
 ## Engineering lineage

@@ -1,8 +1,11 @@
 # Installation readiness
 
-Review date: 2026-10-08. This is an onboarding review of the public source and
-its automated checks, not an independent security audit or a new platform
-certification. Recheck release availability before relying on this snapshot.
+**Historical onboarding review — 2026-10-08.** This is a point-in-time source
+assessment, not the current release checklist, an independent security audit,
+or a new platform certification. In particular, the managed Browser status has
+changed since this review. See [platform support](PLATFORM_SUPPORT.md),
+[the Browser guide](BROWSER.md), and the live GitHub CI/release artifacts before
+relying on an earlier conclusion.
 
 ## Verdict
 
@@ -23,7 +26,7 @@ enroll that machine or grant access to it.
 | Install a managed Linux agent | Signed native installer and deployment feed | Publish signed artifacts, pin the key, configure feed mount, verify platform lifecycle |
 | Manage a Windows PC | Preview agent | Full install/reboot/update/rollback release acceptance remains gated |
 | Manage a Mac | Planned | No supported agent release |
-| Control desktop/browser | Experimental desktop; browser backend absent | Do not present as stable functionality |
+| Control desktop/browser | Experimental desktop; optional managed Browser in current source | Browser requires separately provisioned isolation and operator acceptance; not part of the default installation |
 
 ## Findings that affect a new installation
 

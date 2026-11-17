@@ -24,9 +24,14 @@ Do **not** open a public issue for:
 - credential, private-key, token, or sensitive-data exposure;
 - a reliable denial-of-service against the control plane or enrolled agents.
 
-Use GitHub Private Vulnerability Reporting when it is enabled for the repository.
-If that feature is unavailable, contact a maintainer through a private channel
-before disclosing exploit details publicly.
+Use GitHub's [private vulnerability report form](https://github.com/bazobehram/commandcore/security/advisories/new)
+when **Report a vulnerability** is available on the repository's Security tab.
+This is a private advisory workflow, **not** a public GitHub issue. If GitHub
+does not offer private reporting, use a verified private contact channel from
+the [maintainer profile](https://github.com/bazobehram); do not post exploit
+details, reproduction credentials, or secrets in a public issue or discussion.
+If no verified private channel is available, retain the report privately until
+one can be established.
 
 Include:
 
