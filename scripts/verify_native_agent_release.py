@@ -152,9 +152,7 @@ if __name__ == "__main__":
     parser.add_argument("--public-key-b64", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--repo", required=True)
-    parser.add_argument(
-        "--architecture", choices=("x86_64", "arm64"), default="x86_64"
-    )
+    parser.add_argument("--architecture", choices=("x86_64", "arm64"), default="x86_64")
     a = parser.parse_args()
     verify(a.directory, a.public_key_b64, a.version, a.repo, a.architecture)
     print("SIGNED_NATIVE_RELEASE_VERIFIED")
