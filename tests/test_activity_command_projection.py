@@ -1,9 +1,13 @@
 """Fail-closed tests for the bounded Activity command preview grammar."""
+
 import json
 import unittest
 
 from commandcore_server.activity_trace import safe_trace
-from commandcore_server.activity_visibility import command_projection, safe_operation_detail
+from commandcore_server.activity_visibility import (
+    command_projection,
+    safe_operation_detail,
+)
 
 
 class SafeActivityCommandTests(unittest.TestCase):
@@ -89,7 +93,9 @@ class SafeActivityCommandTests(unittest.TestCase):
             "git -c core.hooksPath=/tmp status",
         ):
             with self.subTest(command=command[:35]):
-                self.assertEqual(command_projection(command)["command_visibility"], "withheld")
+                self.assertEqual(
+                    command_projection(command)["command_visibility"], "withheld"
+                )
 
     def test_environment_override_withholds_even_safe_command(self):
         detail = safe_operation_detail(
@@ -110,13 +116,17 @@ class SafeActivityCommandTests(unittest.TestCase):
 
     def test_oversized_invalid_inputs_rejected(self):
         for command in (None, 0, {}, "", "a" * 5000, "ls " + "a" * 500):
-            self.assertEqual(command_projection(command)["command_visibility"], "withheld")
+            self.assertEqual(
+                command_projection(command)["command_visibility"], "withheld"
+            )
 
     def test_short_filename_can_be_quoted_but_shell_operator_cannot(self):
         r = command_projection("ls 'project files'")
         self.assertEqual(r["command_visibility"], "validated")
         self.assertEqual(r["command_display"], "ls 'project files'")
-        self.assertEqual(command_projection("ls 'project|files'")["command_visibility"], "withheld")
+        self.assertEqual(
+            command_projection("ls 'project|files'")["command_visibility"], "withheld"
+        )
 
 
 if __name__ == "__main__":
