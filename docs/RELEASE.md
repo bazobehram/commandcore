@@ -126,8 +126,27 @@ A release job fails if the image has a missing/mismatched revision or
 unexpected repository source label. The assertion is made against a freshly
 pulled image at the exact registry digest, not a mutable image tag.
 
-The uploaded report is evidence of the workflow's own consistency check.
-It is not a signed third-party provenance attestation, does not approve
-deployment, and does not demonstrate that the same image is running on
-either the public or the operator-owned private installation. Independent promotion, protected approval,
-runtime image-ID checks and backup/rollback acceptance remain mandatory.
+The uploaded digest report is a workflow consistency check; it is not itself a
+cryptographic attestation or authorization to deploy.
+
+The protected GHCR tag workflow additionally signs the exact OCI image digest
+with GitHub Artifact Attestations (`actions/attest@v4`), pushes that attestation
+to GHCR, and verifies it with `gh attestation verify` constrained by source
+repository, exact signing workflow, source tag and commit. BuildKit provenance
+remains enabled independently.
+
+To independently verify an approved release image before promotion:
+
+```bash
+gh attestation verify oci://ghcr.io/OWNER/commandcore@sha256:IMAGE_DIGEST \
+  --repo OWNER/commandcore \
+  --signer-workflow OWNER/commandcore/.github/workflows/ghcr-publish.yml \
+  --source-ref refs/tags/v1.0.0 \
+  --source-digest COMMIT_SHA \
+  --deny-self-hosted-runners
+```
+
+The first attestation only exists when the approved tag workflow has completed
+successfully. Attestation does **not** confirm that either host runs this digest,
+nor approve production promotion. Both hosts still require independent source
+parity checks, protected approvals, canaries and rehearsed rollback.
