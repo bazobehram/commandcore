@@ -19,6 +19,8 @@ clear test evidence are strongly preferred.
 - New behavior requires tests. Security-sensitive behavior requires negative tests
   as well as success-path tests.
 - Public interfaces and protocols require compatibility notes.
+- Pin external GitHub Actions to reviewed 40-character commit SHAs (retain an
+  upstream version comment); never add a mutable tag-only action to a workflow.
 
 ## First contribution: fork, test, and open a PR
 
