@@ -59,6 +59,7 @@ def test_dual_architecture_unsigned_review_manifest(tmp_path, monkeypatch):
     output = tmp_path / "review.json"
     manifest = module.prepare(folders, SOURCE, VERSION, ORIGIN, output)
     assert manifest["version"] == VERSION
+    assert manifest["source_commit"] == SOURCE
     assert len(manifest["artifacts"]) == 2
     assert {a["architecture"] for a in manifest["artifacts"]} == {"x86_64", "arm64"}
     assert all(
