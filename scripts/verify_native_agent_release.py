@@ -19,7 +19,7 @@ MAX_MANIFEST_SIZE = 1_048_576
 MAX_BINARY_SIZE = 134_217_728
 NAMES = {
     "x86_64": "commandcore-agent-linux-x86_64",
-    "aarch64": "commandcore-agent-linux-arm64",
+    "arm64": "commandcore-agent-linux-arm64",
 }
 
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     parser.add_argument("--version", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument(
-        "--architecture", choices=("x86_64", "aarch64"), default="x86_64"
+        "--architecture", choices=("x86_64", "arm64"), default="x86_64"
     )
     a = parser.parse_args()
     verify(a.directory, a.public_key_b64, a.version, a.repo, a.architecture)
