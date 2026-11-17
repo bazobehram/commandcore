@@ -70,7 +70,9 @@ def signed_fixture(tmp_path: Path, architectures=("x86_64",), *, source_commit=S
 )
 def test_valid_signed_release_accepted(tmp_path, architectures, requested):
     key = signed_fixture(tmp_path, architectures)
-    module.verify(tmp_path, key, VERSION, REPO, requested, expected_source_commit=SOURCE)
+    module.verify(
+        tmp_path, key, VERSION, REPO, requested, expected_source_commit=SOURCE
+    )
 
 
 def test_reject_extra_release_file(tmp_path):
@@ -139,7 +141,9 @@ def test_reject_legacy_aarch64_architecture_request(tmp_path):
     """The signed-release verifier requires canonical manifest arch: arm64."""
     key = signed_fixture(tmp_path, ("x86_64", "arm64"))
     with pytest.raises(ValueError, match="unsupported_release_architecture"):
-        module.verify(tmp_path, key, VERSION, REPO, "aarch64", expected_source_commit=SOURCE)
+        module.verify(
+            tmp_path, key, VERSION, REPO, "aarch64", expected_source_commit=SOURCE
+        )
 
 
 def test_reject_unsigned_source_identity_mismatch(tmp_path):
