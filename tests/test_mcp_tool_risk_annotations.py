@@ -59,20 +59,21 @@ def test_all_tool_discovery_annotations_are_explicit_booleans():
 
 
 @pytest.mark.parametrize(
-    "name",
+    ("name", "scope"),
     [
-        "docker.ps",
-        "docker.inspect",
-        "docker.logs",
-        "browser.observe",
-        "browser.elements",
-        "browser.links",
-        "browser.watch",
-        "browser.frame",
+        ("docker.ps", "commandcore:full"),
+        ("docker.inspect", "commandcore:full"),
+        ("docker.logs", "commandcore:full"),
+        ("browser.observe", "commandcore:standard"),
+        ("browser.elements", "commandcore:standard"),
+        ("browser.links", "commandcore:standard"),
+        ("browser.watch", "commandcore:standard"),
+        ("browser.frame", "commandcore:standard"),
     ],
 )
-def test_read_only_metadata_does_not_downgrade_oauth_scope(name):
-    # Risk hints are not an alternative to the real OAuth authorization gate.
+def test_read_only_metadata_does_not_downgrade_oauth_scope(name, scope):
+    # Docker reads still require FULL; Browser reads still require STANDARD.
+    # Risk hints do not change either security boundary.
     assert TOOLS[name]["securitySchemes"] == [
-        {"type": "oauth2", "scopes": ["commandcore:standard"]}
+        {"type": "oauth2", "scopes": [scope]}
     ]
