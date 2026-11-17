@@ -35,6 +35,7 @@ jobs:
           RELEASE_PUBLIC_KEY: ${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}
           RELEASE_VERSION: ${{ inputs.version }}
           REPOSITORY: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
         run: |
           test -n "$RELEASE_PUBLIC_KEY"
           # Public Linux release must cover both architectures from one signed manifest.
@@ -43,6 +44,7 @@ jobs:
             python scripts/verify_native_agent_release.py signed-release \
               --public-key-b64 "$RELEASE_PUBLIC_KEY" \
               --version "$RELEASE_VERSION" --repo "$REPOSITORY" \
+              --source-commit "$SOURCE_COMMIT" \
               --architecture "$architecture"
           done
       - name: Publish verified assets
