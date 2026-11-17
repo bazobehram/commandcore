@@ -25,7 +25,9 @@ def scan_workflows(directory: Path) -> list[str]:
             if ref.startswith("./"):
                 continue  # local repository action: reviewed as source
             if not PIN.fullmatch(ref):
-                errors.append(f"{path.name}:{lineno}: action must use a full commit SHA: {ref}")
+                errors.append(
+                    f"{path.name}:{lineno}: action must use a full commit SHA: {ref}"
+                )
     return errors
 
 
