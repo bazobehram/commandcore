@@ -79,7 +79,6 @@ def safe_path(value: Any) -> str | None:
     return normalized
 
 
-
 def visible_public_url(value: Any) -> str | None:
     """Reduce a Browser URL to an explicitly public HTTPS *origin*.
 
@@ -111,13 +110,18 @@ def visible_public_url(value: Any) -> str | None:
     if (
         len(host) > 253
         or len(labels) < 2
-        or any(not label or len(label) > 48 or label.startswith("-")
-               or label.endswith("-") for label in labels)
+        or any(
+            not label or len(label) > 48 or label.startswith("-") or label.endswith("-")
+            for label in labels
+        )
         or not re.fullmatch(r"[a-z]{2,24}", labels[-1])
         or labels[-1] in {"local", "lan", "internal", "localhost", "home", "arpa"}
-        or re.search(r"secret|credential|password|passwd|token|bearer|auth|"
-                     r"cookie|private|api[_.-]?key|access[_.-]?key|session",
-                     host, re.IGNORECASE)
+        or re.search(
+            r"secret|credential|password|passwd|token|bearer|auth|"
+            r"cookie|private|api[_.-]?key|access[_.-]?key|session",
+            host,
+            re.IGNORECASE,
+        )
     ):
         return None
     return "https://" + host + "/"
@@ -154,7 +158,9 @@ def safe_operation_detail(tool: str, arguments: dict[str, Any]) -> dict[str, Any
         origin = visible_public_url(arguments.get("url"))
         if origin is not None:
             result["public_url"] = origin
-        result["url_visibility"] = "HTTPS origin only; path, query and fragment withheld."
+        result["url_visibility"] = (
+            "HTTPS origin only; path, query and fragment withheld."
+        )
     elif tool == "git.run":
         argv = arguments.get("args")
         if isinstance(argv, list) and argv and isinstance(argv[0], str):
