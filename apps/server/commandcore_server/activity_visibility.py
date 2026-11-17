@@ -140,6 +140,8 @@ _ACTIVITY_SENSITIVE = re.compile(
     r"\.gnupg|id_rsa|id_ed25519|-----BEGIN|AKIA[A-Z0-9]{16}|eyJ",
     re.IGNORECASE,
 )
+# Even a syntactically valid path may be an opaque credential literal.
+_ACTIVITY_OPAQUE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9_-]{24,}(?![A-Za-z0-9])")
 _ACTIVITY_FORBIDDEN = re.compile(r"[=$\x60\\%<>\x00-\x1f\x7f]")
 _ACTIVITY_TOKEN = re.compile(
     r"""(?P<space> +)|(?P<operator>&&|\|\||[;|])|"""
@@ -225,7 +227,8 @@ def command_projection(value: Any) -> dict[str, Any]:
     }
     if not isinstance(value, str) or not 1 <= len(value) <= 4096:
         return withheld
-    if _ACTIVITY_SENSITIVE.search(value) or _ACTIVITY_FORBIDDEN.search(value):
+    if (_ACTIVITY_SENSITIVE.search(value) or _ACTIVITY_FORBIDDEN.search(value)
+            or _ACTIVITY_OPAQUE.search(value)):
         return withheld
     tokens = []
     position = 0
