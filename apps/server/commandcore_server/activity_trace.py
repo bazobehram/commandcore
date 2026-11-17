@@ -34,7 +34,10 @@ def safe_trace(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     detail["action"] = _ACTIONS.get(tool, "Run " + str(tool)[:48])
     if tool.startswith("browser."):
         detail["note"] = (
-            "Browser action; URL, page text, images and typed values omitted"
+            "Only validated public HTTPS origin may be shown; browser paths, "
+            "queries, fragments, page text, images and typed values omitted"
+            if "public_url" in detail
+            else "Browser action; URL, page text, images and typed values omitted"
         )
     elif tool in {"shell.exec", "process.start"}:
         detail["note"] = "Tool operation; shell filesystem effects not inspected"
