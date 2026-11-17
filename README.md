@@ -1,8 +1,8 @@
-<p align="center">
-  <img src="assets/branding/octopus-head.svg" alt="CommandCore octopus logo" width="144">
-</p>
-
 # CommandCore
+
+<p align="center">
+  <img src="assets/branding/commandcore-architecture-animated.svg" alt="Animated CommandCore architecture: MCP clients connect through an OAuth-protected control plane to authorized Linux and preview Windows devices" width="100%">
+</p>
 
 [![CI](https://github.com/bazobehram/commandcore/actions/workflows/ci.yml/badge.svg)](https://github.com/bazobehram/commandcore/actions/workflows/ci.yml)
 [![Repository policy](https://github.com/bazobehram/commandcore/actions/workflows/repository-policy.yml/badge.svg)](https://github.com/bazobehram/commandcore/actions/workflows/repository-policy.yml)
@@ -20,22 +20,57 @@ CommandCore is free software licensed under **GNU AGPL-3.0-or-later**.
 > platform. Windows support is a preview. Interactive desktop control is
 > experimental and is not yet part of the stable support promise.
 
+## See CommandCore in action
+
+These are **real interface captures** from the November 2026 CommandCore 1080p video demonstration. Each image is cropped to focus on the product and exclude webcam footage and sensitive areas. They are **not AI-generated mockups**. Select an image to view it at full resolution.
+
+### 1. Discover your devices from ChatGPT
+
+Ask an MCP-connected assistant to list your authorized machines and see their operating systems, status, and available capabilities — without copying terminal commands.
+
+<p align="center">
+  <a href="assets/readme/chatgpt-devices.png"><img src="assets/readme/chatgpt-devices.png" alt="Real ChatGPT session showing CommandCore devices.list and three connected Linux devices with capabilities" width="702"></a>
+</p>
+
+<sub>Recorded demo: FULL_CONTROL is enabled on the author's test devices; this is not the default permission recommendation.</sub>
+
+### 2. Open a live Browser inside the same conversation
+
+The assistant opens a managed Browser session, reports the result, and shows a live view in ChatGPT. Human control is explicitly separate from AI control.
+
+<p align="center">
+  <a href="assets/readme/browser-chatgpt-response.png"><img src="assets/readme/browser-chatgpt-response.png" alt="Actual ChatGPT CommandCore browser.open operation and browser session result" height="420"></a>
+  <a href="assets/readme/browser-live-panel.png"><img src="assets/readme/browser-live-panel.png" alt="Actual CommandCore Browser panel inside ChatGPT displaying a live Google page with control and privacy buttons" height="420"></a>
+</p>
+
+<sub>Two crops from the same real demonstration frame. The managed Browser is optional and experimental; see the <a href="docs/BROWSER.md">Browser guide</a>.</sub>
+
+### 3. Monitor your devices from the web workspace
+
+The web interface provides a second view of the same devices: their online state, machine metrics, available tools, Browser sessions, and recent execution activity.
+
+<p align="center">
+  <a href="assets/readme/workspace-overview.png"><img src="assets/readme/workspace-overview.png" alt="Actual CommandCore Workspace showing three connected machines, the selected server, hardware metrics, and navigation for Browser and Activity" width="900"></a>
+</p>
+
+### 4. Follow work through execution and verification
+
+In this recorded example, the assistant set up a small test application and checked the service and HTTP result. The visible output and status show what was run and verified, rather than just claiming completion.
+
+<p align="center">
+  <a href="assets/readme/agent-task-completed.png"><img src="assets/readme/agent-task-completed.png" alt="Actual ChatGPT execution result showing deployment verification output and a completed temporary to-do app demonstration" width="693"></a>
+</p>
+
+<sub>The temporary to-do application in this historic walkthrough was later removed; this is an example workflow, not a currently hosted service.</sub>
+
+For a longer tour, see the [video demonstration](https://youtu.be/kRVtG7oW1aQ) and explore the [public website](https://commandcore.app/).
+
 ## Why CommandCore?
 
 Most computer-control MCP tools focus on one client talking to one machine.
 CommandCore is designed as a control plane:
 
-~~~text
-ChatGPT -+
-Claude --+
-Gemini --+
-Codex ---+-- MCP + OAuth --> CommandCore -- outbound WSS --> devices
-IDE/CLI -+                       |
-Other ---+                       +-- identity and grants
-                                +-- policy and audit
-                                +-- device selection
-                                +-- signed agent lifecycle
-~~~
+The architecture graphic at the top illustrates the request path: AI clients connect over MCP and OAuth to CommandCore, which authorizes operations and routes them to enrolled devices over outbound connections.
 
 A single MCP endpoint can expose every device the authenticated account is
 allowed to use. Adding a device does not require adding another MCP server to
