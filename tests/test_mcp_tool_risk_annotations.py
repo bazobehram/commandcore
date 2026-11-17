@@ -74,6 +74,4 @@ def test_all_tool_discovery_annotations_are_explicit_booleans():
 def test_read_only_metadata_does_not_downgrade_oauth_scope(name, scope):
     # Docker reads still require FULL; Browser reads still require STANDARD.
     # Risk hints do not change either security boundary.
-    assert TOOLS[name]["securitySchemes"] == [
-        {"type": "oauth2", "scopes": [scope]}
-    ]
+    assert TOOLS[name]["securitySchemes"] == [{"type": "oauth2", "scopes": [scope]}]
