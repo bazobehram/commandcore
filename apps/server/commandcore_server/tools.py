@@ -911,8 +911,17 @@ TOOL_DEFINITIONS.extend(
         {
             "name": "browser.close",
             "title": "Close visual browser session",
-            "description": "Release only this authenticated caller's browser session.",
-            "inputSchema": _obj({}),
+            "description": "Release only this authenticated caller's Browser in this verified conversation. An optional expected session ID prevents stale embedded controls from closing a replacement session.",
+            "inputSchema": _obj(
+                {
+                    "session_ref": {"type": "string", "maxLength": 128},
+                    "expected_session_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                }
+            ),
         },
     ]
 )
