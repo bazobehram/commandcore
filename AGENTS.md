@@ -44,8 +44,11 @@ For deployment work, read these files before acting:
 7. `docs/SECURITY_MODEL.md`
 8. the relevant client guide under `docs/clients/`
 
-Also read `docs/INSTALLATION_READINESS.md` for current installation limits and
-`docs/RELEASE_DOWNLOADS.md` before promising a signed agent installation.
+Treat `docs/INSTALLATION_READINESS.md` as an October 2026 historical
+onboarding review, not a current release verdict. Verify actual platform
+support through `docs/PLATFORM_SUPPORT.md`, the current source, CI, and signed
+release artifacts. Read `docs/RELEASE_DOWNLOADS.md` before promising a signed
+Agent installation or a hosted download feed.
 
 For contributor work, also read `CONTRIBUTING.md`, `SECURITY.md`, and the
 relevant architecture/protocol documents.
