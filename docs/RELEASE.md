@@ -150,3 +150,18 @@ The first attestation only exists when the approved tag workflow has completed
 successfully. Attestation does **not** confirm that either host runs this digest,
 nor approve production promotion. Both hosts still require independent source
 parity checks, protected approvals, canaries and rehearsed rollback.
+
+## Native Linux release architecture completeness
+
+The protected `publish-native-agent` workflow publishes a public Linux Agent
+release only after a single externally signed manifest independently verifies
+both `x86_64` and `arm64` artifacts. The verifier checks every listed
+artifact's hash, size, filename and HTTPS release URL and rejects unexpected
+files. An x86-only unsigned candidate can still be produced for review, but it
+is **not** a complete public Linux release.
+
+This gate does not create the signing key, sign unsigned CI candidates, publish
+an Agent bundle automatically, or demonstrate user-facing installation. The
+approved public key, isolated signing custody, clean-install/enrollment and
+rollback evidence must be verified before the Public installer endpoints are
+advertised as ready.
