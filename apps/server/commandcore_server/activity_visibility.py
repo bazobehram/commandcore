@@ -6,6 +6,7 @@ import posixpath
 import re
 import shlex
 from typing import Any
+from urllib.parse import urlsplit
 
 _PATH_FIELDS = ("path", "root", "repo", "source", "destination", "cwd")
 _RESTRICTED = re.compile(
@@ -78,6 +79,50 @@ def safe_path(value: Any) -> str | None:
     return normalized
 
 
+
+def visible_public_url(value: Any) -> str | None:
+    """Reduce a Browser URL to an explicitly public HTTPS *origin*.
+
+    Browsing history, userinfo, query strings and fragments can carry secrets.
+    Neither paths nor typed form data belong in cross-session Activity hints.
+    Internal names, numeric IPs, ports and IDN/unicode hosts stay withheld.
+    """
+    if not isinstance(value, str) or not 1 <= len(value) <= 2048:
+        return None
+    if any(ord(char) <= 32 or ord(char) == 127 for char in value) or chr(92) in value:
+        return None
+    try:
+        parsed = urlsplit(value)
+        host = parsed.hostname
+        if (
+            parsed.scheme != "https"
+            or not host
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port is not None
+            or not parsed.netloc
+        ):
+            return None
+    except ValueError:
+        return None
+    if not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", host):
+        return None
+    labels = host.split(".")
+    if (
+        len(host) > 253
+        or len(labels) < 2
+        or any(not label or len(label) > 48 or label.startswith("-")
+               or label.endswith("-") for label in labels)
+        or not re.fullmatch(r"[a-z]{2,24}", labels[-1])
+        or labels[-1] in {"local", "lan", "internal", "localhost", "home", "arpa"}
+        or re.search(r"secret|credential|password|passwd|token|bearer|auth|"
+                     r"cookie|private|api[_.-]?key|access[_.-]?key|session",
+                     host, re.IGNORECASE)
+    ):
+        return None
+    return "https://" + host + "/"
+
+
 def safe_command_name(value: Any) -> str | None:
     if not isinstance(value, str) or not value or len(value) > 32768:
         return None
@@ -105,6 +150,11 @@ def safe_operation_detail(tool: str, arguments: dict[str, Any]) -> dict[str, Any
         result["command_name"] = (
             safe_command_name(arguments.get("command")) or "[hidden]"
         )
+    elif tool.startswith("browser."):
+        origin = visible_public_url(arguments.get("url"))
+        if origin is not None:
+            result["public_url"] = origin
+        result["url_visibility"] = "HTTPS origin only; path, query and fragment withheld."
     elif tool == "git.run":
         argv = arguments.get("args")
         if isinstance(argv, list) and argv and isinstance(argv[0], str):
