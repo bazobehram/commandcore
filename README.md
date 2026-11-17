@@ -22,7 +22,7 @@ CommandCore is free software licensed under **GNU AGPL-3.0-or-later**.
 
 ## See CommandCore in action
 
-These are **real interface captures** from the November 2026 CommandCore 1080p video demonstration. Each image is cropped to focus on the product and exclude webcam footage and sensitive areas. They are **not AI-generated mockups**. Select an image to view it at full resolution.
+These are **real interface captures** from the November 2026 CommandCore 1080p video demonstration. They are cropped, and machine names, private URLs, file paths, and selected command text have been replaced with generic examples for privacy. The underlying interface and results are real; these are **edited captures, not AI-generated mockups**. Select an image to view it at full resolution.
 
 ### 1. Discover your devices from ChatGPT
 
@@ -55,7 +55,7 @@ The web interface provides a second view of the same devices: their online state
 
 ### 4. Follow work through execution and verification
 
-In this recorded example, the assistant set up a small test application and checked the service and HTTP result. The visible output and status show what was run and verified, rather than just claiming completion.
+In this recorded example, the assistant set up a small test application and checked its service and HTTP result. The verification status and output are taken from that session. Private deployment paths and command arguments shown in the image have been anonymized.
 
 <p align="center">
   <a href="assets/readme/agent-task-completed.png"><img src="assets/readme/agent-task-completed.png" alt="Actual ChatGPT execution result showing deployment verification output and a completed temporary to-do app demonstration" width="693"></a>
