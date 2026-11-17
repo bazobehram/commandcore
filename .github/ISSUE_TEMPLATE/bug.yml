@@ -13,7 +13,7 @@ body:
     id: version
     attributes:
       label: CommandCore version or commit
-      placeholder: 0.9.0-rc7 or commit SHA
+      placeholder: Version from VERSION, or a Git commit SHA
     validations:
       required: true
   - type: dropdown
@@ -28,7 +28,8 @@ body:
         - OAuth / authorization
         - Privileged helper
         - Installer / update / rollback
-        - Web panel
+        - Web panel / workspace
+        - Managed Browser / live view
         - Documentation
         - Other
     validations:
