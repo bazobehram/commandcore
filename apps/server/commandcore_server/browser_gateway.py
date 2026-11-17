@@ -784,7 +784,9 @@ class BrowserGateway:
                 return {"closed": False}
             async with entry.lock:
                 if expected_session_id is not None and entry.id != expected_session_id:
-                    raise BrowserError("Browser session changed; refresh before stopping")
+                    raise BrowserError(
+                        "Browser session changed; refresh before stopping"
+                    )
                 # An agent cannot terminate a browser while the operator is
                 # typing credentials or approving a sensitive action.
                 if entry.paused_for_human:
