@@ -1,7 +1,9 @@
 """Authenticated first-party viewer; never enables/provisions Browser."""
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+
+from .web_assets import web_asset
 
 from .auth import STANDARD_SCOPE, scope_allows
 from .browser_gateway import BrowserError
@@ -30,6 +32,46 @@ def install_browser_viewer(app, browser, principal_dependency, same_origin, db):
         sessions = browser.viewer_sessions(principal.subject, principal.issuer)
         if not any(row["client_id"] == client_id for row in sessions):
             raise HTTPException(404, "Browser session unavailable")
+
+    @app.get("/browser/live", include_in_schema=False)
+    async def direct_browser_page():
+        # No session data is embedded in this document. Authenticated APIs
+        # supply owner-bound frames; mere GET never grants human takeover.
+        return HTMLResponse(
+            web_asset("browser-live.html").read_text(encoding="utf-8"),
+            headers={
+                "Cache-Control": "private, no-store",
+                "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": (
+                    "default-src 'none'; script-src 'self'; style-src 'self'; "
+                    "img-src 'self' data:; connect-src 'self'; "
+                    "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+                ),
+            },
+        )
+
+    @app.get("/browser-live.js", include_in_schema=False)
+    async def direct_browser_js():
+        return Response(
+            web_asset("browser-live.js").read_bytes(),
+            media_type="application/javascript",
+            headers={
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.get("/browser-live.css", include_in_schema=False)
+    async def direct_browser_css():
+        return Response(
+            web_asset("browser-live.css").read_bytes(),
+            media_type="text/css",
+            headers={
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.get("/api/browser/sessions")
     async def sessions(principal=Depends(principal_dependency)):

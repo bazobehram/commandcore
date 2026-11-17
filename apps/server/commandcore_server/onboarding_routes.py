@@ -26,6 +26,8 @@ def _panel_return_path(destination: str | None, handoff_token: str) -> str:
     """Never redirect OAuth callbacks to external or untrusted URL destinations."""
     if destination == "browser" and re.fullmatch(r"[A-Za-z0-9_-]{43}", handoff_token):
         return "/browser/console/" + handoff_token
+    if destination == "browser_live":
+        return "/browser/live"
     if destination == "enroll":
         return "/enroll/"
     return "/"
@@ -38,8 +40,15 @@ def _browser_login_landing(path: str) -> HTMLResponse:
     panel session and owner-bound handoff. No script, cookie-policy relaxation,
     third-party redirect or credentials are exposed to the page.
     """
-    if not re.fullmatch(r"/browser/console/[A-Za-z0-9_-]{43}", path):
-        raise ValueError("invalid private console destination")
+    is_live = path == "/browser/live"
+    if not is_live and not re.fullmatch(r"/browser/console/[A-Za-z0-9_-]{43}", path):
+        raise ValueError("invalid browser destination")
+    description = (
+        "View your owner-bound live Browser. AI control remains unchanged."
+        if is_live
+        else "Continue to your private browser console. AI control stays paused "
+        "until you explicitly resume it."
+    )
     return HTMLResponse(
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -47,10 +56,12 @@ def _browser_login_landing(path: str) -> HTMLResponse:
         "<title>CommandCore — Private browser control</title>"
         '<link rel="stylesheet" href="/onboarding.css"></head><body><main>'
         "<h1>CommandCore</h1><h2>Signed in</h2>"
-        "<p>Continue to your private browser console. AI control stays paused "
-        "until you explicitly resume it.</p>"
-        '<a class="button" href="' + escape(path, quote=True) + '">'
-        "Continue to private Browser</a></main></body></html>",
+        "<p>" + description + "</p>"
+        '<a class="button" href="'
+        + escape(path, quote=True)
+        + '">'
+        + ("Continue to live Browser" if is_live else "Continue to private Browser")
+        + "</a></main></body></html>",
         headers={
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",
@@ -306,6 +317,8 @@ def install_routes(
                 if request.query_params.get("return_to") == "enroll"
                 else "browser"
                 if request.query_params.get("return_to") == "browser"
+                else "browser_live"
+                if request.query_params.get("return_to") == "browser_live"
                 else "devices"
             ),
             httponly=True,
@@ -372,7 +385,7 @@ def install_routes(
         return_path = _panel_return_path(destination, handoff)
         response = (
             _browser_login_landing(return_path)
-            if destination == "browser" and return_path != "/"
+            if destination in {"browser", "browser_live"} and return_path != "/"
             else RedirectResponse(return_path, 303)
         )
         session = issue_panel_session(
