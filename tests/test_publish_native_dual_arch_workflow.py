@@ -5,7 +5,9 @@ from pathlib import Path
 import yaml
 
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/publish-native-agent.yml"
+WORKFLOW = (
+    Path(__file__).resolve().parents[1] / ".github/workflows/publish-native-agent.yml"
+)
 
 
 def test_public_agent_publish_requires_signed_x86_and_arm64():
@@ -23,6 +25,8 @@ def test_public_agent_publish_requires_signed_x86_and_arm64():
     assert '--architecture "$architecture"' in command
     assert command.count("verify_native_agent_release.py") == 1
     assert "artifacts'][0]" not in command
-    assert step["env"]["RELEASE_PUBLIC_KEY"] == "${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}"
+    assert (
+        step["env"]["RELEASE_PUBLIC_KEY"] == "${{ vars.AGENT_RELEASE_PUBLIC_KEY_B64 }}"
+    )
     assert step["env"]["RELEASE_VERSION"] == "${{ inputs.version }}"
     assert step["env"]["REPOSITORY"] == "${{ github.repository }}"
