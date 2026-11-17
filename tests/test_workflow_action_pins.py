@@ -4,7 +4,11 @@ import runpy
 from pathlib import Path
 
 scan_workflows = runpy.run_path(
-    str(Path(__file__).resolve().parents[1] / "scripts" / "check_workflow_action_pins.py")
+    str(
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "check_workflow_action_pins.py"
+    )
 )["scan_workflows"]
 
 
@@ -20,8 +24,7 @@ def test_accepts_full_sha_and_local_actions(tmp_path: Path) -> None:
 
 def test_rejects_tag_and_container_actions(tmp_path: Path) -> None:
     (tmp_path / "unsafe.yml").write_text(
-        "steps:\n  - uses: actions/checkout@v4\n"
-        "  - uses: docker://alpine:latest\n",
+        "steps:\n  - uses: actions/checkout@v4\n  - uses: docker://alpine:latest\n",
         encoding="utf-8",
     )
     failures = scan_workflows(tmp_path)
