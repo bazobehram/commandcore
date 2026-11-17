@@ -1021,7 +1021,22 @@ _READ_ONLY_HINTS = {
     "screen.capture",
     "clipboard.read",
 }
+# Annotation-only read operations. Keep these separate from _READ_ONLY_HINTS,
+# which is also used by required_oauth_scope: metadata must not lower grants.
+_METADATA_READ_ONLY_HINTS = {
+    "docker.ps",
+    "docker.inspect",
+    "docker.logs",
+    "browser.observe",
+    "browser.elements",
+    "browser.links",
+    "browser.watch",
+    "browser.frame",
+}
 _DESTRUCTIVE_HINTS = {
+    "fs.write",
+    "fs.patch",
+    "fs.copy",
     "fs.move",
     "fs.delete",
     "shell.exec",
@@ -1051,8 +1066,25 @@ _DESTRUCTIVE_HINTS = {
     "browser.click",
     "browser.type",
     "browser.keypress",
+    "browser.close",
 }
 _OPEN_WORLD_HINTS = {
+    # Browser reads and controls can observe/navigate untrusted public pages.
+    # Human handoff and session cleanup only change our local ownership state.
+    "browser.open",
+    "browser.observe",
+    "browser.elements",
+    "browser.frame",
+    "browser.move",
+    "browser.click",
+    "browser.type",
+    "browser.keypress",
+    "browser.scroll",
+    "browser.watch",
+    "browser.links",
+    "browser.follow",
+    "browser.back",
+    "browser.forward",
     "shell.exec",
     "process.start",
     "package.install",
@@ -1063,10 +1095,7 @@ _OPEN_WORLD_HINTS = {
 }
 for _tool in TOOL_DEFINITIONS:
     _name = _tool["name"]
-    _read_only = _name in _READ_ONLY_HINTS or _name in {
-        "browser.watch",
-        "browser.frame",
-    }
+    _read_only = _name in _READ_ONLY_HINTS or _name in _METADATA_READ_ONLY_HINTS
     _tool["annotations"] = {
         "title": _tool.get("title", _name),
         "readOnlyHint": _read_only,
