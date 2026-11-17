@@ -1,4 +1,13 @@
-# Public repository readiness
+# Public repository readiness — historical snapshot
+
+> **Archived decision record (2026-10-06).** This review predates the public
+> CommandCore GitHub repository. Its first-publication instructions, candidate
+> version, and claims about whether the repository exists are not current tasks.
+> For present-day onboarding see [README](../README.md),
+> [documentation index](README.md), and [platform support](PLATFORM_SUPPORT.md).
+> For future release requirements use [release process](RELEASE.md) and the
+> [public release checklist](PUBLIC_RELEASE_CHECKLIST.md). Do not reinitialize
+> Git history or republish this repository based on this historical verdict.
 
 Date: 2026-10-06  
 Candidate version: `0.9.0-rc7`

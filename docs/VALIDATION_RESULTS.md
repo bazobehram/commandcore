@@ -45,7 +45,9 @@ A passing fixture does not by itself establish:
 - support for every Linux distribution;
 - Windows FULL_CONTROL;
 - interactive desktop support;
-- browser automation;
+- arbitrary website automation or a turnkey managed Browser deployment;
+  the optional managed Browser requires separately provisioned, verified
+  isolation and owner-control boundaries (see [Browser guide](BROWSER.md));
 - compatibility with every OAuth provider or MCP client;
 - safety of enabling privileged tools on unrelated production workloads.
 

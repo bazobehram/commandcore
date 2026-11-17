@@ -1,7 +1,14 @@
 # Public release checklist
 
-Use this checklist before making a source release or changing the repository to
-public visibility.
+> **Scope:** This document combines one-time *first publication* procedures
+> (historical: the repository is already public) with recurring checks for each
+> new release. Unchecked items are not evidence that a live deployment lacks a
+> feature or that a release has failed. Use the current tagged commit, CI results,
+> signed artifacts, and [release process](RELEASE.md) for actual release decisions.
+> Never recreate or rewrite the public repository history to satisfy an old
+> first-publication step.
+
+Use the recurring sections before publishing a new source or binary release.
 
 ## Repository hygiene
 
@@ -63,7 +70,7 @@ public visibility.
 - [ ] Server database backup/restore rehearsal passes.
 - [ ] Release signing key is isolated from the public server and repository.
 
-## Publication
+## Initial publication (historical; do not repeat on this repository)
 
 - [ ] Create a clean public repository/history rather than exposing private development history.
 - [ ] Push the reviewed source commit.
