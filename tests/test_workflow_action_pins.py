@@ -1,8 +1,11 @@
 """Regression coverage for immutable GitHub Actions references."""
 
+import runpy
 from pathlib import Path
 
-from scripts.check_workflow_action_pins import scan_workflows
+scan_workflows = runpy.run_path(
+    str(Path(__file__).resolve().parents[1] / "scripts" / "check_workflow_action_pins.py")
+)["scan_workflows"]
 
 
 def test_accepts_full_sha_and_local_actions(tmp_path: Path) -> None:
