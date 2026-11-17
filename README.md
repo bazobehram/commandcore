@@ -305,6 +305,10 @@ Start with the [documentation index](docs/README.md). Important references:
 Contributions are welcome. Before opening a pull request, read
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+For your first fork and pull request, follow the
+[step-by-step contributor workflow](CONTRIBUTING.md#first-contribution-fork-test-and-open-a-pr).
+The repository's `AGENTS.md` provides additional boundaries for AI coding agents.
+
 The project uses review-first development:
 
 - changes arrive through pull requests;

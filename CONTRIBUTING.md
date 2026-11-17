@@ -20,6 +20,40 @@ clear test evidence are strongly preferred.
   as well as success-path tests.
 - Public interfaces and protocols require compatibility notes.
 
+## First contribution: fork, test, and open a PR
+
+A fork is a separate copy of CommandCore. Do not point a local evaluation
+server at someone else's production devices, database, OAuth tenant, or signing
+keys. Start from the public repository and test in a disposable environment.
+
+1. Fork [bazobehram/commandcore](https://github.com/bazobehram/commandcore)
+   on GitHub, then clone **your fork** (substitute your own account name):
+
+   ~~~bash
+   git clone https://github.com/YOUR-USERNAME/commandcore.git
+   cd commandcore
+   git remote add upstream https://github.com/bazobehram/commandcore.git
+   git switch -c docs/my-first-contribution
+   ~~~
+
+2. Read [AGENTS.md](AGENTS.md) if you use an AI coding agent. That file defines
+   the project's permission and deployment boundaries; do not let an agent
+   modify real devices or expose a service simply to run tests.
+3. Install the development dependencies below and run the checks relevant to
+   your change. For a documentation-only PR, run
+   `python scripts/public_repo_check.py` and check changed Markdown links.
+4. Commit with your own verified Git author identity and **DCO sign-off**:
+   `git add <changed-files>`, then `git commit -s -m "docs: explain example"`.
+   Do not copy another person's Signed-off-by identity.
+5. Push the branch to your fork and open a pull request against
+   `bazobehram/commandcore:main`. Fill in the PR template with actual test
+   evidence and any compatibility or permission impact. GitHub Actions checks
+   must pass before a maintainer can merge.
+
+For a later contribution, fetch `upstream/main` before branching; do not
+force-push or rewrite the original repository's history. If CI fails, open the
+failed job log and fix the underlying issue. Do not skip security or DCO gates.
+
 ## Developer Certificate of Origin
 
 CommandCore uses the Developer Certificate of Origin 1.1 instead of a separate
