@@ -20,8 +20,8 @@ jobs:
   offline-acceptance-bundle:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
       - name: Build offline Windows VM acceptance scripts
@@ -35,7 +35,7 @@ jobs:
             --verify dist/windows-m3-vm-acceptance.zip
           cd dist
           sha256sum windows-m3-vm-acceptance.zip > windows-m3-vm-acceptance.zip.sha256
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: windows-m3-disposable-vm-acceptance
           path: |
