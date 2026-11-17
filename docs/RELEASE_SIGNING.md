@@ -82,3 +82,12 @@ Each release should retain:
 - provenance record.
 
 See RELEASE.md and PUBLIC_RELEASE_CHECKLIST.md.
+
+## GHCR container image provenance
+
+The protected GHCR tag workflow signs and verifies the immutable image digest
+with GitHub Artifact Attestations. This is distinct from the isolated Ed25519
+key used for native Agent manifests. A successful signature check identifies the
+release artifact source/workflow; it does not approve deployment or imply runtime
+parity across Public and Private. See [release metadata](RELEASE.md#immutable-ghcr-release-image-metadata)
+and the protected two-target deployment process.
