@@ -127,13 +127,28 @@ def visible_public_url(value: Any) -> str | None:
     return "https://" + host + "/"
 
 
-
 # Only a finite developer command grammar can appear in Activity hints.
 # Execution receipts use a different request-local redaction policy.
-_ACTIVITY_EXEC = frozenset({
-    "pwd", "uname", "cd", "mkdir", "ls", "stat", "df", "du",
-    "git", "python", "python3", "pytest", "npm", "cargo", "pip", "pip3",
-})
+_ACTIVITY_EXEC = frozenset(
+    {
+        "pwd",
+        "uname",
+        "cd",
+        "mkdir",
+        "ls",
+        "stat",
+        "df",
+        "du",
+        "git",
+        "python",
+        "python3",
+        "pytest",
+        "npm",
+        "cargo",
+        "pip",
+        "pip3",
+    }
+)
 _ACTIVITY_SENSITIVE = re.compile(
     r"secret|credential|password|passwd|token|bearer|auth|cookie|private|"
     r"api[_.-]?key|access[_.-]?key|session|\.env|\.ssh|\.aws|\.kube|"
@@ -150,10 +165,7 @@ _ACTIVITY_TOKEN = re.compile(
 
 
 def _activity_target(value: str) -> bool:
-    if (
-        not re.fullmatch(r"[A-Za-z0-9_./ @+-]{1,120}", value)
-        or value.startswith("-")
-    ):
+    if not re.fullmatch(r"[A-Za-z0-9_./ @+-]{1,120}", value) or value.startswith("-"):
         return False
     return safe_path(value) not in (None, "[restricted path]")
 
@@ -187,8 +199,10 @@ def _approved_activity_step(words: list[str]) -> bool:
             "branch": {"--show-current"},
             "rev-parse": {"--show-toplevel", "--is-inside-work-tree"},
         }
-        return bool(args) and args[0] in flags and all(
-            x in flags[args[0]] for x in args[1:]
+        return (
+            bool(args)
+            and args[0] in flags
+            and all(x in flags[args[0]] for x in args[1:])
         )
     if name in {"python", "python3"}:
         if args == ["--version"]:
@@ -227,8 +241,11 @@ def command_projection(value: Any) -> dict[str, Any]:
     }
     if not isinstance(value, str) or not 1 <= len(value) <= 4096:
         return withheld
-    if (_ACTIVITY_SENSITIVE.search(value) or _ACTIVITY_FORBIDDEN.search(value)
-            or _ACTIVITY_OPAQUE.search(value)):
+    if (
+        _ACTIVITY_SENSITIVE.search(value)
+        or _ACTIVITY_FORBIDDEN.search(value)
+        or _ACTIVITY_OPAQUE.search(value)
+    ):
         return withheld
     tokens = []
     position = 0
@@ -318,7 +335,11 @@ def safe_operation_detail(tool: str, arguments: dict[str, Any]) -> dict[str, Any
         if path is not None:
             result[key] = path
     if tool in {"shell.exec", "process.start"}:
-        result.update(command_projection(arguments.get("command") if not arguments.get("env") else None))
+        result.update(
+            command_projection(
+                arguments.get("command") if not arguments.get("env") else None
+            )
+        )
         result["command_name"] = (
             safe_command_name(arguments.get("command")) or "[hidden]"
         )
