@@ -37,10 +37,14 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           test -n "$RELEASE_PUBLIC_KEY"
-          python scripts/verify_native_agent_release.py signed-release \
-            --public-key-b64 "$RELEASE_PUBLIC_KEY" \
-            --version "$RELEASE_VERSION" --repo "$REPOSITORY" \
-            --architecture "$(python -c 'import json; m=json.load(open("signed-release/manifest.signed.json")); print(m["artifacts"][0]["architecture"])')"
+          # Public Linux release must cover both architectures from one signed manifest.
+          # The verifier checks the signature and all artifact bytes each time.
+          for architecture in x86_64 arm64; do
+            python scripts/verify_native_agent_release.py signed-release \
+              --public-key-b64 "$RELEASE_PUBLIC_KEY" \
+              --version "$RELEASE_VERSION" --repo "$REPOSITORY" \
+              --architecture "$architecture"
+          done
       - name: Publish verified assets
         env:
           GH_TOKEN: ${{ github.token }}
