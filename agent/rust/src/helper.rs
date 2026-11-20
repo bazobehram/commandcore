@@ -116,7 +116,7 @@ impl HelperClient {
             Value::String(nonce)
         });
         let bytes = canonical_bytes(&payload)?;
-        let mut mac = Hmac::<Sha256>::new_from_slice(&secret)
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret)
             .map_err(|_| anyhow!("invalid helper HMAC key"))?;
         mac.update(&bytes);
         payload.as_object_mut().unwrap().insert(
