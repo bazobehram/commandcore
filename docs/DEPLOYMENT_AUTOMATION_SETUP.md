@@ -47,6 +47,36 @@ This preflight is read-only. It blocks topology drift; it does not authorize
 deployment or replace tests, rollbacks, protected GitHub environments, or
 explicit production approval. Do not commit the private manifest.
 
+## Live application-code overlay preflight
+
+The Compose-topology gate checks approved Compose **paths**, not mounted Python or
+web code. Before each production promotion, run the separate read-only
+code-overlay audit on **each deployment host** against a local checkout of the
+reviewed source commit:
+
+```sh
+python3 scripts/runtime_overlay_audit.py \
+  --container commandcore-public-commandcore-1 \
+  --source-root /path/to/reviewed/source \
+  --strict
+```
+
+Use the corresponding private container name on the private host. The audit
+reports only application-code target names and match status; it does not print
+credentials or inspect databases, user files or data volumes. The default mode
+reports differences; `--strict` also rejects source-matching code overlays,
+so a release cannot quietly depend on mutable hotfix mounts outside its image.
+A nonzero result **blocks promotion**, not the currently healthy live service.
+Never remove or replace an active overlay merely to make the audit pass.
+Consolidate each needed hotfix into reviewed source, test a clean immutable
+candidate, verify signed image provenance, rehearse rollback, then remove old
+mounts in a separate protected production deployment.
+
+A clean overlay audit **does not prove code parity on its own**. It must be used
+with immutable image identity checks, OAuth/MCP acceptance, database migration
+and Browser/UI checks. CI cannot inspect private runtime containers; this gate
+belongs to the protected deployment runner on each host.
+
 ## Candidate artifact integrity gate
 
 Before any future deployment, the deployment runner must independently
