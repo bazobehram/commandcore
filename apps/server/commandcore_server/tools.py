@@ -1021,9 +1021,21 @@ _READ_ONLY_HINTS = {
     "screen.capture",
     "clipboard.read",
 }
+# Read-only risk metadata must not lower the OAuth scope of legacy STANDARD tools.
+_ANNOTATION_ONLY_READ_TOOLS = {
+    "docker.ps",
+    "docker.inspect",
+    "docker.logs",
+    "browser.observe",
+    "browser.elements",
+    "browser.links",
+}
 _DESTRUCTIVE_HINTS = {
     "fs.move",
     "fs.delete",
+    "fs.write",
+    "fs.patch",
+    "fs.copy",
     "shell.exec",
     "process.start",
     "process.stop",
@@ -1040,6 +1052,7 @@ _DESTRUCTIVE_HINTS = {
     "keyboard.keypress",
     "clipboard.write",
     "services.manage",
+    "package.install",
     "system.reboot",
     "system.shutdown",
     "git.run",
@@ -1051,8 +1064,22 @@ _DESTRUCTIVE_HINTS = {
     "browser.click",
     "browser.type",
     "browser.keypress",
+    "browser.close",
 }
 _OPEN_WORLD_HINTS = {
+    "browser.open",
+    "browser.observe",
+    "browser.elements",
+    "browser.frame",
+    "browser.move",
+    "browser.click",
+    "browser.type",
+    "browser.keypress",
+    "browser.scroll",
+    "browser.links",
+    "browser.follow",
+    "browser.back",
+    "browser.forward",
     "shell.exec",
     "process.start",
     "package.install",
@@ -1063,10 +1090,15 @@ _OPEN_WORLD_HINTS = {
 }
 for _tool in TOOL_DEFINITIONS:
     _name = _tool["name"]
-    _read_only = _name in _READ_ONLY_HINTS or _name in {
-        "browser.watch",
-        "browser.frame",
-    }
+    _read_only = (
+        _name in _READ_ONLY_HINTS
+        or _name in _ANNOTATION_ONLY_READ_TOOLS
+        or _name
+        in {
+            "browser.watch",
+            "browser.frame",
+        }
+    )
     _tool["annotations"] = {
         "title": _tool.get("title", _name),
         "readOnlyHint": _read_only,

@@ -228,6 +228,60 @@ def test_tool_definitions_have_mcp_risk_annotations():
     assert by_name["package.install"]["annotations"]["openWorldHint"] is True
 
 
+def test_tool_risk_annotations_cover_overwrites_public_web_and_read_only_docker():
+    from commandcore_server.tools import TOOL_DEFINITIONS
+
+    by_name = {tool["name"]: tool["annotations"] for tool in TOOL_DEFINITIONS}
+    for name in ("fs.write", "fs.patch", "fs.copy", "package.install", "browser.close"):
+        assert by_name[name]["readOnlyHint"] is False
+        assert by_name[name]["destructiveHint"] is True
+
+    for name in (
+        "docker.ps",
+        "docker.inspect",
+        "docker.logs",
+        "browser.observe",
+        "browser.elements",
+        "browser.links",
+    ):
+        assert by_name[name]["readOnlyHint"] is True
+        assert by_name[name]["destructiveHint"] is False
+
+    definitions = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
+    standard_scope = definitions["browser.open"]["securitySchemes"]
+    full_scope = [{"type": "oauth2", "scopes": ["commandcore:full"]}]
+    for name in ("docker.ps", "docker.inspect", "docker.logs"):
+        assert definitions[name]["securitySchemes"] == full_scope
+    for name in ("browser.observe", "browser.elements", "browser.links"):
+        assert definitions[name]["securitySchemes"] == standard_scope
+
+    for name in (
+        "browser.open",
+        "browser.observe",
+        "browser.elements",
+        "browser.frame",
+        "browser.move",
+        "browser.click",
+        "browser.type",
+        "browser.keypress",
+        "browser.scroll",
+        "browser.links",
+        "browser.follow",
+        "browser.back",
+        "browser.forward",
+    ):
+        assert by_name[name]["openWorldHint"] is True
+
+    handler = MCPHandler(
+        SimpleNamespace(), SimpleNamespace(inc=lambda _: None), "candidate"
+    )
+    browser_search = next(
+        tool for tool in handler.definitions if tool["name"] == "browser.search"
+    )
+    assert browser_search["annotations"]["openWorldHint"] is True
+    assert browser_search["securitySchemes"] == standard_scope
+
+
 def test_modern_results_can_be_stamped_with_server_info():
     from commandcore_server.mcp import _with_server_info
 
