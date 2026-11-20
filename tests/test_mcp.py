@@ -247,6 +247,14 @@ def test_tool_risk_annotations_cover_overwrites_public_web_and_read_only_docker(
         assert by_name[name]["readOnlyHint"] is True
         assert by_name[name]["destructiveHint"] is False
 
+    definitions = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
+    standard_scope = definitions["browser.open"]["securitySchemes"]
+    full_scope = [{"type": "oauth2", "scopes": ["commandcore:full"]}]
+    for name in ("docker.ps", "docker.inspect", "docker.logs"):
+        assert definitions[name]["securitySchemes"] == full_scope
+    for name in ("browser.observe", "browser.elements", "browser.links"):
+        assert definitions[name]["securitySchemes"] == standard_scope
+
     for name in (
         "browser.open",
         "browser.observe",
@@ -271,6 +279,7 @@ def test_tool_risk_annotations_cover_overwrites_public_web_and_read_only_docker(
         tool for tool in handler.definitions if tool["name"] == "browser.search"
     )
     assert browser_search["annotations"]["openWorldHint"] is True
+    assert browser_search["securitySchemes"] == standard_scope
 
 
 def test_modern_results_can_be_stamped_with_server_info():
