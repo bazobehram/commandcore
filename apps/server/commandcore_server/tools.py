@@ -994,12 +994,6 @@ TOOL_DEFINITIONS.extend(
 
 # MCP annotations are UX/risk hints for clients, never security boundaries.
 _READ_ONLY_HINTS = {
-    "docker.ps",
-    "docker.inspect",
-    "docker.logs",
-    "browser.observe",
-    "browser.elements",
-    "browser.links",
     "auth.whoami",
     "devices.list",
     "devices.info",
@@ -1026,6 +1020,15 @@ _READ_ONLY_HINTS = {
     "desktop.windows",
     "screen.capture",
     "clipboard.read",
+}
+# Read-only risk metadata must not lower the OAuth scope of legacy STANDARD tools.
+_ANNOTATION_ONLY_READ_TOOLS = {
+    "docker.ps",
+    "docker.inspect",
+    "docker.logs",
+    "browser.observe",
+    "browser.elements",
+    "browser.links",
 }
 _DESTRUCTIVE_HINTS = {
     "fs.move",
@@ -1087,10 +1090,15 @@ _OPEN_WORLD_HINTS = {
 }
 for _tool in TOOL_DEFINITIONS:
     _name = _tool["name"]
-    _read_only = _name in _READ_ONLY_HINTS or _name in {
-        "browser.watch",
-        "browser.frame",
-    }
+    _read_only = (
+        _name in _READ_ONLY_HINTS
+        or _name in _ANNOTATION_ONLY_READ_TOOLS
+        or _name
+        in {
+            "browser.watch",
+            "browser.frame",
+        }
+    )
     _tool["annotations"] = {
         "title": _tool.get("title", _name),
         "readOnlyHint": _read_only,
