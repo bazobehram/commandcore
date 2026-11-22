@@ -189,17 +189,39 @@ class ProvisionNonceLedger:
                 "operator nonce ledger permissions unsafe"
             )
         self._identity = (st.st_dev, st.st_ino)
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        self._anchor_fd = os.open(self.path, flags)
+        opened = os.fstat(self._anchor_fd)
+        if (opened.st_dev, opened.st_ino) != self._identity:
+            self.close()
+            raise BrowserProvisionIntentDenied(
+                "operator nonce ledger changed while opening"
+            )
         with closing(self._connection()) as db, db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS used_intents (nonce TEXT PRIMARY KEY, consumed_at INTEGER NOT NULL)"
             )
 
+    def close(self) -> None:
+        fd = getattr(self, "_anchor_fd", -1)
+        if fd >= 0:
+            os.close(fd)
+            self._anchor_fd = -1
+
+    def __del__(self) -> None:
+        self.close()
+
     def _connection(self) -> sqlite3.Connection:
-        st = self.path.lstat()
+        try:
+            st = self.path.lstat()
+            pinned = os.fstat(self._anchor_fd)
+        except (OSError, ValueError) as exc:
+            raise BrowserProvisionIntentDenied("operator nonce ledger missing") from exc
         if (
             not stat.S_ISREG(st.st_mode)
             or st.st_mode & 0o077
             or (st.st_dev, st.st_ino) != self._identity
+            or (pinned.st_dev, pinned.st_ino) != self._identity
         ):
             raise BrowserProvisionIntentDenied(
                 "operator nonce ledger replaced or unsafe"

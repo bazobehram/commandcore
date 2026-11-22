@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -159,3 +161,24 @@ def test_operator_entrypoint_requires_nonce_consumption(tmp_path):
     assert verified.subject == "alice"
     with pytest.raises(BrowserProvisionIntentDenied, match="replayed"):
         verify_and_consume_provision_intent(token, KEY, ISSUER, ledger, now=1004)
+
+
+def test_signed_but_wrong_audience_and_extra_fields_rejected():
+    token = make()
+    encoded = token.split(".")[0]
+    original = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+    for changes in ({"aud": "another-operator"}, {"unexpected": "field"}, {"v": 2}):
+        data = {**original, **changes}
+        body = json.dumps(
+            data, separators=(",", ":"), sort_keys=True, ensure_ascii=False
+        ).encode()
+        tag = hmac.new(
+            KEY, b"commandcore-public-browser-intent-v1\0" + body, hashlib.sha256
+        ).digest()
+        forged = (
+            base64.urlsafe_b64encode(body).rstrip(b"=").decode()
+            + "."
+            + base64.urlsafe_b64encode(tag).rstrip(b"=").decode()
+        )
+        with pytest.raises(BrowserProvisionIntentDenied):
+            verify_provision_intent(forged, KEY, ISSUER, now=1001)
