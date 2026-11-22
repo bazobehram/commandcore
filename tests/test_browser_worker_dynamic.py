@@ -10,6 +10,13 @@ from commandcore_server.browser_gateway import BrowserError, BrowserGateway
 from commandcore_server.browser_worker_binding import BrowserWorkerBinding
 from commandcore_server.browser_worker_dynamic import RefreshingOwnerBrowserWorkerPool
 
+
+@pytest.fixture(autouse=True)
+def isolated_browser_session_journal(tmp_path, monkeypatch):
+    # CI runners do not have the production /data mount. Never write there in tests.
+    monkeypatch.setenv("COMMANDCORE_BROWSER_JOURNAL_DIR", str(tmp_path / "journals"))
+
+
 SECRET = "synthetic-test-unique-browser-owner-binding-key"
 ISSUER = "https://review.example/"
 
