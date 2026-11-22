@@ -193,3 +193,24 @@ def test_wrong_api_primary_group_is_denied_before_operator(tmp_path):
         )
     _finish(thread, failures)
     assert calls == []
+
+
+def test_failed_operator_socket_group_setup_leaves_no_stale_path(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    target = tmp_path / "ipc.sock"
+
+    def denied_chgrp(*_args):
+        raise PermissionError("synthetic group failure")
+
+    monkeypatch.setattr(
+        "commandcore_server.browser_provision_ipc.os.chown", denied_chgrp
+    )
+    with pytest.raises(PermissionError):
+        serve_provision_intents(
+            str(target),
+            expected_client_uid=os.getuid(),
+            socket_gid=os.getgid(),
+            consume=lambda _: None,
+            max_connections=1,
+        )
+    assert not target.exists()

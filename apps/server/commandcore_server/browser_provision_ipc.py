@@ -104,6 +104,19 @@ def send_provision_intent(
         raise BrowserProvisionTransportDenied("operator transport unavailable") from exc
 
 
+def _remove_owned_socket(target: Path, pinned: os.stat_result) -> None:
+    try:
+        st = target.lstat()
+        if (
+            stat.S_ISSOCK(st.st_mode)
+            and st.st_uid == os.geteuid()
+            and (st.st_dev, st.st_ino) == (pinned.st_dev, pinned.st_ino)
+        ):
+            target.unlink()
+    except OSError:
+        pass
+
+
 def serve_provision_intents(
     path: str,
     *,
@@ -135,11 +148,15 @@ def serve_provision_intents(
         finally:
             os.umask(original_umask)
         pinned = target.lstat()
-        if socket_gid is not None:
-            os.chown(target, -1, socket_gid)
-        os.chmod(target, 0o660)
-        if socket_gid is not None and target.stat().st_gid != socket_gid:
-            raise BrowserProvisionTransportDenied("operator socket group mismatch")
+        try:
+            if socket_gid is not None:
+                os.chown(target, -1, socket_gid)
+            os.chmod(target, 0o660)
+            if socket_gid is not None and target.stat().st_gid != socket_gid:
+                raise BrowserProvisionTransportDenied("operator socket group mismatch")
+        except (OSError, BrowserProvisionTransportDenied):
+            _remove_owned_socket(target, pinned)
+            raise
         listener.listen(4)
         listener.settimeout(0.5)
         try:
@@ -194,14 +211,4 @@ def serve_provision_intents(
                     except OSError:
                         pass
         finally:
-            # Do not remove a socket path that another process substituted.
-            try:
-                st = target.lstat()
-                if (
-                    stat.S_ISSOCK(st.st_mode)
-                    and st.st_uid == os.geteuid()
-                    and (st.st_dev, st.st_ino) == (pinned.st_dev, pinned.st_ino)
-                ):
-                    target.unlink()
-            except OSError:
-                pass
+            _remove_owned_socket(target, pinned)
