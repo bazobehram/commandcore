@@ -146,3 +146,50 @@ def test_world_writable_socket_directory_is_rejected(tmp_path):
             max_connections=1,
         )
     assert not (tmp_path / "ipc.sock").exists()
+
+
+def test_wrong_operator_primary_group_is_denied(tmp_path):
+    calls = []
+    path, thread, failures = _socket_server(tmp_path, calls.append)
+    with pytest.raises(
+        BrowserProvisionTransportDenied, match="untrusted operator peer"
+    ):
+        send_provision_intent(
+            _signed(), str(path), operator_uid=os.getuid(), operator_gid=os.getgid() + 1
+        )
+    _finish(thread, failures)
+    assert calls == []
+
+
+def test_wrong_api_primary_group_is_denied_before_operator(tmp_path):
+    calls = []
+    tmp_path.chmod(0o700)
+    path = tmp_path / "ipc.sock"
+    failures = []
+
+    def serve():
+        try:
+            serve_provision_intents(
+                str(path),
+                expected_client_uid=os.getuid(),
+                expected_client_gid=os.getgid() + 1,
+                socket_gid=os.getgid(),
+                consume=calls.append,
+                max_connections=1,
+            )
+        except Exception as exc:  # noqa: BLE001 - propagate exception from test thread
+            failures.append(exc)
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if path.exists():
+            break
+        time.sleep(0.01)
+    assert path.exists(), failures
+    with pytest.raises(BrowserProvisionTransportDenied):
+        send_provision_intent(
+            _signed(), str(path), operator_uid=os.getuid(), operator_gid=os.getgid()
+        )
+    _finish(thread, failures)
+    assert calls == []

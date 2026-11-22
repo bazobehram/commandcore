@@ -58,10 +58,16 @@ def _peer_credentials(sock: socket.socket) -> tuple[int, int]:
         raise BrowserProvisionTransportDenied("peer identity unavailable") from exc
 
 
-def send_provision_intent(token: str, path: str, *, operator_uid: int) -> str:
+def send_provision_intent(
+    token: str, path: str, *, operator_uid: int, operator_gid: int | None = None
+) -> str:
     """Authorized API process sends an already-JWT-verified, signed intent."""
     target = _socket_path(path, must_exist=True)
-    if operator_uid < 0 or not isinstance(token, str):
+    if (
+        operator_uid < 0
+        or (operator_gid is not None and operator_gid < 0)
+        or not isinstance(token, str)
+    ):
         raise BrowserProvisionTransportDenied("operator peer or request invalid")
     try:
         request = token.encode("ascii")
@@ -73,8 +79,10 @@ def send_provision_intent(token: str, path: str, *, operator_uid: int) -> str:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(_TIMEOUT)
             conn.connect(str(target))
-            uid, _gid = _peer_credentials(conn)
-            if uid != operator_uid:
+            uid, gid = _peer_credentials(conn)
+            if uid != operator_uid or (
+                operator_gid is not None and gid != operator_gid
+            ):
                 raise BrowserProvisionTransportDenied("untrusted operator peer")
             conn.sendall(request)
             conn.shutdown(socket.SHUT_WR)
@@ -100,6 +108,8 @@ def serve_provision_intents(
     path: str,
     *,
     expected_client_uid: int,
+    expected_client_gid: int | None = None,
+    socket_gid: int | None = None,
     consume: Callable[[str], object],
     stop: Callable[[], bool] | None = None,
     max_connections: int | None = None,
@@ -109,7 +119,12 @@ def serve_provision_intents(
     Never bind on a network interface. Peer UID is checked before reading data.
     A real operator must supply an authenticated handler, not a permissive stub.
     """
-    if expected_client_uid < 0 or max_connections is not None and max_connections < 1:
+    if (
+        expected_client_uid < 0
+        or (expected_client_gid is not None and expected_client_gid < 0)
+        or (socket_gid is not None and socket_gid < 0)
+        or (max_connections is not None and max_connections < 1)
+    ):
         raise BrowserProvisionTransportDenied("operator peer policy invalid")
     target = _socket_path(path, must_exist=False)
     accepted = 0
@@ -120,7 +135,11 @@ def serve_provision_intents(
         finally:
             os.umask(original_umask)
         pinned = target.lstat()
+        if socket_gid is not None:
+            os.chown(target, -1, socket_gid)
         os.chmod(target, 0o660)
+        if socket_gid is not None and target.stat().st_gid != socket_gid:
+            raise BrowserProvisionTransportDenied("operator socket group mismatch")
         listener.listen(4)
         listener.settimeout(0.5)
         try:
@@ -135,8 +154,11 @@ def serve_provision_intents(
                 with conn:
                     conn.settimeout(_TIMEOUT)
                     try:
-                        uid, _ = _peer_credentials(conn)
-                        if uid != expected_client_uid:
+                        uid, gid = _peer_credentials(conn)
+                        if uid != expected_client_uid or (
+                            expected_client_gid is not None
+                            and gid != expected_client_gid
+                        ):
                             raise BrowserProvisionTransportDenied("untrusted API peer")
                         parts = []
                         total = 0

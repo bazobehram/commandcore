@@ -49,6 +49,8 @@ def run_operator_listener(
     socket_path: str,
     state_dir: Path,
     expected_client_uid: int,
+    expected_client_gid: int,
+    socket_gid: int,
     issuer: str,
     allow_hosts: str,
     steel_image: str,
@@ -96,6 +98,8 @@ def run_operator_listener(
     serve_provision_intents(
         socket_path,
         expected_client_uid=expected_client_uid,
+        expected_client_gid=expected_client_gid,
+        socket_gid=socket_gid,
         consume=consume,
         max_connections=max_connections,
     )
@@ -106,6 +110,8 @@ def main() -> None:
     parser.add_argument("--socket-path", required=True)
     parser.add_argument("--state-dir", required=True, type=Path)
     parser.add_argument("--expected-client-uid", type=int, required=True)
+    parser.add_argument("--expected-client-gid", type=int, required=True)
+    parser.add_argument("--socket-gid", type=int, required=True)
     parser.add_argument("--issuer", required=True)
     parser.add_argument("--allow-hosts", required=True)
     parser.add_argument("--steel-image", required=True)
@@ -118,6 +124,8 @@ def main() -> None:
             socket_path=args.socket_path,
             state_dir=args.state_dir,
             expected_client_uid=args.expected_client_uid,
+            expected_client_gid=args.expected_client_gid,
+            socket_gid=args.socket_gid,
             issuer=args.issuer,
             allow_hosts=args.allow_hosts,
             steel_image=args.steel_image,
