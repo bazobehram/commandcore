@@ -8,18 +8,6 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .mcp_ui_diagnostics import record_ui_resource_request
-from .metrics import Metrics
-from .models import Principal
-from .tools import (
-    DEVICE_TOOLS,
-    TOOL_DEFINITIONS,
-    ToolError,
-    ToolService,
-    operation_ui_context,
-)
-from .web_assets import web_asset
-from .shell_receipt import SHELL_UI_URI, build_shell_card
 from .mcp_protocol import (
     LEGACY_PROTOCOLS,
     MODERN_PROTOCOL,
@@ -32,6 +20,18 @@ from .mcp_protocol import (
     _with_server_info,
 )
 from .mcp_task_ledger import UITaskLedger
+from .mcp_ui_diagnostics import record_ui_resource_request
+from .metrics import Metrics
+from .models import Principal
+from .shell_receipt import SHELL_UI_URI, build_shell_card
+from .tools import (
+    DEVICE_TOOLS,
+    TOOL_DEFINITIONS,
+    ToolError,
+    ToolService,
+    operation_ui_context,
+)
+from .web_assets import web_asset
 
 # v2 resource identities are deployed successfully in the canonical OAuth
 # CommandCore plugin. Always retain the original v1 URI for old conversations,
@@ -485,11 +485,13 @@ class MCPHandler:
                 dict(
                     original_watch,
                     name="commandcore.workspace",
+                    title="Open CommandCore Workspace",
                     description="Open the full Activity and Browser workspace when the user explicitly requests it.",
                 ),
                 dict(
                     original_watch,
                     name="commandcore.viewer",
+                    title="Refresh CommandCore Viewer",
                     description="Renew this widget's verified conversation viewer; no new task or UI is opened.",
                     _meta={
                         "ui": {"visibility": ["app"]},
@@ -555,6 +557,15 @@ class MCPHandler:
                 "visibility", ["model", "app"]
             )
             entry["_meta"]["openai/widgetAccessible"] = True
+            # Aliases must not inherit another tool's display labels.
+            annotations = entry.get("annotations", {})
+            title = entry.get("title")
+            if title and annotations.get("title") not in (None, title):
+                annotations["title"] = title
+                entry["_meta"]["openai/toolInvocation/invoking"] = f"{title}…"[:64]
+                entry["_meta"]["openai/toolInvocation/invoked"] = f"{title}: complete"[
+                    :64
+                ]
             if tool_name == "activity.feed":
                 entry["inputSchema"]["properties"]["task_id"] = {
                     "type": "string",
