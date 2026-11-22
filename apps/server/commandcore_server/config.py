@@ -128,6 +128,21 @@ class Settings:
     browser_dynamic_workers_enabled: bool = _bool(
         "COMMANDCORE_BROWSER_DYNAMIC_WORKERS_ENABLED", False
     )
+    browser_provision_api_enabled: bool = _bool(
+        "COMMANDCORE_BROWSER_PROVISION_API_ENABLED", False
+    )
+    browser_provision_socket: str = os.getenv(
+        "COMMANDCORE_BROWSER_PROVISION_SOCKET", ""
+    ).strip()
+    browser_provision_key_file: str = os.getenv(
+        "COMMANDCORE_BROWSER_PROVISION_KEY_FILE", ""
+    ).strip()
+    browser_provision_operator_uid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_PROVISION_OPERATOR_UID", "-1")
+    )
+    browser_provision_operator_gid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_PROVISION_OPERATOR_GID", "-1")
+    )
     browser_worker_binding_path: str = os.getenv(
         "COMMANDCORE_BROWSER_WORKER_BINDING_PATH", ""
     ).strip()
@@ -142,6 +157,18 @@ class Settings:
     )
 
     def validate(self) -> None:
+        if self.browser_provision_api_enabled and not (
+            self.browser_dynamic_workers_enabled
+            and self.browser_enabled
+            and self.oauth_enabled
+            and self.browser_provision_socket.startswith("/")
+            and self.browser_provision_key_file.startswith("/")
+            and self.browser_provision_operator_uid > 0
+            and self.browser_provision_operator_gid > 0
+        ):
+            raise RuntimeError(
+                "OAuth Browser provisioning API requires the complete reviewed operator configuration"
+            )
         if self.browser_dynamic_workers_enabled and not (
             self.browser_enabled
             and self.oauth_enabled

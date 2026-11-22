@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .browser_gateway import BrowserError, BrowserGateway
+from .browser_worker_binding import WorkerOwnershipError
 from .browser_worker_pool import Owner, OwnerBrowserWorkerPool, ProofVerifier
 
 _MAX_MANIFEST_BYTES = 65536
@@ -182,6 +183,23 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
                 raise BrowserError(
                     "dynamic browser worker manifest unavailable or invalid"
                 ) from exc
+
+    def has_owner_binding(self, owner: Owner) -> bool:
+        """Owner ledger lookup only; a proof outage is NOT a missing assignment."""
+        self.refresh()
+        found = False
+        for worker in self.workers:
+            binding = worker.worker_binding
+            if binding is None:
+                raise BrowserError("unbound worker route")
+            try:
+                if binding.matches(owner):
+                    if found:
+                        raise BrowserError("ambiguous owner assignment")
+                    found = True
+            except WorkerOwnershipError as exc:
+                raise BrowserError("owner binding ledger unavailable") from exc
+        return found
 
     def _find_worker(self, owner: Owner) -> BrowserGateway:
         self.refresh()

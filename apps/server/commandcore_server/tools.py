@@ -21,6 +21,10 @@ from .activity import argument_summary, source
 from .agent_gateway import AgentManager
 from .auth import FULL_SCOPE, STANDARD_SCOPE, scope_allows
 from .browser_gateway import BROWSER_TOOL_NAMES, BrowserError, BrowserGateway
+from .browser_provision_api import BrowserOAuthProvisioner
+from .browser_provision_intent import BrowserProvisionIntentDenied
+from .browser_provision_ipc import BrowserProvisionTransportDenied
+from .browser_worker_dynamic import RefreshingOwnerBrowserWorkerPool
 from .browser_worker_pool import OwnerBrowserWorkerPool
 from .db import Database
 from .live_activity import LiveActivity
@@ -1220,11 +1224,13 @@ class ToolService:
         selection_ttl_seconds: int,
         browser: BrowserGateway | OwnerBrowserWorkerPool | None = None,
         public_base_url: str = "",
+        browser_provisioner: BrowserOAuthProvisioner | None = None,
     ):
         self.db = db
         self.agents = agents
         self.selection_ttl_seconds = selection_ttl_seconds
         self.browser = browser
+        self.browser_provisioner = browser_provisioner
         self.public_base_url = public_base_url.rstrip("/")
         self.live_activity = LiveActivity()
         self._browser_conversation_leases: dict[tuple[str, str, str], str] = {}
@@ -1238,7 +1244,16 @@ class ToolService:
             if isinstance(browser, OwnerBrowserWorkerPool)
             else ([browser] if browser is not None else [])
         )
-        if len(workers) == 1 and workers[0].worker_binding is not None:
+        if isinstance(browser, RefreshingOwnerBrowserWorkerPool):
+            # Stable across API restarts, even when zero workers exist yet.
+            self.live_activity._session_key = hashlib.sha256(
+                b"commandcore-conversation-tag-v1\0" + browser.binding_secret.encode()
+            ).digest()
+        if (
+            len(workers) == 1
+            and workers[0].worker_binding is not None
+            and not isinstance(browser, RefreshingOwnerBrowserWorkerPool)
+        ):
             binding = workers[0].worker_binding
             secret = binding._key
             self.live_activity._session_key = hashlib.sha256(
@@ -1267,17 +1282,53 @@ class ToolService:
                 )
         self._collaboration_ledger: ApprovalLedger | None = None
 
-    def _browser_lease_read(self, owner):
-        if self._browser_lease_cipher is None or self._browser_lease_file is None:
+    def _dynamic_browser_lease(self, owner):
+        """Resolve a per-worker encrypted lease only after verified ownership/proof."""
+        if not isinstance(self.browser, RefreshingOwnerBrowserWorkerPool):
             return None
         try:
-            path = self._browser_lease_file
+            worker = self.browser._find_worker(owner)
+        except BrowserError:
+            return None
+        binding = worker.worker_binding
+        if binding is None:
+            return None
+        root = Path(
+            os.environ.get("COMMANDCORE_BROWSER_JOURNAL_DIR", "/data/browser-sessions")
+        )
+        if not root.is_absolute() or not root.is_dir() or root.stat().st_mode & 0o077:
+            return None
+        secret = hashlib.sha256(
+            b"commandcore-conversation-lease-v2\0"
+            + binding._key
+            + binding.worker_id.encode("ascii")
+        ).digest()
+        return (
+            Fernet(base64.urlsafe_b64encode(secret)),
+            root / (binding.worker_id + ".conversation.enc"),
+            worker,
+        )
+
+    def _browser_lease_read(self, owner):
+        material = (
+            self._dynamic_browser_lease(owner)
+            if isinstance(self.browser, RefreshingOwnerBrowserWorkerPool)
+            else (
+                self._browser_lease_cipher,
+                self._browser_lease_file,
+                self._browser_lease_worker,
+            )
+        )
+        cipher, path, _worker = material if material else (None, None, None)
+        if cipher is None or path is None:
+            return None
+        try:
             info = path.lstat()
             import stat
 
             if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
                 return None
-            data = json.loads(self._browser_lease_cipher.decrypt(path.read_bytes()))
+            data = json.loads(cipher.decrypt(path.read_bytes()))
             if data.get("v") != 1 or data.get("owner") != list(owner):
                 return None
             tag, session = data.get("tag"), data.get("session")
@@ -1292,18 +1343,27 @@ class ToolService:
             return None
 
     def _browser_lease_save(self, owner, tag):
-        if self._browser_lease_cipher is None or self._browser_lease_file is None:
+        material = (
+            self._dynamic_browser_lease(owner)
+            if isinstance(self.browser, RefreshingOwnerBrowserWorkerPool)
+            else (
+                self._browser_lease_cipher,
+                self._browser_lease_file,
+                self._browser_lease_worker,
+            )
+        )
+        cipher, path, worker = material if material else (None, None, None)
+        if cipher is None or path is None or worker is None:
             raise ToolError(
                 "browser_lease_storage_unavailable",
                 "Secure conversation lease storage unavailable",
             )
-        worker = self._browser_lease_worker
         entry = worker.sessions.get(owner)
         if entry is None:
             raise ToolError(
                 "browser_lease_session_missing", "Browser session not available"
             )
-        data = self._browser_lease_cipher.encrypt(
+        data = cipher.encrypt(
             json.dumps(
                 {
                     "v": 1,
@@ -1316,7 +1376,6 @@ class ToolService:
         )
         import secrets
 
-        path = self._browser_lease_file
         temp = path.with_name(path.name + "." + secrets.token_hex(6) + ".tmp")
         try:
             fd = os.open(
@@ -1342,10 +1401,15 @@ class ToolService:
         finally:
             temp.unlink(missing_ok=True)
 
-    def _browser_lease_delete(self):
-        if self._browser_lease_file is not None:
+    def _browser_lease_delete(self, owner=None):
+        if isinstance(self.browser, RefreshingOwnerBrowserWorkerPool):
+            material = self._dynamic_browser_lease(owner) if owner else None
+            path = material[1] if material else None
+        else:
+            path = self._browser_lease_file
+        if path is not None:
             try:
-                self._browser_lease_file.unlink(missing_ok=True)
+                path.unlink(missing_ok=True)
             except OSError as exc:
                 raise ToolError("browser_lease_cleanup_failed") from exc
 
@@ -1387,6 +1451,11 @@ class ToolService:
             # Restore only when encrypted owner, session identity and signed
             # conversation tag all agree; no other chat may adopt the worker.
             worker = self._browser_lease_worker
+            if isinstance(self.browser, RefreshingOwnerBrowserWorkerPool):
+                try:
+                    worker = self.browser._find_worker(owner)
+                except BrowserError:
+                    worker = None
             entry = worker.sessions.get(owner) if worker is not None else None
             recovered = self._browser_lease_read(owner)
             if entry is not None and recovered is not None and recovered[1] == entry.id:
@@ -1411,6 +1480,26 @@ class ToolService:
                     "browser_conversation_not_active",
                     "No Browser session belongs to this conversation",
                 )
+            # Only a verified browser.open may provision an absent OAuth owner.
+            if name == "browser.open" and self.browser_provisioner is not None:
+                try:
+                    unassigned = (
+                        not self.browser_provisioner.worker_pool.has_owner_binding(
+                            owner
+                        )
+                    )
+                except BrowserError as exc:
+                    raise ToolError(
+                        "browser_conversation_unverified",
+                        "Unable to verify Browser worker ownership",
+                    ) from exc
+                if unassigned:
+                    self._browser_conversation_leases[owner] = host_tag
+                    return {
+                        key: value
+                        for key, value in args.items()
+                        if key != "session_ref"
+                    }
             # A recovered owner-only session has no verified chat attribution.
             # Never silently assign its screenshot or control to another chat.
             try:
@@ -1806,6 +1895,27 @@ class ToolService:
                     principal, name, args, host_session
                 )
                 try:
+                    if name == "browser.open" and self.browser_provisioner is not None:
+                        try:
+                            await self.browser_provisioner.ensure_owner(principal)
+                        except (
+                            BrowserProvisionIntentDenied,
+                            BrowserProvisionTransportDenied,
+                        ) as exc:
+                            # A failed or uncertain allocation must not pin an
+                            # empty Browser conversation to this chat.
+                            self._browser_conversation_leases.pop(
+                                (
+                                    principal.issuer,
+                                    principal.subject,
+                                    principal.client_id,
+                                ),
+                                None,
+                            )
+                            raise ToolError(
+                                "browser_provision_pending",
+                                "Browser worker assignment unavailable or pending; no action executed",
+                            ) from exc
                     result = await self.browser.call(
                         subject=principal.subject,
                         issuer=principal.issuer,
@@ -1825,7 +1935,9 @@ class ToolService:
                             ],
                         )
                     if name == "browser.close":
-                        self._browser_lease_delete()
+                        self._browser_lease_delete(
+                            (principal.issuer, principal.subject, principal.client_id)
+                        )
                         self._browser_conversation_leases.pop(
                             (principal.issuer, principal.subject, principal.client_id),
                             None,
