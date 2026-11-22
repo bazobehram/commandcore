@@ -30,6 +30,7 @@ from .browser_viewer import install_browser_viewer
 from .browser_worker_attestation import WorkerAttestationVerifier
 from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
 from .browser_worker_binding import BrowserWorkerBinding
+from .browser_worker_dynamic import RefreshingOwnerBrowserWorkerPool
 from .browser_worker_pool import OwnerBrowserWorkerPool
 from .config import Settings
 from .db import Database
@@ -54,26 +55,39 @@ db = Database(settings.db_path)
 metrics = Metrics()
 agents = AgentManager(db, metrics, settings.max_job_output_bytes)
 browser = (
-    OwnerBrowserWorkerPool.from_manifest(
-        settings.browser_worker_manifest,
-        settings.browser_worker_binding_key,
-        settings.browser_allow_hosts,
-        settings.public_base_url,
-        attestation=(
-            (
-                Ed25519WorkerAttestationVerifier(
-                    settings.browser_attestation_path,
-                    settings.browser_attestation_public_key,
+    (
+        RefreshingOwnerBrowserWorkerPool(
+            settings.browser_worker_manifest,
+            settings.browser_worker_binding_key,
+            settings.browser_allow_hosts,
+            settings.public_base_url,
+            attestation=Ed25519WorkerAttestationVerifier(
+                settings.browser_attestation_path,
+                settings.browser_attestation_public_key,
+            ),
+        )
+        if settings.browser_dynamic_workers_enabled
+        else OwnerBrowserWorkerPool.from_manifest(
+            settings.browser_worker_manifest,
+            settings.browser_worker_binding_key,
+            settings.browser_allow_hosts,
+            settings.public_base_url,
+            attestation=(
+                (
+                    Ed25519WorkerAttestationVerifier(
+                        settings.browser_attestation_path,
+                        settings.browser_attestation_public_key,
+                    )
+                    if settings.browser_attestation_public_key
+                    else WorkerAttestationVerifier(
+                        settings.browser_attestation_path,
+                        settings.browser_attestation_key,
+                    )
                 )
-                if settings.browser_attestation_public_key
-                else WorkerAttestationVerifier(
-                    settings.browser_attestation_path,
-                    settings.browser_attestation_key,
-                )
-            )
-            if settings.oauth_enabled
-            else None
-        ),
+                if settings.oauth_enabled
+                else None
+            ),
+        )
     )
     if settings.browser_enabled and settings.browser_worker_manifest
     else (
