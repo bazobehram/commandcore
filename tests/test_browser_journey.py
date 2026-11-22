@@ -353,9 +353,14 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
             if isinstance(n, ast.ClassDef) and n.name == "ToolService"
         )
         segment = ast.get_source_segment(source, cls)
+        # Explicit baseline review: the opt-in public Browser path now
+        # provisions only verified OAuth browser.open calls and stores
+        # per-worker encrypted conversation leases. Existing device
+        # resolution, grants, approvals and agent dispatch are unchanged.
+        # Negative tests in test_browser_provision_api.py cover the new gate.
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "5a632426c8d2bda18fe431ed7a45496aed7b82df88ea11d7c5d5d99c921b2f93",
+            "b4c26d282b57ca9a0710ca745fd883d4e7721d772271e1b7b371b008ddad6f4b",
         )
 
 

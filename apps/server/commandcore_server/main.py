@@ -26,6 +26,7 @@ from .agent_gateway import AgentManager
 from .auth import ADMIN_SCOPE, ALL_SCOPES, OAuthSettings, OAuthVerifier, scope_allows
 from .browser_console import install_browser_console
 from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
+from .browser_provision_api import BrowserOAuthProvisioner
 from .browser_viewer import install_browser_viewer
 from .browser_worker_attestation import WorkerAttestationVerifier
 from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
@@ -112,12 +113,24 @@ browser = (
         else None
     )
 )
+provisioner = (
+    BrowserOAuthProvisioner(
+        worker_pool=browser,
+        provision_secret_path=settings.browser_provision_key_file,
+        socket_path=settings.browser_provision_socket,
+        operator_uid=settings.browser_provision_operator_uid,
+        operator_gid=settings.browser_provision_operator_gid,
+    )
+    if settings.browser_provision_api_enabled
+    else None
+)
 tools = ToolService(
     db,
     agents,
     settings.selection_ttl_seconds,
     browser=browser,
     public_base_url=settings.public_base_url,
+    browser_provisioner=provisioner,
 )
 visible_tools = (
     TOOL_DEFINITIONS
