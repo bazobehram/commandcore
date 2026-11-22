@@ -125,6 +125,9 @@ class Settings:
     browser_worker_manifest: str = os.getenv(
         "COMMANDCORE_BROWSER_WORKER_MANIFEST", ""
     ).strip()
+    browser_dynamic_workers_enabled: bool = _bool(
+        "COMMANDCORE_BROWSER_DYNAMIC_WORKERS_ENABLED", False
+    )
     browser_worker_binding_path: str = os.getenv(
         "COMMANDCORE_BROWSER_WORKER_BINDING_PATH", ""
     ).strip()
@@ -139,6 +142,15 @@ class Settings:
     )
 
     def validate(self) -> None:
+        if self.browser_dynamic_workers_enabled and not (
+            self.browser_enabled
+            and self.oauth_enabled
+            and self.browser_worker_manifest
+            and self.browser_attestation_public_key
+        ):
+            raise RuntimeError(
+                "dynamic Browser requires explicit OAuth, manifest and Ed25519 public proof"
+            )
         if self.private_owner_subject:
             if not self.oauth_enabled or self.public_bootstrap_enabled:
                 raise RuntimeError(
