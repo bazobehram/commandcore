@@ -108,6 +108,26 @@ async def test_core_surface_lists_only_daily_tools_and_rejects_admin():
     assert json.loads(response.body)["result"]["isError"] is True
 
 
+def test_aliases_advertise_distinct_tool_titles():
+    handler = MCPHandler(SimpleNamespace(), SimpleNamespace(), "candidate")
+    by_name = {tool["name"]: tool for tool in handler.definitions}
+    assert len(by_name) == len(handler.definitions)
+    titles = [
+        by_name[name]["title"]
+        for name in ("commandcore.watch", "commandcore.workspace", "commandcore.viewer")
+    ]
+    assert len(set(titles)) == len(titles)
+    for name in ("commandcore.workspace", "commandcore.viewer", "browser.search"):
+        tool = by_name[name]
+        assert tool["annotations"]["title"] == tool["title"]
+        assert tool["_meta"]["openai/toolInvocation/invoking"] == f"{tool['title']}…"
+    watch = by_name["commandcore.watch"]
+    assert (
+        by_name["commandcore.workspace"]["securitySchemes"] == watch["securitySchemes"]
+    )
+    assert by_name["commandcore.viewer"]["_meta"]["ui"]["visibility"] == ["app"]
+
+
 @pytest.mark.asyncio
 async def test_browser_close_schema_preserves_stale_session_guard():
     handler = MCPHandler(
