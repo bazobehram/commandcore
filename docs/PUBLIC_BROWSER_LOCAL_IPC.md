@@ -1,6 +1,6 @@
 # Public Browser operator local IPC — source-only implementation
 
-**Status:** implemented and tested in a disposable local environment; **not installed as a production daemon or connected to the live OAuth API**. Public Browser remains disabled. The private homeserver does not share worker, OAuth, or signing credentials with the public operator.
+**Status:** implemented and tested in a disposable local environment; **not installed as a production daemon or connected to the live OAuth API**. Public Browser remains disabled. The private deployment does not share worker, OAuth, or signing credentials with the public operator.
 
 ## Trust boundary
 
