@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import os
 import re
+import signal
 import socket
 import stat
 import struct
@@ -313,8 +314,14 @@ def main() -> None:
             api_gid=args.api_gid,
         )
         await relay.start()
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        # An operator-managed Docker sidecar receives SIGTERM on orderly stop.
+        # Gracefully remove only our exact pinned socket inodes.
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, stop.set)
         try:
-            await relay.serve_forever()
+            await stop.wait()
         finally:
             await relay.close()
 

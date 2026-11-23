@@ -408,3 +408,43 @@ async def test_policy_get_does_not_forward_pipelined_second_request(tmp_path):
         await relay.close()
         server.close()
         await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_relay_cli_sigterm_cleans_only_owned_sockets(tmp_path):
+    import signal
+    import sys
+
+    root = _directory(tmp_path, ID_A)
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "commandcore_server.browser_worker_uds_relay",
+        "--worker-id",
+        ID_A,
+        "--socket-dir",
+        str(root),
+        "--api-uid",
+        str(os.getuid()),
+        "--api-gid",
+        str(os.getgid()),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        for _ in range(100):
+            if (root / "steel.sock").exists() and (root / "policy.sock").exists():
+                break
+            if proc.returncode is not None:
+                break
+            await asyncio.sleep(0.02)
+        assert proc.returncode is None
+        assert (root / "steel.sock").exists()
+        proc.send_signal(signal.SIGTERM)
+        assert await asyncio.wait_for(proc.wait(), timeout=5) == 0
+        assert not (root / "steel.sock").exists()
+        assert not (root / "policy.sock").exists()
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
