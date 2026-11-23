@@ -119,6 +119,53 @@ async def _bridge(
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+async def _policy_read_only(
+    client: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    opener: UpstreamOpener,
+) -> None:
+    """Serve exactly one bounded policy GET; never tunnel CONNECT or pipelines."""
+    try:
+        request = await asyncio.wait_for(client.readuntil(b"\r\n\r\n"), timeout=5)
+    except (
+        asyncio.IncompleteReadError,
+        asyncio.LimitOverrunError,
+        TimeoutError,
+    ) as exc:
+        raise WorkerRelayDenied("invalid policy request") from exc
+    if len(request) > 8192:
+        raise WorkerRelayDenied("oversized policy request")
+    lines = request[:-4].split(b"\r\n")
+    if lines[0] != b"GET /_commandcore/policy HTTP/1.1":
+        raise WorkerRelayDenied("relay policy socket is read-only GET")
+    if any(
+        line.lower().startswith((b"transfer-encoding:", b"content-length:"))
+        for line in lines[1:]
+    ):
+        raise WorkerRelayDenied("policy request body denied")
+    upstream: asyncio.StreamWriter | None = None
+    try:
+        remote, upstream = await asyncio.wait_for(
+            opener(8080), timeout=_CONNECT_TIMEOUT
+        )
+        upstream.write(request)
+        await upstream.drain()
+        total = 0
+        # The policy endpoint must send Connection: close. Do not forward any
+        # subsequent client bytes, including pipelined CONNECT requests.
+        while chunk := await asyncio.wait_for(remote.read(4096), timeout=5):
+            total += len(chunk)
+            if total > 16384:
+                raise WorkerRelayDenied("policy response exceeds bound")
+            writer.write(chunk)
+            await writer.drain()
+    finally:
+        if upstream is not None:
+            upstream.close()
+            with suppress(OSError):
+                await upstream.wait_closed()
+
+
 class WorkerUnixRelay:
     """Per-worker fixed-target transport; identity authorization stays at API."""
 
@@ -171,6 +218,9 @@ class WorkerUnixRelay:
                 or _peer(peer) != (self.api_uid, self.api_gid)
                 or self._active > _MAX_ACTIVE
             ):
+                return
+            if service == "policy":
+                await _policy_read_only(reader, writer, self._opener)
                 return
             up, remote = await asyncio.wait_for(
                 self._opener(_SERVICES[service]), timeout=_CONNECT_TIMEOUT

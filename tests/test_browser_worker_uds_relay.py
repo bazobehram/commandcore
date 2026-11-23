@@ -87,7 +87,11 @@ async def test_two_worker_socket_isolation_and_http_policy_over_uds(tmp_path):
                 async with client_relay.http_client(
                     policy=(service == "policy"), timeout=4
                 ) as client:
-                    response = await client.get("http://worker.internal/test")
+                    response = await client.get(
+                        "http://worker.internal/_commandcore/policy"
+                        if service == "policy"
+                        else "http://worker.internal/test"
+                    )
                 assert response.status_code == 200
                 assert response.text == expected
     finally:
@@ -328,3 +332,79 @@ async def test_browser_gateway_cdp_and_policy_really_use_worker_uds(tmp_path):
             await relay.close()
     http_server.close()
     await http_server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_policy_socket_denies_connect_before_upstream(tmp_path):
+    attempts = []
+
+    async def forbidden(_port):
+        attempts.append(True)
+        raise AssertionError("CONNECT should not escape via policy socket")
+
+    relay = _new(ID_A, _directory(tmp_path, ID_A), forbidden)
+    await relay.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(
+            str(relay.directory / "policy.sock")
+        )
+        writer.write(b"CONNECT google.com:443 HTTP/1.1\r\nHost: google.com\r\n\r\n")
+        await writer.drain()
+        try:
+            data = await asyncio.wait_for(reader.read(), 2)
+        except ConnectionResetError:
+            data = b""
+        assert data == b""
+        assert not attempts
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except ConnectionResetError:
+            pass
+    finally:
+        await relay.close()
+
+
+@pytest.mark.asyncio
+async def test_policy_get_does_not_forward_pipelined_second_request(tmp_path):
+    upstream_requests = []
+
+    async def policy(reader, writer):
+        raw = await reader.readuntil(b"\r\n\r\n")
+        upstream_requests.append(raw)
+        writer.write(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
+        )
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(policy, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+
+    async def upstream(_port):
+        return await asyncio.open_connection("127.0.0.1", port)
+
+    relay = _new(ID_A, _directory(tmp_path, ID_A), upstream)
+    await relay.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(
+            str(relay.directory / "policy.sock")
+        )
+        writer.write(
+            b"GET /_commandcore/policy HTTP/1.1\r\nHost: worker\r\n\r\n"
+            b"CONNECT example.com:443 HTTP/1.1\r\nHost: example.com\r\n\r\n"
+        )
+        await writer.drain()
+        result = await asyncio.wait_for(reader.read(), 3)
+        assert b"200 OK" in result
+        assert len(upstream_requests) == 1
+        assert b"CONNECT" not in upstream_requests[0]
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except ConnectionResetError:
+            pass
+    finally:
+        await relay.close()
+        server.close()
+        await server.wait_closed()

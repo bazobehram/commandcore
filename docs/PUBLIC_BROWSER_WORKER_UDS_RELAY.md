@@ -9,7 +9,7 @@ A provisioned public Browser worker currently has three isolated Docker bridge n
 The new `browser_worker_uds_relay.py` is an operator-only sidecar process designed to join **exactly one verified worker control network**. It accepts connections on two separate Unix sockets (no TCP listener) in a fixed, operator-owned host-mounted directory:
 
 - `.../<worker_id>/steel.sock`: fixed control alias `ccctl-<worker_id>:3000`. Opaque HTTP and CDP WebSocket bytes are forwarded unchanged, with backpressure, timeout, per-connection maximum age and connection budget.
-- `.../<worker_id>/policy.sock`: fixed control alias `ccctl-<worker_id>:8080`. Used only for the existing read-only egress policy endpoint; the API must continue checking the returned policy against its configured host allowlist.
+- `.../<worker_id>/policy.sock`: fixed control alias `ccctl-<worker_id>:8080`. The relay accepts exactly one bounded `GET /_commandcore/policy` request and never tunnels HTTP CONNECT or forwards pipelined subsequent requests. It caps the policy response and closes the socket. The API must continue checking the returned policy against its configured host allowlist.
 
 The sidecar accepts only a pinned Linux `SO_PEERCRED` API UID + primary GID. It rejects invalid worker IDs, unsafe/writable/socket-collision paths, unknown ports and unauthorized peers. It cannot choose another worker's hostname from an HTTP request or CDP URI. It never sees OAuth bearer tokens, never uses Docker, and drops its sockets on clean shutdown only if inode/UID still match its own originals. A dedicated provision/read socket group and an operator-controlled, group-traversable but **not group-writable** directory are required. Do not reuse a broader signing/proof group for public API access.
 
@@ -21,7 +21,7 @@ The API side `browser_worker_uds_client.py` derives its path **only** from the p
 
 - Real Linux Unix sockets: two mock worker backends return distinct HTTP responses through separate sockets, with no cross-route mixing; both Steel and policy paths tested.
 - Transparent CDP-compatible WebSocket upgrade/text frames over UDS; `BrowserGateway`'s actual HTTP/CDP client uses those sockets in a separate test.
-- Wrong UID is denied before an upstream connection; invalid worker IDs, symlink/world-writable directories, fake socket file and wrong group are rejected.
+- Wrong UID is denied before an upstream connection; invalid worker IDs, symlink/world-writable directories, fake socket file and wrong group are rejected. The policy socket rejects CONNECT before upstream and does not forward a pipelined second request.
 - A socket pathname replaced while the old relay process still runs is detected by API; the old process does not unlink the replacement.
 - Netti host-identity acceptance, synthetic backends only: API UID 10001/GID999 and operator UID994/GID987, with a temporary restricted group-accessible directory. Script (operator staging only): `/opt/commandcore-public/staging/plugin-review-20261120/run_worker_relay_cross_uid_20261123.sh`. No Docker workers were created.
 
