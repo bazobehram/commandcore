@@ -62,6 +62,13 @@ browser = (
             settings.browser_worker_binding_key,
             settings.browser_allow_hosts,
             settings.public_base_url,
+            relay_root=(
+                settings.browser_uds_relay_root
+                if settings.browser_uds_relay_enabled
+                else ""
+            ),
+            relay_operator_uid=settings.browser_uds_relay_operator_uid,
+            relay_operator_gid=settings.browser_uds_relay_operator_gid,
             attestation=Ed25519WorkerAttestationVerifier(
                 settings.browser_attestation_path,
                 settings.browser_attestation_public_key,

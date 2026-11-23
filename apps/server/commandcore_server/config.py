@@ -128,6 +128,18 @@ class Settings:
     browser_dynamic_workers_enabled: bool = _bool(
         "COMMANDCORE_BROWSER_DYNAMIC_WORKERS_ENABLED", False
     )
+    browser_uds_relay_enabled: bool = _bool(
+        "COMMANDCORE_BROWSER_UDS_RELAY_ENABLED", False
+    )
+    browser_uds_relay_root: str = os.getenv(
+        "COMMANDCORE_BROWSER_UDS_RELAY_ROOT", ""
+    ).strip()
+    browser_uds_relay_operator_uid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_UDS_RELAY_OPERATOR_UID", "-1")
+    )
+    browser_uds_relay_operator_gid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_UDS_RELAY_OPERATOR_GID", "-1")
+    )
     browser_provision_api_enabled: bool = _bool(
         "COMMANDCORE_BROWSER_PROVISION_API_ENABLED", False
     )
@@ -157,6 +169,18 @@ class Settings:
     )
 
     def validate(self) -> None:
+        if self.browser_uds_relay_enabled and not (
+            self.browser_enabled
+            and self.oauth_enabled
+            and self.browser_dynamic_workers_enabled
+            and self.browser_uds_relay_root.startswith("/")
+            and self.browser_uds_relay_operator_uid > 0
+            and self.browser_uds_relay_operator_gid > 0
+            and self.browser_attestation_public_key
+        ):
+            raise RuntimeError(
+                "public Browser Unix relay requires explicit OAuth, dynamic owner pool and signed proof"
+            )
         if self.browser_provision_api_enabled and not (
             self.browser_dynamic_workers_enabled
             and self.browser_enabled
