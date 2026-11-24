@@ -1,9 +1,8 @@
 # CommandCore branding
 
-`octopus-head.svg` is the canonical current symbol, matching the public site's
-header and the Angular workspace. See `docs/BRANDING.md` for the complete asset
-map and update instructions.
+`commandcore-mark.png` is the canonical turquoise mark used in the public
+site, Angular workspace, and GitHub README. See `docs/BRANDING.md` for the
+asset map.
 
-The `commandcore-logo.webp` and `commandcore-stacked.png` files have been
-regenerated using this octopus. Existing filenames are preserved for backwards
-compatibility; they do not contain the old logo.
+The `octopus-head.svg`, `commandcore-logo.webp`, and
+`commandcore-stacked.png` files provide compatibility variants of this mark.

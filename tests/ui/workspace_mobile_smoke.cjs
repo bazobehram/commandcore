@@ -100,8 +100,10 @@ async function main() {
     await emptyPage.waitForFunction(() => document.activeElement?.matches('.palette-search input'));
     await emptyPage.keyboard.press('Escape');
     await emptyPage.waitForFunction(() => !document.querySelector('.command-palette') && document.activeElement?.matches('.search-trigger'));
-    const faviconPath = await emptyPage.locator('link[rel="icon"][type="image/svg+xml"]').getAttribute('href');
-    assert.equal(faviconPath, '/brand/octopus-head.svg', 'Missing octopus SVG favicon');
+    const faviconPath = await emptyPage.locator('link[rel="icon"][type="image/x-icon"]').getAttribute('href');
+    assert.equal(faviconPath, '/favicon.ico?v=turquoise-v1', 'Missing CommandCore ICO favicon');
+    const markPath = await emptyPage.locator('link[rel="icon"][type="image/png"]').getAttribute('href');
+    assert.equal(markPath, '/brand/commandcore-mark.png?v=turquoise-v1', 'Missing CommandCore PNG favicon');
     await emptyPage.close();
     console.log('PASS empty workspace: exactly one Add Device CTA, active modal, favicon');
   } finally {

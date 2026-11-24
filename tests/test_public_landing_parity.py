@@ -20,7 +20,7 @@ class PageRefs(HTMLParser):
 
 
 def test_public_home_is_the_approved_workspace_landing():
-    html = (SITE / "index.html").read_text()
+    html = (SITE / "index.html").read_text(encoding="utf-8")
     refs = PageRefs()
     refs.feed(html)
     assert "Your AI." in html
@@ -30,6 +30,8 @@ def test_public_home_is_the_approved_workspace_landing():
     assert "/site/landing.js?v=public-home-20261030" in refs.refs
     assert "/auth/login" in refs.refs
     assert "/workspace/" in refs.refs
+    assert "/favicon.ico?v=turquoise-v1" in refs.refs
+    assert refs.refs.count("/brand/commandcore-mark.png?v=turquoise-v1") == 3
     assert 'href="/app/"' not in html
     assert "your server" in html and "AI workstation" in html
     assert (SITE / "site/landing.css").stat().st_size > 1000
