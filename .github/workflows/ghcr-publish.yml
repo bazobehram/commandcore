@@ -7,7 +7,37 @@ on:
 permissions:
   contents: read
 jobs:
+  workspace:
+    if: github.repository == 'bazobehram/commandcore' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.15.0'
+          cache: npm
+          cache-dependency-path: apps/workspace-angular/package-lock.json
+      - run: npm ci
+        working-directory: apps/workspace-angular
+      - run: npm run test:api && npm run test:unit && npm run build
+        working-directory: apps/workspace-angular
+      - name: Package the reviewed Workspace build
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 scripts/package_workspace_release.py \
+            --root apps/workspace-angular/dist/commandcore-workspace/browser \
+            --output "$RUNNER_TEMP/commandcore-workspace.zip" --commit "$GITHUB_SHA"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: workspace-build-for-release
+          path: ${{ runner.temp }}/commandcore-workspace.zip
+          if-no-files-found: error
   publish:
+    needs: workspace
     if: github.repository == 'bazobehram/commandcore' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     environment: ghcr-publish
@@ -106,6 +136,38 @@ jobs:
             --container "$candidate" --source-root . \
             --expected-image-id "$image_id" > "$RUNNER_TEMP/runtime-release-parity.json"
           cat "$RUNNER_TEMP/runtime-release-parity.json"
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: workspace-build-for-release
+          path: ${{ runner.temp }}/workspace-release
+      - name: Bind the Workspace artifact to the image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$RUNNER_TEMP/workspace-release/commandcore-workspace.zip"
+          test -s "$workspace"
+          python -c 'import json, sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); m = json.loads(z.read("WORKSPACE_RELEASE.json")); assert m["source_commit"] == sys.argv[2] and z.testzip() is None' "$workspace" "$GITHUB_SHA"
+          printf 'workspace_sha256=%s\n' "$(sha256sum "$workspace" | cut -d' ' -f1)" >> "$RUNNER_TEMP/commandcore-image.txt"
+      - name: Attest Workspace and shared release identity
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            ${{ runner.temp }}/workspace-release/commandcore-workspace.zip
+            ${{ runner.temp }}/commandcore-image.txt
+          create-storage-record: false
+      - name: Verify Workspace and shared identity provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for file in "$RUNNER_TEMP/workspace-release/commandcore-workspace.zip" "$RUNNER_TEMP/commandcore-image.txt"; do
+            gh attestation verify "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ghcr-publish.yml" \
+              --source-ref "$GITHUB_REF" --source-digest "$GITHUB_SHA" \
+              --deny-self-hosted-runners
+          done
       - name: Generate signed GitHub provenance attestation
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
@@ -132,3 +194,4 @@ jobs:
           path: |
             ${{ runner.temp }}/commandcore-image.txt
             ${{ runner.temp }}/runtime-release-parity.json
+            ${{ runner.temp }}/workspace-release/commandcore-workspace.zip
