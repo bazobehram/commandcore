@@ -7,7 +7,6 @@ import socket
 import threading
 
 import pytest
-from commandcore_server import browser_provision_ipc
 from commandcore_server.browser_provision_intent import (
     ProvisionNonceLedger,
     issue_provision_intent,
@@ -35,31 +34,6 @@ def _signed(owner: str = "first") -> str:
         ),
         KEY,
     )
-
-
-@pytest.fixture
-def listener_ready(monkeypatch):
-    """Signal actual listen completion without making a probe connection.
-
-    bind() publishes the Unix socket path before listen(), so path existence
-    alone can race. Patch only this module's socket reference, not the global
-    socket class; no production behavior or peer validation is changed.
-    """
-    ready = threading.Event()
-
-    class ListeningSocket(socket.socket):
-        def listen(self, backlog):
-            super().listen(backlog)
-            ready.set()
-
-    class SocketModule:
-        def __getattr__(self, name):
-            return getattr(socket, name)
-
-        socket = ListeningSocket
-
-    monkeypatch.setattr(browser_provision_ipc, "socket", SocketModule())
-    return ready
 
 
 def _socket_server(tmp_path, consumer, listener_ready, *, peer_uid=None, count=1):
