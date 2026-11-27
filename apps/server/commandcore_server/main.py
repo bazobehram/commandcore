@@ -129,7 +129,7 @@ provisioner = (
         operator_uid=settings.browser_provision_operator_uid,
         operator_gid=settings.browser_provision_operator_gid,
     )
-    if settings.browser_provision_api_enabled
+    if settings.browser_enabled and settings.browser_provision_api_enabled
     else None
 )
 tools = ToolService(

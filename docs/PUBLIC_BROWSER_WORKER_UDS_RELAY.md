@@ -29,6 +29,12 @@ The API side `browser_worker_uds_client.py` derives its path **only** from the p
 
 The operator-side `verify_physical_relay` helper now validates an explicitly pinned relay container and image, numeric non-root identity and exact command, dropped capabilities, read-only filesystem, resource limits, sole socket bind mount, isolated network ID and exclusive boundary/relay network membership. It checks both real Unix socket identities and re-inspects the container incarnation before returning evidence. The helper is not yet called by the physical worker lifecycle or signing loop; its evidence is not yet part of the signed API proof. Unit fixtures use real local Unix sockets and simulated Docker inspection, not installed Docker sidecars.
 
+## Signed relay proof and master switch
+
+Ed25519 version 2 snapshots include the independently inspected relay container/image/incarnation and both socket identities for every worker. The API requires that proof for relay-backed routes, compares the actual pinned sockets before and after actions, and rejects legacy, expired, tampered or changed relay evidence. Version 1 remains valid for the existing private direct Browser route. Operator lifecycle and recurring proof publication still need to supply actual independently inspected evidence.
+
+Set `COMMANDCORE_BROWSER_ENABLED=false` on the public controller and restart/recreate only that controller to disable Browser access and new API provisioning, even if the subordinate flags remain configured. Setting it true still requires all normal isolation and configuration checks. This is not a live hot reload, nor does it automatically stop existing Docker workers; the operator must drain/stop those workers using the verified lifecycle when capacity needs to be reclaimed. Keep the private instance setting independent.
+
 ## Production STOP-SHIP: source code alone is not enough
 
 1. Extend the operator **physical worker registry, labels, pinned image identity and Ed25519 proof** to verify one sidecar's immutable container ID, network endpoint membership, seccomp/capabilities, read-only rootfs and mounted socket directory. Reject any extra or changed network membership, published ports or unapproved host mounts. The current two-container physical proof does NOT cover the new sidecar. Do not start it in production without this verification.

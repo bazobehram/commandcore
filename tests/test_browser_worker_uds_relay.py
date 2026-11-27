@@ -263,6 +263,7 @@ def test_default_disabled_public_uds_relay_flag_is_not_implicit():
 
     settings = replace(
         Settings(),
+        browser_enabled=True,
         browser_uds_relay_enabled=True,
         browser_dynamic_workers_enabled=False,
     )

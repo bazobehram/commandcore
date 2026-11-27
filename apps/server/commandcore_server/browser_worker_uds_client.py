@@ -35,6 +35,7 @@ class WorkerUnixClient:
         self.operator_uid = operator_uid
         self.operator_gid = operator_gid
         self._pinned: dict[str, tuple[int, int]] = {}
+        self._signed_incarnation: tuple[str, ...] | None = None
         self._validate_dir()
 
     def _validate_dir(self) -> None:
@@ -81,6 +82,27 @@ class WorkerUnixClient:
             return str(path)
         except OSError as exc:
             raise BrowserError("Browser relay socket unavailable") from exc
+
+    def verify_attested_identity(self, row: dict[str, str]) -> None:
+        """Require the exact signed relay process and both pinned sockets."""
+        from .browser_worker_attestation_ed25519 import RELAY_FIELDS
+
+        if row.get("worker_id") != self.worker_id or not RELAY_FIELDS <= row.keys():
+            raise BrowserError("Browser relay signed proof missing")
+        incarnation = tuple(row[field] for field in sorted(RELAY_FIELDS))
+        if (
+            self._signed_incarnation is not None
+            and self._signed_incarnation != incarnation
+        ):
+            raise BrowserError("Browser relay signed incarnation changed")
+        for service in sorted(_SOCKET_NAMES):
+            self.socket(service)
+            device, inode = self._pinned[service]
+            if row["relay_" + service + "_dev"] != str(device) or row[
+                "relay_" + service + "_ino"
+            ] != str(inode):
+                raise BrowserError("Browser relay socket differs from signed proof")
+        self._signed_incarnation = incarnation
 
     def http_client(
         self, *, policy: bool = False, timeout: float = 15

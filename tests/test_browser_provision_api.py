@@ -291,6 +291,7 @@ def test_provision_api_is_disabled_unless_all_required_flags_present():
 
     settings = replace(
         Settings(),
+        browser_enabled=True,
         browser_provision_api_enabled=True,
         browser_dynamic_workers_enabled=False,
     )
