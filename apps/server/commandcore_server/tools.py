@@ -7,6 +7,7 @@ import os
 import re
 import time
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -1234,6 +1235,8 @@ class ToolService:
         self.public_base_url = public_base_url.rstrip("/")
         self.live_activity = LiveActivity()
         self._browser_conversation_leases: dict[tuple[str, str, str], str] = {}
+        self._browser_inflight: dict[tuple[str, str, str], int] = {}
+        self._browser_expiring: set[tuple[str, str, str]] = set()
         self._browser_lease_cipher = None
         self._browser_lease_file = None
         self._browser_lease_worker = None
@@ -1412,6 +1415,49 @@ class ToolService:
                 path.unlink(missing_ok=True)
             except OSError as exc:
                 raise ToolError("browser_lease_cleanup_failed") from exc
+
+    @contextmanager
+    def _browser_operation(self, owner):
+        if owner in self._browser_expiring:
+            raise ToolError(
+                "browser_cleanup_in_progress", "Browser idle cleanup in progress; retry"
+            )
+        self._browser_inflight[owner] = self._browser_inflight.get(owner, 0) + 1
+        try:
+            yield
+        finally:
+            remaining = self._browser_inflight[owner] - 1
+            if remaining:
+                self._browser_inflight[owner] = remaining
+            else:
+                self._browser_inflight.pop(owner, None)
+
+    @contextmanager
+    def _browser_idle_guard(self, owner):
+        # No await between admission and registration. Other owners and
+        # non-Browser tools remain unaffected; active viewers do not queue.
+        if self._browser_inflight.get(owner) or owner in self._browser_expiring:
+            yield False
+            return
+        self._browser_expiring.add(owner)
+        try:
+            yield True
+        finally:
+            self._browser_expiring.discard(owner)
+
+    def _retire_idle_browser_lease(self, owner):
+        # Called only after an exact session release under the cleanup guard.
+        # A failed journal deletion leaves the in-memory lease fail-closed.
+        self._browser_lease_delete(owner)
+        self._browser_conversation_leases.pop(owner, None)
+
+    async def expire_idle_browser_sessions(self) -> int:
+        if self.browser is None:
+            return 0
+        return await self.browser.expire_idle_sessions(
+            owner_guard=self._browser_idle_guard,
+            on_closed=self._retire_idle_browser_lease,
+        )
 
     def _browser_scope_args(
         self,
@@ -1891,19 +1937,67 @@ class ToolService:
                         "browser_identity_required",
                         "Browser requires an explicit verified OAuth issuer, subject and client",
                     )
-                verified_args = self._browser_scope_args(
-                    principal, name, args, host_session
-                )
-                try:
-                    if name == "browser.open" and self.browser_provisioner is not None:
-                        try:
-                            await self.browser_provisioner.ensure_owner(principal)
-                        except (
-                            BrowserProvisionIntentDenied,
-                            BrowserProvisionTransportDenied,
-                        ) as exc:
-                            # A failed or uncertain allocation must not pin an
-                            # empty Browser conversation to this chat.
+                with self._browser_operation(
+                    (principal.issuer, principal.subject, principal.client_id)
+                ):
+                    verified_args = self._browser_scope_args(
+                        principal, name, args, host_session
+                    )
+                    try:
+                        if (
+                            name == "browser.open"
+                            and self.browser_provisioner is not None
+                        ):
+                            try:
+                                await self.browser_provisioner.ensure_owner(principal)
+                            except (
+                                BrowserProvisionIntentDenied,
+                                BrowserProvisionTransportDenied,
+                            ) as exc:
+                                # A failed or uncertain allocation must not pin an
+                                # empty Browser conversation to this chat.
+                                self._browser_conversation_leases.pop(
+                                    (
+                                        principal.issuer,
+                                        principal.subject,
+                                        principal.client_id,
+                                    ),
+                                    None,
+                                )
+                                raise ToolError(
+                                    "browser_provision_pending",
+                                    "Browser worker assignment unavailable or pending; no action executed",
+                                ) from exc
+                        result = await self.browser.call(
+                            subject=principal.subject,
+                            issuer=principal.issuer,
+                            client_id=principal.client_id,
+                            name=name,
+                            args=verified_args,
+                        )
+                        if name == "browser.open":
+                            self._browser_lease_save(
+                                (
+                                    principal.issuer,
+                                    principal.subject,
+                                    principal.client_id,
+                                ),
+                                self._browser_conversation_leases[
+                                    (
+                                        principal.issuer,
+                                        principal.subject,
+                                        principal.client_id,
+                                    )
+                                ],
+                            )
+                        if name == "browser.close":
+                            self._browser_lease_delete(
+                                (
+                                    principal.issuer,
+                                    principal.subject,
+                                    principal.client_id,
+                                )
+                            )
                             self._browser_conversation_leases.pop(
                                 (
                                     principal.issuer,
@@ -1912,57 +2006,31 @@ class ToolService:
                                 ),
                                 None,
                             )
-                            raise ToolError(
-                                "browser_provision_pending",
-                                "Browser worker assignment unavailable or pending; no action executed",
-                            ) from exc
-                    result = await self.browser.call(
-                        subject=principal.subject,
-                        issuer=principal.issuer,
-                        client_id=principal.client_id,
-                        name=name,
-                        args=verified_args,
-                    )
-                    if name == "browser.open":
-                        self._browser_lease_save(
-                            (principal.issuer, principal.subject, principal.client_id),
-                            self._browser_conversation_leases[
-                                (
-                                    principal.issuer,
-                                    principal.subject,
-                                    principal.client_id,
+                        if name in {"browser.watch", "browser.frame"}:
+                            label = os.getenv(
+                                "COMMANDCORE_BROWSER_HOST_LABEL",
+                                "Operator-managed worker",
+                            )
+                            result["host"] = (
+                                label
+                                if re.fullmatch(
+                                    r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}", label
                                 )
-                            ],
-                        )
-                    if name == "browser.close":
-                        self._browser_lease_delete(
-                            (principal.issuer, principal.subject, principal.client_id)
-                        )
-                        self._browser_conversation_leases.pop(
-                            (principal.issuer, principal.subject, principal.client_id),
-                            None,
-                        )
-                    if name in {"browser.watch", "browser.frame"}:
-                        label = os.getenv(
-                            "COMMANDCORE_BROWSER_HOST_LABEL", "Operator-managed worker"
-                        )
-                        result["host"] = (
-                            label
-                            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}", label)
-                            else "Operator-managed worker"
-                        )
-                    if name == "browser.watch":
-                        result.update(
-                            self.live_activity.issue_viewer(principal, host_session)
-                        )
-                    if name == "browser.watch" and self.public_base_url:
-                        result = {
-                            **result,
-                            "dashboard_url": self.public_base_url + "/?view=browser",
-                        }
-                    return result
-                except BrowserError as exc:
-                    raise ToolError("browser_error", str(exc)) from exc
+                                else "Operator-managed worker"
+                            )
+                        if name == "browser.watch":
+                            result.update(
+                                self.live_activity.issue_viewer(principal, host_session)
+                            )
+                        if name == "browser.watch" and self.public_base_url:
+                            result = {
+                                **result,
+                                "dashboard_url": self.public_base_url
+                                + "/?view=browser",
+                            }
+                        return result
+                    except BrowserError as exc:
+                        raise ToolError("browser_error", str(exc)) from exc
 
             if name not in DEVICE_TOOLS:
                 raise ToolError("unknown_tool")
