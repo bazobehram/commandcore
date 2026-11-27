@@ -1,4 +1,48 @@
 {
+  "activity.feed": {
+    "description": "Owner-scoped activity. Optional STANDARD OAuth-only ephemeral safe operation details: redacted paths, cwd, selected safe command names. Never returns raw commands, file contents or output.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "maxLength": 128,
+          "type": "string"
+        },
+        "include_details": {
+          "type": "boolean"
+        },
+        "limit": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "session_ref": {
+          "maxLength": 128,
+          "type": "string"
+        },
+        "view": {
+          "enum": [
+            "all",
+            "conversation"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "title": "Read live CommandCore activity"
+  },
+  "activity.watch": {
+    "description": "Open a live, expandable operation timeline INSIDE this ChatGPT conversation (MCP Apps). Call once before a multi-step device task when the user wants to watch what the AI does. Each step can show authorized redacted command, working directory, target file, status and duration. This is not a separate web dashboard.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "title": "Show CommandCore activity in chat"
+  },
   "agents.approval.inbox": {
     "description": "Read-only owner-scoped proposals awaiting authenticated user review. No message content, no approval, and no desktop input. This tool cannot authorize delivery.",
     "inputSchema": {
@@ -188,6 +232,16 @@
       "type": "object"
     },
     "title": "Write clipboard"
+  },
+  "commandcore.watch": {
+    "description": "Combined, read-only MCP Apps dashboard with Live Activity and optional Live Browser monitor. Browser control still requires its own OAuth scope.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "title": "Show CommandCore Live Views"
   },
   "desktop.focus": {
     "description": "Activate an existing X11 window using its discovered window ID.",
