@@ -263,8 +263,11 @@ def test_journal_preserves_same_boot_activity_and_grants_reboot_grace(
     )
     binding.claim(OWNER)
     store = BrowserSessionStore(binding)
+    # Hosted CI can boot less than 15 minutes before this test runs.
+    # Simulate a valid same-boot clock, independent of real host uptime.
+    monkeypatch.setattr(time, "monotonic", lambda: 2000.0)
     entry = OwnedSession("a" * 36)
-    entry.last_activity_mono = time.monotonic() - 901
+    entry.last_activity_mono = 1099.0
     with patch.object(store, "boot_id", return_value="boot-a"):
         store.save(OWNER, entry)
         assert store.load()[1]["last_activity_mono"] == entry.last_activity_mono
@@ -278,5 +281,6 @@ def test_journal_preserves_same_boot_activity_and_grants_reboot_grace(
         assert time.monotonic() - store.load()[1]["last_activity_mono"] < 2
         store.save(OWNER, entry)
     with patch.object(store, "boot_id", return_value="boot-b"):
-        assert time.monotonic() - store.load()[1]["last_activity_mono"] < 2
+        monkeypatch.setattr(time, "monotonic", lambda: 10.0)
+        assert store.load()[1]["last_activity_mono"] == 10.0
     binding.close()
