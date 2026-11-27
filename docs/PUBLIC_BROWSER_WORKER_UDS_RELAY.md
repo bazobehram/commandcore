@@ -27,7 +27,7 @@ The API side `browser_worker_uds_client.py` derives its path **only** from the p
 
 ## Operator physical relay verification (source only)
 
-The operator-side `verify_physical_relay` helper now validates an explicitly pinned relay container and image, numeric non-root identity and exact command, dropped capabilities, read-only filesystem, resource limits, sole socket bind mount, isolated network ID and exclusive boundary/relay network membership. It checks both real Unix socket identities and re-inspects the container incarnation before returning evidence. The helper is not yet called by the physical worker lifecycle or signing loop; its evidence is not yet part of the signed API proof. Unit fixtures use real local Unix sockets and simulated Docker inspection, not installed Docker sidecars.
+The operator-side `verify_physical_relay` helper now validates an explicitly pinned relay container and image, numeric non-root identity and exact command, dropped capabilities, read-only filesystem, resource limits, sole socket bind mount, isolated network ID and exclusive boundary/relay network membership. It checks both real Unix socket identities and re-inspects the container incarnation before returning evidence. The operator CLI can call this helper during provisioning and startup. The recurring signing loop still needs to collect its actual evidence for the version 2 signed API proof. Unit fixtures use real local Unix sockets and simulated Docker inspection, not installed Docker sidecars.
 
 ## Signed relay proof and master switch
 
@@ -45,3 +45,19 @@ Set `COMMANDCORE_BROWSER_ENABLED=false` on the public controller and restart/rec
 6. Publish owner-reviewed actual `/privacy` and `/terms` (currently 404), rerun authenticated OpenAI rc10 MCP Rescan, supply reviewer account/demo device and eight real test results, then submit only after all release gates pass.
 
 This module deliberately accepts operator/API identity from deployment configuration and offers a dependency-injected upstream connector for synthetic tests. Production CLI always fixes upstream alias and ports from the immutable worker ID; there is no caller-selected destination. No public Browser flag is flipped by this PR.
+
+### Operator lifecycle integration
+
+The operator CLI can now provision a pinned relay sidecar alongside an isolated
+Steel/boundary pair using explicit relay image ID, socket root and numeric
+operator/API identities. The registry retains the exact relay identity.
+Start validates capacity and publishes a route only after physical verification;
+stop withdraws publication first, stops the relay and browser, and retains
+a retryable stopping state on failure. Retirement requires stopped resources.
+The operator can set an active worker limit per deployment. The existing
+direct private-worker path remains supported.
+
+This is source-level integration tested with simulated Docker operations.
+The recurring Ed25519 signer and public OAuth listener still need to consume
+the relay registry and deployment options; real Netti provisioning and
+two-owner acceptance are not established by these tests.
