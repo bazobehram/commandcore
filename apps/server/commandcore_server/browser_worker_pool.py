@@ -213,6 +213,20 @@ class OwnerBrowserWorkerPool:
             return False
         return True
 
+    async def expire_idle_sessions(self, *, owner_guard=None, on_closed=None) -> int:
+        """Use the same owner and physical proof gates as interactive actions."""
+        closed = 0
+        for worker in tuple(self.workers):
+
+            def verify_route(owner, expected=worker):
+                if self._find_worker(owner) is not expected:
+                    raise BrowserError("browser worker changed during idle cleanup")
+
+            closed += await worker.expire_idle_sessions(
+                verify_route=verify_route, owner_guard=owner_guard, on_closed=on_closed
+            )
+        return closed
+
     async def call(
         self,
         *,

@@ -357,10 +357,12 @@ class JourneyTests(unittest.IsolatedAsyncioTestCase):
         # provisions only verified OAuth browser.open calls and stores
         # per-worker encrypted conversation leases. Existing device
         # resolution, grants, approvals and agent dispatch are unchanged.
-        # Negative tests in test_browser_provision_api.py cover the new gate.
+        # Negative tests in test_browser_provision_api.py cover provisioning.
+        # The idle cleanup guard now wraps only the existing Browser branch;
+        # test_browser_idle_parity.py checks owner and lease isolation.
         self.assertEqual(
             hashlib.sha256(segment.encode()).hexdigest(),
-            "b4c26d282b57ca9a0710ca745fd883d4e7721d772271e1b7b371b008ddad6f4b",
+            "ed08d6f3bada68c5801bb8652398b4f22b87cfdfb4aa28cdbde3d5786042630e",
         )
 
 
@@ -430,6 +432,17 @@ class ToolBoundaryTests(unittest.IsolatedAsyncioTestCase):
                             "browser_conversation_in_use",
                         },
                     )
+            call.assert_not_awaited()
+
+    async def test_idle_guard_blocks_actual_browser_calls_before_gateway(self):
+        with (
+            self.s._browser_idle_guard(self.owner) as permitted,
+            patch.object(self.g, "call", new=AsyncMock()) as call,
+        ):
+            self.assertTrue(permitted)
+            with self.assertRaises(ToolError) as caught:
+                await self.s.call(self.p, "browser.frame", {}, host_session="chat-A")
+            self.assertEqual(caught.exception.code, "browser_cleanup_in_progress")
             call.assert_not_awaited()
 
     async def test_same_conversation_delegates_to_gateway_and_private_pause_still_blocks(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -444,17 +445,31 @@ async def heartbeat_monitor() -> None:
         db.expire_stale_devices(time.time() - settings.heartbeat_timeout_seconds)
 
 
+async def browser_idle_monitor() -> None:
+    while True:
+        await asyncio.sleep(30)
+        if browser is not None:
+            try:
+                await tools.expire_idle_browser_sessions()
+            except Exception:  # noqa: BLE001 - keep the cleanup monitor alive, no details
+                logging.getLogger(__name__).warning("Browser idle cleanup deferred")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(heartbeat_monitor())
+    tasks = [asyncio.create_task(heartbeat_monitor())]
+    if browser is not None:
+        tasks.append(asyncio.create_task(browser_idle_monitor()))
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="CommandCore", version=__version__, lifespan=lifespan)
