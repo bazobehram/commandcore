@@ -144,9 +144,18 @@ def _cc_safe_shell_display(args):
     # bounded, redacted excerpt; suppress stdout because the omitted body was
     # not completely displayed or reviewed.
     if len(command) > 5000:
-        safe, _ = _cc_mask_terminal_secrets(command[:2400])
+        # Redact before clipping: an incomplete credential at the preview
+        # boundary may not match the redaction pattern.
+        if len(command) > 262144:
+            return {
+                "command": "",
+                "visibility": "withheld",
+                "reason": "command_preview_limit",
+            }
+        safe, _ = _cc_mask_terminal_secrets(command)
         return {
-            "command": safe + "\n… [preview shortened; full script not displayed]",
+            "command": safe[:2400]
+            + "\n… [preview shortened; full script not displayed]",
             "visibility": "shortened",
             "reason": "command_preview_limit",
         }
@@ -169,15 +178,18 @@ def _cc_safe_shell_display(args):
 def _cc_terminal_display(value, limit):
     if not isinstance(value, str):
         return "", False
+    # The transport already bounds normal output. Reject exceptional inputs
+    # instead of redacting a partially scanned credential or PEM block.
+    if len(value) > 262144:
+        return "[output preview limit exceeded]", True
     text = "".join(
         ch for ch in value if ch in "\t\n" or 32 <= ord(ch) < 127 or ord(ch) > 159
     )
-    clipped = len(text) > limit
-    text = text[:limit]
     if "-----BEGIN " in text and "PRIVATE KEY-----" in text:
         return "[sensitive output withheld]", True
+    clipped = len(text) > limit
     text, _had_secret = _cc_mask_terminal_secrets(text)
-    return text, clipped
+    return text[:limit], clipped or len(text) > limit
 
 
 def build_shell_card(args, payload):
