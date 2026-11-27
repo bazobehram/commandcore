@@ -48,7 +48,7 @@ jobs:
       - name: Check workspace at mobile and desktop viewports
         run: node tests/ui/workspace_mobile_smoke.cjs
         working-directory: .
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: commandcore-workspace-dist
           path: apps/workspace-angular/dist/commandcore-workspace/browser
