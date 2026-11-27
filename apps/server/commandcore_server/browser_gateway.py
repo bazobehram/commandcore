@@ -15,6 +15,8 @@ import re
 import secrets
 import socket
 import time
+from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -162,6 +164,7 @@ class OwnedSession:
     navigation_pages: list[dict[str, str]] = field(default_factory=list)
     navigation_index: int = -1
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    last_activity_mono: float = field(default_factory=time.monotonic)
 
 
 class BrowserGateway:
@@ -241,6 +244,7 @@ class BrowserGateway:
                 entry.handoff_reason = prior["reason"]
                 entry.handoff_token = prior["token"]
                 entry.handoff_until = prior["until_mono"]
+                entry.last_activity_mono = prior["last_activity_mono"]
                 entry.last_action = (
                     "Private human control preserved across server restart"
                     if entry.paused_for_human
@@ -262,6 +266,37 @@ class BrowserGateway:
                 self.worker_binding.claim(owner)
             except WorkerOwnershipError as exc:
                 raise BrowserError("browser owner binding unavailable") from exc
+
+    def _touch_session(self, owner, entry: OwnedSession) -> None:
+        entry.last_activity_mono = time.monotonic()
+        self._save_session(owner, entry)
+
+    async def expire_idle_sessions(
+        self, *, verify_route=None, owner_guard=None, on_closed=None
+    ) -> int:
+        """Retire only exact idle owner sessions. Passive frames never renew them."""
+        closed = 0
+        for owner, entry in list(self.sessions.items()):
+            if entry.lock.locked() or time.monotonic() - entry.last_activity_mono < 900:
+                continue
+            with owner_guard(owner) if owner_guard else nullcontext(True) as permitted:
+                if not permitted:
+                    continue
+                try:
+                    result = await self._release(
+                        owner,
+                        expected_session_id=entry.id,
+                        idle_only=True,
+                        verify_route=verify_route,
+                    )
+                except BrowserError:
+                    # Retain failed releases for the next sweep; never transfer a worker.
+                    continue
+                if result["closed"]:
+                    if on_closed is not None:
+                        on_closed(owner)
+                    closed += 1
+        return closed
 
     def _save_session(self, owner, entry):
         if self._session_store:
@@ -458,7 +493,7 @@ class BrowserGateway:
         entry.cursor_x = None
         entry.cursor_y = None
         entry.last_action = "Waiting for your manual approval"
-        self._save_session(owner, entry)
+        self._touch_session(owner, entry)
         return {
             "handoff_url": self.public_base_url
             + "/browser/console/"
@@ -682,7 +717,7 @@ class BrowserGateway:
             entry.cursor_y = None
             entry.last_action = "Control returned to AI"
             try:
-                self._save_session(owner, entry)
+                self._touch_session(owner, entry)
             except BrowserError:
                 # Never acknowledge Resume when durable state could still
                 # restore the private handoff after a process restart.
@@ -795,7 +830,12 @@ class BrowserGateway:
             )
 
     async def _release(
-        self, owner: tuple[str, str, str], *, expected_session_id: str | None = None
+        self,
+        owner: tuple[str, str, str],
+        *,
+        expected_session_id: str | None = None,
+        idle_only: bool = False,
+        verify_route: Callable[[tuple[str, str, str]], None] | None = None,
     ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
@@ -807,10 +847,18 @@ class BrowserGateway:
                     raise BrowserError(
                         "Browser session changed; refresh before stopping"
                     )
-                # An agent cannot terminate a browser while the operator is
-                # typing credentials or approving a sensitive action.
-                if entry.paused_for_human:
+                # Recheck idleness under the action lock. An active human grant
+                # is never interrupted, and an expired one never resumes the AI.
+                if idle_only and (
+                    time.monotonic() - entry.last_activity_mono < 900
+                    or (entry.paused_for_human and self._active_handoff(entry))
+                ):
+                    return {"closed": False}
+                if entry.paused_for_human and not idle_only:
                     raise BrowserError("browser paused for human; cannot close")
+                if verify_route is not None:
+                    verify_route(owner)
+                    self._require_current_session(owner, entry)
                 try:
                     async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
                         r = await client.post(
@@ -832,6 +880,8 @@ class BrowserGateway:
                     raise BrowserError(
                         "Steel session release could not be verified"
                     ) from exc
+                if verify_route is not None:
+                    verify_route(owner)
                 self._require_current_session(owner, entry)
                 if self._session_store:
                     try:
@@ -1278,6 +1328,9 @@ class BrowserGateway:
                     entry.pending_click = None
                     return {"pending": None}
                 return {"pending": {"x": pending["x"], "y": pending["y"]}}
+            # Pending-click polling and passive viewer frames do not count as activity.
+            # Only requests that passed the owner and handoff checks reach here.
+            self._touch_session(owner, entry)
             if name == "browser.approve_click":
                 if not human:
                     raise BrowserError("private human approval required")

@@ -74,6 +74,7 @@ class BrowserSessionStore:
             "reason": entry.handoff_reason,
             "token": entry.handoff_token,
             "until_mono": entry.handoff_until,
+            "last_activity_mono": entry.last_activity_mono,
             "boot": self.boot_id(),
         }
         raw = json.dumps(state, separators=(",", ":"), ensure_ascii=False).encode()
@@ -163,6 +164,17 @@ class BrowserSessionStore:
             ):
                 token = None
                 until = 0.0
+            # Monotonic timestamps are only meaningful within the same boot.
+            # Legacy journals and reboot recovery receive a conservative grace.
+            now = time.monotonic()
+            last_activity = data.get("last_activity_mono", now)
+            boot = self.boot_id()
+            if not boot or data.get("boot") != boot:
+                last_activity = now
+            elif (
+                type(last_activity) not in (int, float) or not 0 <= last_activity <= now
+            ):
+                raise ValueError("invalid browser activity timestamp")
             return owner, {
                 "id": sid,
                 "target_id": target,
@@ -170,6 +182,7 @@ class BrowserSessionStore:
                 "reason": reason,
                 "token": token,
                 "until_mono": until,
+                "last_activity_mono": last_activity,
             }
         except (
             InvalidToken,
