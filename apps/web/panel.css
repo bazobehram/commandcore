@@ -11,3 +11,10 @@
 .cc-update-confirm{margin:12px 0;padding:14px;border:1px solid #466074;border-radius:12px;background:#14202b;display:flex;gap:10px;flex-wrap:wrap}
 .cc-update-confirm p{flex:1 0 100%;margin:0 0 5px}
 .cc-update-confirm button{min-width:130px}
+
+/* Keep high-risk confirmations consistent with the Angular workspace. */
+.device-action-confirm{width:min(440px,calc(100vw - 32px));max-height:90vh;overflow:auto}
+.device-action-confirm h2{margin:0 0 12px}
+.device-action-confirm .device-action-name{color:inherit;font-weight:700;overflow-wrap:anywhere}
+.device-action-buttons{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px}
+.device-action-confirm button:focus-visible,.device-action-confirm input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
