@@ -23,6 +23,7 @@ def test_public_agent_publish_requires_signed_x86_and_arm64():
     command = step["run"]
     assert "for architecture in x86_64 arm64; do" in command
     assert '--architecture "$architecture"' in command
+    assert '--source-commit "$SOURCE_COMMIT"' in command
     assert command.count("verify_native_agent_release.py") == 1
     assert "artifacts'][0]" not in command
     assert (
@@ -30,3 +31,4 @@ def test_public_agent_publish_requires_signed_x86_and_arm64():
     )
     assert step["env"]["RELEASE_VERSION"] == "${{ inputs.version }}"
     assert step["env"]["REPOSITORY"] == "${{ github.repository }}"
+    assert step["env"]["SOURCE_COMMIT"] == "${{ github.sha }}"

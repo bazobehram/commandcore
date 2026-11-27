@@ -96,6 +96,7 @@ def prepare(
         "schema_version": 1,
         "product": "commandcore-agent",
         "version": release_version,
+        "source_commit": source_sha,
         "artifacts": artifacts,
     }
     # A signer must add signing_key_id from an independently trusted public key

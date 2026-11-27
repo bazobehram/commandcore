@@ -91,3 +91,14 @@ key used for native Agent manifests. A successful signature check identifies the
 release artifact source/workflow; it does not approve deployment or imply runtime
 parity across Public and Private. See [release metadata](RELEASE.md#immutable-ghcr-release-image-metadata)
 and the protected two-target deployment process.
+
+## Bind the signed Native release to reviewed source
+
+The signed native Agent manifest includes the exact 40-character `source_commit`
+from the validated unsigned CI candidates. The protected publisher requires
+that signed field to equal the publisher workflow's `GITHUB_SHA`, in addition
+to verifying both architectures, the offline signature and every artifact hash.
+A signature by itself does **not** prove that a binary was compiled from the
+claimed source: reviewer provenance of the unsigned candidate and protected
+release approvals remain independent requirements. Old staged manifests without
+a signed source commit must not be promoted by this publisher.

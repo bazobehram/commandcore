@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -82,6 +83,8 @@ def verify(
     version: str,
     repo: str,
     architecture: str = "x86_64",
+    *,
+    expected_source_commit: str,
 ) -> None:
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("invalid_release_directory")
@@ -100,6 +103,16 @@ def verify(
         raise ValueError("invalid_manifest_identity")
     if manifest.get("version") != version:
         raise ValueError("release_version_mismatch")
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_source_commit):
+        raise ValueError("invalid_expected_source_commit")
+    declared_source = manifest.get("source_commit")
+    if (
+        not isinstance(declared_source, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", declared_source)
+    ):
+        raise ValueError("invalid_release_source_commit")
+    if declared_source != expected_source_commit:
+        raise ValueError("release_source_commit_mismatch")
     assets = manifest.get("artifacts")
     if not isinstance(assets, list) or not (1 <= len(assets) <= 2):
         raise ValueError("release_artifact_count")
@@ -152,7 +165,15 @@ if __name__ == "__main__":
     parser.add_argument("--public-key-b64", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--repo", required=True)
+    parser.add_argument("--source-commit", required=True)
     parser.add_argument("--architecture", choices=("x86_64", "arm64"), default="x86_64")
     a = parser.parse_args()
-    verify(a.directory, a.public_key_b64, a.version, a.repo, a.architecture)
+    verify(
+        a.directory,
+        a.public_key_b64,
+        a.version,
+        a.repo,
+        a.architecture,
+        expected_source_commit=a.source_commit,
+    )
     print("SIGNED_NATIVE_RELEASE_VERIFIED")
