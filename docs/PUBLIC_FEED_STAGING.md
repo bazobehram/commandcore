@@ -287,3 +287,22 @@ It never reads a private signing key or silently downgrades a Full Control
 installation. Full Control keeps its separately published helper prerequisites.
 Use different local feed configuration files for the two independent origins;
 never copy private state or rewrite URLs inside a signed manifest.
+
+### Native build provenance (separate from the release signature)
+
+On reviewed `main`, each architecture-specific candidate workflow attests the
+exact executable and `UNSIGNED_BUILD_METADATA.json` with GitHub-hosted build
+provenance, then verifies both subjects against the expected source commit and
+workflow before upload. Native Rust source changes also trigger rebuilding.
+The candidate is still unsigned for distribution; this does not authorize
+installation, replace independent signer custody or satisfy real lifecycle and
+rollback acceptance. Older artifacts without provenance cannot be retroactively
+represented as attested builds.
+
+The independent reviewer repeats the existing candidate integrity verification
+and `gh attestation verify <file> --repo bazobehram/commandcore --signer-workflow
+bazobehram/commandcore/.github/workflows/<architecture-workflow>.yml
+--source-ref refs/heads/main --source-digest <reviewed-commit>
+--deny-self-hosted-runners` for the downloaded executable and metadata before
+preparing either origin-specific manifest. Never copy a deployment credential or
+release signing private key into the build workflow.
