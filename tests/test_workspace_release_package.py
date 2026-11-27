@@ -1,10 +1,14 @@
 import hashlib
 import json
+import runpy
 import zipfile
+from pathlib import Path
 
 import pytest
 
-from scripts.package_workspace_release import package
+package = runpy.run_path(
+    str(Path(__file__).resolve().parents[1] / "scripts/package_workspace_release.py")
+)["package"]
 
 COMMIT = "a" * 40
 
