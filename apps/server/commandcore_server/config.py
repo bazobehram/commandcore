@@ -132,6 +132,18 @@ class Settings:
     browser_dynamic_workers_enabled: bool = _bool(
         "COMMANDCORE_BROWSER_DYNAMIC_WORKERS_ENABLED", False
     )
+    browser_uds_relay_enabled: bool = _bool(
+        "COMMANDCORE_BROWSER_UDS_RELAY_ENABLED", False
+    )
+    browser_uds_relay_root: str = os.getenv(
+        "COMMANDCORE_BROWSER_UDS_RELAY_ROOT", ""
+    ).strip()
+    browser_uds_relay_operator_uid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_UDS_RELAY_OPERATOR_UID", "-1")
+    )
+    browser_uds_relay_operator_gid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_UDS_RELAY_OPERATOR_GID", "-1")
+    )
     browser_provision_api_enabled: bool = _bool(
         "COMMANDCORE_BROWSER_PROVISION_API_ENABLED", False
     )
@@ -165,23 +177,44 @@ class Settings:
             raise RuntimeError(
                 "COMMANDCORE_PANEL_OAUTH_TARGET_PARAMETER must be audience or resource"
             )
-        if self.browser_provision_api_enabled and not (
-            self.browser_dynamic_workers_enabled
-            and self.browser_enabled
-            and self.oauth_enabled
-            and self.browser_provision_socket.startswith("/")
-            and self.browser_provision_key_file.startswith("/")
-            and self.browser_provision_operator_uid > 0
-            and self.browser_provision_operator_gid > 0
+        if (
+            self.browser_enabled
+            and self.browser_uds_relay_enabled
+            and not (
+                self.oauth_enabled
+                and self.browser_dynamic_workers_enabled
+                and self.browser_uds_relay_root.startswith("/")
+                and self.browser_uds_relay_operator_uid > 0
+                and self.browser_uds_relay_operator_gid > 0
+                and self.browser_attestation_public_key
+            )
+        ):
+            raise RuntimeError(
+                "public Browser Unix relay requires explicit OAuth, dynamic owner pool and signed proof"
+            )
+        if (
+            self.browser_enabled
+            and self.browser_provision_api_enabled
+            and not (
+                self.browser_dynamic_workers_enabled
+                and self.oauth_enabled
+                and self.browser_provision_socket.startswith("/")
+                and self.browser_provision_key_file.startswith("/")
+                and self.browser_provision_operator_uid > 0
+                and self.browser_provision_operator_gid > 0
+            )
         ):
             raise RuntimeError(
                 "OAuth Browser provisioning API requires the complete reviewed operator configuration"
             )
-        if self.browser_dynamic_workers_enabled and not (
+        if (
             self.browser_enabled
-            and self.oauth_enabled
-            and self.browser_worker_manifest
-            and self.browser_attestation_public_key
+            and self.browser_dynamic_workers_enabled
+            and not (
+                self.oauth_enabled
+                and self.browser_worker_manifest
+                and self.browser_attestation_public_key
+            )
         ):
             raise RuntimeError(
                 "dynamic Browser requires explicit OAuth, manifest and Ed25519 public proof"

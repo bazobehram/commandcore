@@ -28,6 +28,7 @@ from .activity import source
 from .browser_egress import POLICY_VERSION, _public_dns_name
 from .browser_session_store import BrowserSessionStore, SessionStoreError
 from .browser_worker_binding import BrowserWorkerBinding, WorkerOwnershipError
+from .browser_worker_uds_client import WorkerUnixClient
 
 # Shared read-only hit testing for link discovery and later revalidation.
 # Check real rendered pieces: a search result's bounding-box centre can be
@@ -222,6 +223,9 @@ class BrowserGateway:
         # another owner, even after the previous session has been closed.
         self._bound_owner: tuple[str, str, str] | None = None
         self.worker_binding = worker_binding
+        # The public operator may attach a validated per-worker UDS transport.
+        # Existing private Browser behavior remains direct by default.
+        self.control_relay: WorkerUnixClient | None = None
         # An unverified download policy makes this physical worker unsafe to
         # reuse; operator replacement is required rather than silent retry.
         self._quarantined_download_policy = False
@@ -628,7 +632,7 @@ class BrowserGateway:
         in-flight capture per owner is enforced by private_stream_frame.
         """
         uri = await self._cdp_socket_uri(entry.id)
-        async with websockets.connect(
+        async with self._connect_ws(
             uri, open_timeout=10, max_size=9_000_000, close_timeout=2
         ) as ws:
             cdp = CDP(ws)
@@ -756,7 +760,7 @@ class BrowserGateway:
             if len(self.sessions) >= self.max_sessions:
                 raise BrowserError("maximum concurrent browser sessions reached")
             try:
-                async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
+                async with self._http_client(timeout=15, policy=True) as client:
                     policy_response = await client.get(
                         self.egress_policy_url + "/_commandcore/policy"
                     )
@@ -771,6 +775,7 @@ class BrowserGateway:
                         raise BrowserError(
                             "browser egress policy does not match configuration"
                         )
+                async with self._http_client(timeout=15) as client:
                     r = await client.post(
                         self.base_url + "/v1/sessions",
                         json={
@@ -798,7 +803,7 @@ class BrowserGateway:
                 # A failed cleanup does not restore trust; never reuse this
                 # physical worker without a separate operator replacement.
                 try:
-                    async with httpx.AsyncClient(timeout=6, trust_env=False) as client:
+                    async with self._http_client(timeout=6) as client:
                         await client.post(
                             self.base_url + "/v1/sessions/" + session_id + "/release"
                         )
@@ -821,7 +826,7 @@ class BrowserGateway:
         explicit user approval, never an automatic per-site exception.
         """
         uri = await self._cdp_socket_uri(session_id)
-        async with websockets.connect(
+        async with self._connect_ws(
             uri, open_timeout=12, max_size=2_000_000, close_timeout=2
         ) as ws:
             await CDP(ws).send(
@@ -860,7 +865,7 @@ class BrowserGateway:
                     verify_route(owner)
                     self._require_current_session(owner, entry)
                 try:
-                    async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
+                    async with self._http_client(timeout=12) as client:
                         r = await client.post(
                             self.base_url + "/v1/sessions/" + entry.id + "/release"
                         )
@@ -893,6 +898,18 @@ class BrowserGateway:
                     self._unverified_recovery = None
         return {"closed": True}
 
+    def _http_client(
+        self, *, timeout: float, policy: bool = False
+    ) -> httpx.AsyncClient:
+        if self.control_relay is not None:
+            return self.control_relay.http_client(timeout=timeout, policy=policy)
+        return httpx.AsyncClient(timeout=timeout, trust_env=False)
+
+    def _connect_ws(self, uri: str, **options):
+        if self.control_relay is not None:
+            return self.control_relay.websocket(uri, **options)
+        return websockets.connect(uri, **options)
+
     async def _cdp_socket_uri(self, session_id: str) -> str:
         """Reach self-hosted Steel by a private IP, not its Docker DNS alias.
 
@@ -900,6 +917,13 @@ class BrowserGateway:
         names. Resolve the explicitly configured internal service to an IP;
         reject public destinations. Re-resolve on each call after restarts.
         """
+        if self.control_relay is not None:
+            if not re.fullmatch(r"[0-9a-f-]{36}", session_id):
+                raise BrowserError("invalid private Steel session ID")
+            self.control_relay.socket("steel")
+            # The actual connection is the exact UDS; loopback is only the
+            # WebSocket Host header accepted by the Steel CDP proxy.
+            return f"ws://127.0.0.1:3000/?sessionId={session_id}"
         u = urlsplit(self.cdp_url)
         host = u.hostname or ""
         if u.scheme != "ws" or not host or u.username or u.password:
@@ -987,7 +1011,7 @@ class BrowserGateway:
         # their presence is not a reason to hide an otherwise safe address.
         expression = LINK_LIST_SCRIPT
         uri = await self._cdp_socket_uri(entry.id)
-        async with websockets.connect(
+        async with self._connect_ws(
             uri, open_timeout=12, max_size=9_000_000, close_timeout=2
         ) as ws:
             cdp = CDP(ws)
@@ -1084,7 +1108,7 @@ class BrowserGateway:
           }
           return {url:location.href,items};
         })()"""
-        async with websockets.connect(
+        async with self._connect_ws(
             uri, open_timeout=12, max_size=9_000_000, close_timeout=2
         ) as ws:
             cdp = CDP(ws)
@@ -1144,7 +1168,7 @@ class BrowserGateway:
             if attempt:
                 await asyncio.sleep(1.5 * attempt)
             try:
-                async with websockets.connect(
+                async with self._connect_ws(
                     uri, open_timeout=12, max_size=9_000_000, close_timeout=2
                 ) as ws:
                     cdp = CDP(ws)
@@ -1213,7 +1237,7 @@ class BrowserGateway:
         # Do not create, navigate, attach to another tab, or issue input while
         # checking a recovered session. A missing session is never replaced.
         try:
-            async with httpx.AsyncClient(timeout=8, trust_env=False) as client:
+            async with self._http_client(timeout=8) as client:
                 response = await client.get(self.base_url + "/v1/sessions/" + entry.id)
                 response.raise_for_status()
                 state = response.json()
@@ -1449,7 +1473,7 @@ class BrowserGateway:
     ) -> None:
         """Per-owner lock is held by caller throughout CDP and screenshot."""
         uri = await self._cdp_socket_uri(entry.id)
-        async with websockets.connect(
+        async with self._connect_ws(
             uri, open_timeout=12, max_size=9_000_000, close_timeout=2
         ) as ws:
             cdp = CDP(ws)

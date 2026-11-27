@@ -130,6 +130,9 @@ class OwnerBrowserWorkerPool:
 
     def _verify_physical_assignment(self, worker: BrowserGateway) -> None:
         if self.attestation is None:
+            if worker.control_relay is not None:
+                worker.sessions.clear()
+                raise BrowserError("Browser relay requires signed physical proof")
             return
         binding = worker.worker_binding
         assert binding is not None
@@ -144,6 +147,14 @@ class OwnerBrowserWorkerPool:
             raise BrowserError(
                 "browser physical worker not currently verified"
             ) from exc
+        if worker.control_relay is not None:
+            try:
+                if not isinstance(self.attestation, Ed25519WorkerAttestationVerifier):
+                    raise BrowserError("Browser relay requires Ed25519 proof")
+                worker.control_relay.verify_attested_identity(row)
+            except BrowserError:
+                worker.sessions.clear()
+                raise
         start_stamp = row.get("steel_started_at", "")
         if not start_stamp:
             raise BrowserError("browser worker runtime incarnation is unverified")

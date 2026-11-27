@@ -18,6 +18,7 @@ from typing import Any
 from .browser_gateway import BrowserError, BrowserGateway
 from .browser_worker_binding import WorkerOwnershipError
 from .browser_worker_pool import Owner, OwnerBrowserWorkerPool, ProofVerifier
+from .browser_worker_uds_client import WorkerUnixClient
 
 _MAX_MANIFEST_BYTES = 65536
 
@@ -33,6 +34,9 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
         public_base_url: str,
         *,
         attestation: ProofVerifier,
+        relay_root: str = "",
+        relay_operator_uid: int = -1,
+        relay_operator_gid: int = -1,
     ) -> None:
         if attestation is None or len(binding_secret) < 32:
             raise ValueError("dynamic public Browser requires proof and owner key")
@@ -41,6 +45,13 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
         self.allow_hosts = allow_hosts
         self.public_base_url = public_base_url
         self.attestation = attestation
+        if relay_root and (relay_operator_uid < 0 or relay_operator_gid < 0):
+            raise ValueError(
+                "public worker relay identity must be explicitly configured"
+            )
+        self.relay_root = relay_root
+        self.relay_operator_uid = relay_operator_uid
+        self.relay_operator_gid = relay_operator_gid
         self.workers: tuple[BrowserGateway, ...] = ()
         self._worker_starts: dict[str, str] = {}
         self._manifest_digest: bytes | None = None
@@ -109,6 +120,26 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
             and a.egress_policy_url == b.egress_policy_url
             and a.allow_hosts == b.allow_hosts
             and a.public_base_url == b.public_base_url
+            and (
+                (
+                    str(a.control_relay.root),
+                    a.control_relay.worker_id,
+                    a.control_relay.operator_uid,
+                    a.control_relay.operator_gid,
+                )
+                if a.control_relay
+                else None
+            )
+            == (
+                (
+                    str(b.control_relay.root),
+                    b.control_relay.worker_id,
+                    b.control_relay.operator_uid,
+                    b.control_relay.operator_gid,
+                )
+                if b.control_relay
+                else None
+            )
         )
 
     def refresh(self) -> None:
@@ -136,6 +167,16 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
                         self.attestation,
                     )
                     incoming = tuple(candidate.workers)
+                    if self.relay_root:
+                        for gateway in incoming:
+                            binding = gateway.worker_binding
+                            assert binding is not None
+                            gateway.control_relay = WorkerUnixClient(
+                                self.relay_root,
+                                binding.worker_id,
+                                operator_uid=self.relay_operator_uid,
+                                operator_gid=self.relay_operator_gid,
+                            )
                 else:
                     incoming = ()
                 # Check against in-place edits or atomic rename between reads.
