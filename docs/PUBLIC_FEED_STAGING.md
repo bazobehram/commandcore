@@ -268,3 +268,41 @@ python scripts/prepare_linux_release_review.py \
 Neither option signs or publishes anything. After independent signing, the
 corresponding trusted-key verifier, artifact checks, lifecycle acceptance and
 operator approval must pass. Never replace signed URLs after signing.
+
+### Independent Standard-only onboarding
+
+The shared server exposes `/install/linux-standard-ready` only when the local
+feed has a reviewed `linux-standard-onboarding.json`, a pinned `linux.sh`, and
+an Ed25519-signed current native manifest with both x86_64 and ARM64 artifacts.
+The configuration has exactly `schema_version` (1), `server_url` (the configured
+HTTPS origin of this deployment), `agent_public_key_b64` (independently trusted
+public verification key), and `installer_sha256` (reviewed installer bytes).
+The artifact URLs must match this same origin, version and filename; no private
+origin, unpinned installer, missing artifact or unsigned manifest is accepted.
+The runtime gate verifies the signature and checks artifact presence and size;
+operators must verify artifact hashes and acceptance before publication, and
+the installer verifies the downloaded artifact hash again before activation.
+The Standard wrapper explicitly disables Full Control helper preparation.
+It never reads a private signing key or silently downgrades a Full Control
+installation. Full Control keeps its separately published helper prerequisites.
+Use different local feed configuration files for the two independent origins;
+never copy private state or rewrite URLs inside a signed manifest.
+
+### Native build provenance (separate from the release signature)
+
+On reviewed `main`, each architecture-specific candidate workflow attests the
+exact executable and `UNSIGNED_BUILD_METADATA.json` with GitHub-hosted build
+provenance, then verifies both subjects against the expected source commit and
+workflow before upload. Native Rust source changes also trigger rebuilding.
+The candidate is still unsigned for distribution; this does not authorize
+installation, replace independent signer custody or satisfy real lifecycle and
+rollback acceptance. Older artifacts without provenance cannot be retroactively
+represented as attested builds.
+
+The independent reviewer repeats the existing candidate integrity verification
+and `gh attestation verify <file> --repo bazobehram/commandcore --signer-workflow
+bazobehram/commandcore/.github/workflows/<architecture-workflow>.yml
+--source-ref refs/heads/main --source-digest <reviewed-commit>
+--deny-self-hosted-runners` for the downloaded executable and metadata before
+preparing either origin-specific manifest. Never copy a deployment credential or
+release signing private key into the build workflow.

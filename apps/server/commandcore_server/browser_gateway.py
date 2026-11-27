@@ -15,6 +15,8 @@ import re
 import secrets
 import socket
 import time
+from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -163,6 +165,7 @@ class OwnedSession:
     navigation_pages: list[dict[str, str]] = field(default_factory=list)
     navigation_index: int = -1
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    last_activity_mono: float = field(default_factory=time.monotonic)
 
 
 class BrowserGateway:
@@ -245,6 +248,7 @@ class BrowserGateway:
                 entry.handoff_reason = prior["reason"]
                 entry.handoff_token = prior["token"]
                 entry.handoff_until = prior["until_mono"]
+                entry.last_activity_mono = prior["last_activity_mono"]
                 entry.last_action = (
                     "Private human control preserved across server restart"
                     if entry.paused_for_human
@@ -255,6 +259,48 @@ class BrowserGateway:
                 # Recovery is provisional: verify the exact session against Steel
                 # before permitting any further AI/human interaction.
                 self._unverified_recovery = owner
+
+    def _require_current_session(self, owner, entry: OwnedSession) -> None:
+        # A queued action must not operate on a session retired by Stop or
+        # invalidated by a worker-proof refresh while it waited for the lock.
+        if self.sessions.get(owner) is not entry:
+            raise BrowserError("browser session changed; refresh before continuing")
+        if self.worker_binding is not None:
+            try:
+                self.worker_binding.claim(owner)
+            except WorkerOwnershipError as exc:
+                raise BrowserError("browser owner binding unavailable") from exc
+
+    def _touch_session(self, owner, entry: OwnedSession) -> None:
+        entry.last_activity_mono = time.monotonic()
+        self._save_session(owner, entry)
+
+    async def expire_idle_sessions(
+        self, *, verify_route=None, owner_guard=None, on_closed=None
+    ) -> int:
+        """Retire only exact idle owner sessions. Passive frames never renew them."""
+        closed = 0
+        for owner, entry in list(self.sessions.items()):
+            if entry.lock.locked() or time.monotonic() - entry.last_activity_mono < 900:
+                continue
+            with owner_guard(owner) if owner_guard else nullcontext(True) as permitted:
+                if not permitted:
+                    continue
+                try:
+                    result = await self._release(
+                        owner,
+                        expected_session_id=entry.id,
+                        idle_only=True,
+                        verify_route=verify_route,
+                    )
+                except BrowserError:
+                    # Retain failed releases for the next sweep; never transfer a worker.
+                    continue
+                if result["closed"]:
+                    if on_closed is not None:
+                        on_closed(owner)
+                    closed += 1
+        return closed
 
     def _save_session(self, owner, entry):
         if self._session_store:
@@ -451,7 +497,7 @@ class BrowserGateway:
         entry.cursor_x = None
         entry.cursor_y = None
         entry.last_action = "Waiting for your manual approval"
-        self._save_session(owner, entry)
+        self._touch_session(owner, entry)
         return {
             "handoff_url": self.public_base_url
             + "/browser/console/"
@@ -482,8 +528,10 @@ class BrowserGateway:
         # capture the human login console. The next poll can retry safely.
         if not entry.paused_for_human and not entry.lock.locked():
             async with entry.lock:
+                self._require_current_session(owner, entry)
                 if not entry.paused_for_human:
                     shot = await asyncio.wait_for(self._snapshot(entry), timeout=8)
+                    self._require_current_session(owner, entry)
                     image = shot.get("screenshot_base64")
                     if image and (
                         image != entry.frame_image
@@ -559,6 +607,7 @@ class BrowserGateway:
                 raise BrowserError("browser owner binding unavailable") from exc
         entry = self.sessions[owner]
         async with entry.lock:
+            self._require_current_session(owner, entry)
             if (
                 not entry.paused_for_human
                 or not self._active_handoff(entry)
@@ -566,6 +615,7 @@ class BrowserGateway:
             ):
                 raise BrowserError("handoff not found or expired")
             shot = await self._snapshot_private_frame(entry)
+            self._require_current_session(owner, entry)
             if (
                 not entry.paused_for_human
                 or not self._active_handoff(entry)
@@ -631,8 +681,11 @@ class BrowserGateway:
             except WorkerOwnershipError as exc:
                 raise BrowserError(str(exc)) from exc
         await self._verify_recovered_session(owner)
-        entry = self.sessions[owner]
+        entry = self.sessions.get(owner)
+        if entry is None:
+            raise BrowserError("browser session changed; refresh before continuing")
         async with entry.lock:
+            self._require_current_session(owner, entry)
             if not self._active_handoff(entry) or not secrets.compare_digest(
                 entry.handoff_token or "", token
             ):
@@ -643,6 +696,7 @@ class BrowserGateway:
             consent_origin = None
             if allow_ai_interaction:
                 page = await self._snapshot_private_frame(entry)
+                self._require_current_session(owner, entry)
                 page_url = page.get("url")
                 check_url(page_url, self.allow_hosts)
                 parsed = urlsplit(page_url)
@@ -667,7 +721,7 @@ class BrowserGateway:
             entry.cursor_y = None
             entry.last_action = "Control returned to AI"
             try:
-                self._save_session(owner, entry)
+                self._touch_session(owner, entry)
             except BrowserError:
                 # Never acknowledge Resume when durable state could still
                 # restore the private handoff after a process restart.
@@ -781,34 +835,67 @@ class BrowserGateway:
             )
 
     async def _release(
-        self, owner: tuple[str, str, str], *, expected_session_id: str | None = None
+        self,
+        owner: tuple[str, str, str],
+        *,
+        expected_session_id: str | None = None,
+        idle_only: bool = False,
+        verify_route: Callable[[tuple[str, str, str]], None] | None = None,
     ) -> dict[str, Any]:
         async with self._create_lock:
             entry = self.sessions.get(owner)
             if not entry:
                 return {"closed": False}
             async with entry.lock:
+                self._require_current_session(owner, entry)
                 if expected_session_id is not None and entry.id != expected_session_id:
                     raise BrowserError(
                         "Browser session changed; refresh before stopping"
                     )
-                # An agent cannot terminate a browser while the operator is
-                # typing credentials or approving a sensitive action.
-                if entry.paused_for_human:
+                # Recheck idleness under the action lock. An active human grant
+                # is never interrupted, and an expired one never resumes the AI.
+                if idle_only and (
+                    time.monotonic() - entry.last_activity_mono < 900
+                    or (entry.paused_for_human and self._active_handoff(entry))
+                ):
+                    return {"closed": False}
+                if entry.paused_for_human and not idle_only:
                     raise BrowserError("browser paused for human; cannot close")
-                async with self._http_client(timeout=12) as client:
-                    r = await client.post(
-                        self.base_url + "/v1/sessions/" + entry.id + "/release"
-                    )
-                    r.raise_for_status()
-                    if r.json().get("status") != "released":
-                        raise BrowserError("Steel did not confirm session release")
+                if verify_route is not None:
+                    verify_route(owner)
+                    self._require_current_session(owner, entry)
+                try:
+                    async with self._http_client(timeout=12) as client:
+                        r = await client.post(
+                            self.base_url + "/v1/sessions/" + entry.id + "/release"
+                        )
+                        # Private already treats an absent exact session as closed.
+                        # Never transfer ownership or acknowledge other HTTP failures.
+                        if r.status_code not in (404, 410):
+                            r.raise_for_status()
+                            payload = r.json()
+                            if (
+                                not isinstance(payload, dict)
+                                or payload.get("status") != "released"
+                            ):
+                                raise BrowserError(
+                                    "Steel did not confirm session release"
+                                )
+                except (httpx.HTTPError, ValueError) as exc:
+                    raise BrowserError(
+                        "Steel session release could not be verified"
+                    ) from exc
+                if verify_route is not None:
+                    verify_route(owner)
+                self._require_current_session(owner, entry)
                 if self._session_store:
                     try:
                         self._session_store.delete()
                     except SessionStoreError as exc:
                         raise BrowserError("browser journal cleanup failed") from exc
                 self.sessions.pop(owner, None)
+                if self._unverified_recovery == owner:
+                    self._unverified_recovery = None
         return {"closed": True}
 
     def _http_client(
@@ -1162,6 +1249,7 @@ class BrowserGateway:
                 raise BrowserError("saved browser session no longer exists")
         except (httpx.HTTPError, ValueError) as exc:
             raise BrowserError("cannot verify saved browser session") from exc
+        self._require_current_session(owner, entry)
         self._unverified_recovery = None
 
     async def call(
@@ -1220,6 +1308,7 @@ class BrowserGateway:
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
             async with entry.lock:
+                self._require_current_session(owner, entry)
                 return self._handoff(owner, args.get("reason", "login_or_approval"))
         if name == "browser.close":
             expected = args.get("expected_session_id")
@@ -1236,6 +1325,7 @@ class BrowserGateway:
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
         async with entry.lock:
+            self._require_current_session(owner, entry)
             # Recheck authority *inside* the lock. An agent action can be
             # waiting behind human handoff; the previous pre-lock check
             # let it execute after the handoff was granted.
@@ -1262,6 +1352,9 @@ class BrowserGateway:
                     entry.pending_click = None
                     return {"pending": None}
                 return {"pending": {"x": pending["x"], "y": pending["y"]}}
+            # Pending-click polling and passive viewer frames do not count as activity.
+            # Only requests that passed the owner and handoff checks reach here.
+            self._touch_session(owner, entry)
             if name == "browser.approve_click":
                 if not human:
                     raise BrowserError("private human approval required")
@@ -1274,6 +1367,7 @@ class BrowserGateway:
                     )
                 # No clicks at a stale coordinate after navigation or a fresh page.
                 current = await self._snapshot_private_frame(entry)
+                self._require_current_session(owner, entry)
                 if current.get("url") != pending["url"]:
                     raise BrowserError(
                         "page changed; inspect the page and click manually"
@@ -1287,11 +1381,15 @@ class BrowserGateway:
             if name == "browser.elements":
                 if human:
                     raise BrowserError("human controls use the private console")
-                return await self._visible_elements(entry)
+                result = await self._visible_elements(entry)
+                self._require_current_session(owner, entry)
+                return result
             if name == "browser.links":
                 if human:
                     raise BrowserError("human controls use the private console")
-                return await self._visible_links(entry)
+                result = await self._visible_links(entry)
+                self._require_current_session(owner, entry)
+                return result
 
             if not human:
                 entry.action_running = True
@@ -1312,6 +1410,7 @@ class BrowserGateway:
                 if not human and name != "browser.click":
                     entry.pending_click = None
                 await self._perform_action(owner, entry, name, args, human=human)
+                self._require_current_session(owner, entry)
                 if not human and name == "browser.click":
                     # A completed safe click supersedes a previously blocked proposal.
                     entry.pending_click = None
@@ -1321,6 +1420,7 @@ class BrowserGateway:
                     # Avoid blocking user clicks behind redundant CDP work.
                     return {"status": "ok"}
                 shot = await self._snapshot(entry)
+                self._require_current_session(owner, entry)
                 self._publish_frame(
                     entry,
                     shot,

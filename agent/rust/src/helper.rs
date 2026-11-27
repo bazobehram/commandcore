@@ -63,14 +63,34 @@ fn canonical_bytes(payload: &Value) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec(&canonicalize(&body))?)
 }
 
+// Python HelperClient and HelperServer load the key with bytes.strip().
+// Use the same ASCII byte set at BOTH ends; keys generated from random bytes
+// can begin with whitespace, and trimming only the tail causes a rare HMAC
+// disagreement even when the unprivileged IPC socket is accessible.
+#[cfg(any(unix, test))]
+fn python_bytes_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r')
+}
+
+#[cfg(any(unix, test))]
+fn normalized_helper_secret(raw: &[u8]) -> &[u8] {
+    let start = raw
+        .iter()
+        .position(|byte| !python_bytes_space(*byte))
+        .unwrap_or(raw.len());
+    let end = raw
+        .iter()
+        .rposition(|byte| !python_bytes_space(*byte))
+        .map_or(start, |index| index + 1);
+    &raw[start..end]
+}
+
 impl HelperClient {
     #[cfg(unix)]
     fn signed(&self, mut payload: Value) -> Result<Value> {
-        let mut secret = fs::read(&self.secret_path)
+        let secret_bytes = fs::read(&self.secret_path)
             .with_context(|| format!("read helper secret {}", self.secret_path.display()))?;
-        while secret.last().is_some_and(|b| b.is_ascii_whitespace()) {
-            secret.pop();
-        }
+        let secret = normalized_helper_secret(&secret_bytes);
         if secret.len() < 32 {
             return Err(anyhow!("helper secret must contain at least 32 bytes"));
         }
@@ -96,7 +116,7 @@ impl HelperClient {
             Value::String(nonce)
         });
         let bytes = canonical_bytes(&payload)?;
-        let mut mac = Hmac::<Sha256>::new_from_slice(&secret)
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret)
             .map_err(|_| anyhow!("invalid helper HMAC key"))?;
         mac.update(&bytes);
         payload.as_object_mut().unwrap().insert(
@@ -275,6 +295,20 @@ pub async fn runtime_capabilities(version: &str) -> Value {
 mod tests {
     use super::*;
     use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+
+    #[test]
+    fn helper_secret_normalization_matches_python_bytes_strip() {
+        let key = b"0123456789abcdef0123456789abcdef";
+        let mut raw = vec![b' ', b'\t', 0x0b];
+        raw.extend_from_slice(key);
+        raw.extend_from_slice(b"\r\n\x0c");
+        assert_eq!(normalized_helper_secret(&raw), key);
+        assert_eq!(
+            normalized_helper_secret(b"\x00 middle whitespace \x00"),
+            b"\x00 middle whitespace \x00"
+        );
+        assert!(normalized_helper_secret(b" \t\n\x0b\x0c\r ").is_empty());
+    }
 
     #[test]
     fn helper_hmac_vector_matches_python_reference() {

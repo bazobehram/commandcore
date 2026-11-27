@@ -80,6 +80,10 @@ class Settings:
     ).strip()
     oauth_issuer: str = os.getenv("COMMANDCORE_OAUTH_ISSUER", "").strip()
     oauth_audience: str = os.getenv("COMMANDCORE_OAUTH_AUDIENCE", "").strip()
+    # Provider request syntax only; JWT audience verification is unchanged.
+    panel_oauth_target_parameter: str = os.getenv(
+        "COMMANDCORE_PANEL_OAUTH_TARGET_PARAMETER", "audience"
+    ).strip()
     oauth_jwks_url: str = os.getenv("COMMANDCORE_OAUTH_JWKS_URL", "").strip()
     oauth_authorization_servers: tuple[str, ...] = tuple(
         x.strip()
@@ -169,6 +173,10 @@ class Settings:
     )
 
     def validate(self) -> None:
+        if self.panel_oauth_target_parameter not in {"audience", "resource"}:
+            raise RuntimeError(
+                "COMMANDCORE_PANEL_OAUTH_TARGET_PARAMETER must be audience or resource"
+            )
         if self.browser_uds_relay_enabled and not (
             self.browser_enabled
             and self.oauth_enabled

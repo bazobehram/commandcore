@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .activity_trace import safe_trace
+from .activity_visibility import safe_path
 from .auth import STANDARD_SCOPE, scope_allows
 from .models import Principal
 
@@ -97,7 +98,16 @@ def _enrich_request(
             "manager",
         ):
             value = args.get(key)
-            if isinstance(value, str) and _SAFE_LABEL.fullmatch(value):
+            # Apply the same restricted-path policy as Private, including
+            # colon-delimited image/tag components. Reject URL-shaped labels
+            # before normalization, including URLs containing userinfo.
+            if (
+                isinstance(value, str)
+                and _SAFE_LABEL.fullmatch(value)
+                and safe_path(value) not in (None, "[restricted path]")
+                and safe_path(value.replace(":", "/"))
+                not in (None, "[restricted path]")
+            ):
                 detail[key] = value
         if tool == "package.install" and isinstance(args.get("packages"), list):
             detail["package_count"] = min(1000, len(args["packages"]))
@@ -147,7 +157,12 @@ class LiveActivity:
         self, principal: Principal, host_session: str | None
     ) -> dict[str, Any]:
         tag = self.session_tag(host_session)
-        if not tag or principal.auth_kind != "oauth2" or not principal.issuer:
+        if not tag or not (
+            principal.auth_kind == "oauth2"
+            and principal.issuer
+            and principal.subject
+            and principal.client_id
+        ):
             return {"session_available": False}
         self._expire_viewers()
         ref = secrets.token_urlsafe(24)
@@ -162,7 +177,16 @@ class LiveActivity:
 
     def resolve_viewer(self, principal: Principal, ref: str) -> str | None:
         self._expire_viewers()
-        if not isinstance(ref, str) or len(ref) > 128:
+        if (
+            not (
+                principal.auth_kind == "oauth2"
+                and principal.issuer
+                and principal.subject
+                and principal.client_id
+            )
+            or not isinstance(ref, str)
+            or len(ref) > 128
+        ):
             return None
         row = self._viewers.get(ref)
         if not row or (row["issuer"], row["owner"], row["client"]) != (
@@ -266,6 +290,22 @@ class LiveActivity:
         device_filter: str | None = None,
         session_tag: str | None = None,
     ) -> dict[str, Any]:
+        if type(include_details) is not bool or type(panel_details) is not bool:
+            raise ValueError("Activity detail flags must be boolean")
+        if (
+            include_details
+            and not panel_details
+            and not (
+                principal.auth_kind == "oauth2"
+                and principal.issuer
+                and principal.subject
+                and principal.client_id
+                and scope_allows(principal.scopes, STANDARD_SCOPE)
+            )
+        ):
+            raise ValueError(
+                "Activity details require verified STANDARD OAuth identity"
+            )
         # The first-party dashboard may bridge OAuth clients only for the
         # SAME verified issuer/subject with STANDARD authority. MCP detailed
         # feeds retain their existing client boundary.

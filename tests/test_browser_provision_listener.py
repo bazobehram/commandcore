@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -43,7 +42,7 @@ def _make(subject):
 
 
 def test_full_local_listener_to_operator_adapter_with_fake_docker(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, listener_ready
 ):
     tmp_path.chmod(0o700)
     ledger = ProvisionNonceLedger(str(tmp_path / "ledger.sqlite3"))
@@ -84,10 +83,7 @@ def test_full_local_listener_to_operator_adapter_with_fake_docker(
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
-    for _ in range(100):
-        if sock.exists():
-            break
-        time.sleep(0.01)
+    assert listener_ready.wait(timeout=5), failures
     assert sock.exists(), failures
     token = _make("alpha")
     assert (
