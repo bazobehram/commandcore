@@ -17,6 +17,7 @@ on:
       - 'VERSION'
       - 'agent/rust/Cargo.toml'
       - 'agent/rust/Cargo.lock'
+      - 'agent/rust/src/**'
 
 permissions:
   contents: read
@@ -26,6 +27,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04-arm
     timeout-minutes: 45
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -79,6 +84,27 @@ jobs:
             --output dist/unsigned-native-agent-candidate \
             --source-sha "$GITHUB_SHA" \
             --architecture arm64
+      - name: Attest exact native binary and build metadata
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            dist/unsigned-native-agent-candidate/commandcore-agent-linux-arm64
+            dist/unsigned-native-agent-candidate/UNSIGNED_BUILD_METADATA.json
+          create-storage-record: false
+      - name: Verify native build provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for file in dist/unsigned-native-agent-candidate/commandcore-agent-linux-arm64 dist/unsigned-native-agent-candidate/UNSIGNED_BUILD_METADATA.json; do
+            gh attestation verify "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/unsigned-linux-arm64-candidate.yml" \
+              --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
+              --deny-self-hosted-runners
+          done
+          echo 'NATIVE_BUILD_PROVENANCE=VERIFIED; RELEASE_SIGNATURE=NOT_PERFORMED'
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: unsigned-linux-arm64-agent-review-candidate
