@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
+import httpx
 from commandcore_server.browser_gateway import (
     BrowserError,
     BrowserGateway,
@@ -91,6 +93,116 @@ class BrowserLiveFrameTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(BrowserError, "invalid expected"):
                 await self.send("browser.close", {"expected_session_id": invalid})
         self.assertIs(self.gateway.sessions[self.owner], self.entry)
+
+    async def test_stop_retires_exact_missing_session_without_reassigning_worker(self):
+        for status in (404, 410, 200):
+            with self.subTest(status=status):
+                self.gateway.sessions[self.owner] = self.entry
+                self.gateway._bound_owner = self.owner
+                response = httpx.Response(
+                    status,
+                    request=httpx.Request("POST", "http://steel:3000/release"),
+                    json={"status": "released"} if status == 200 else {},
+                )
+                with patch(
+                    "commandcore_server.browser_gateway.httpx.AsyncClient"
+                ) as client:
+                    post = client.return_value.__aenter__.return_value.post
+                    post.return_value = response
+                    result = await self.send(
+                        "browser.close", {"expected_session_id": self.entry.id}
+                    )
+                    self.assertEqual(result, {"closed": True})
+                    post.assert_awaited_once_with(
+                        "http://steel:3000/v1/sessions/" + self.entry.id + "/release"
+                    )
+                self.assertNotIn(self.owner, self.gateway.sessions)
+                self.assertEqual(self.gateway._bound_owner, self.owner)
+                self.assertEqual(await self.send("browser.close"), {"closed": False})
+
+    async def test_stop_preserves_session_when_release_not_confirmed(self):
+        for status, body in (
+            (403, {}),
+            (500, {}),
+            (200, {"status": "active"}),
+            (200, []),
+        ):
+            with self.subTest(status=status, body=body):
+                response = httpx.Response(
+                    status,
+                    request=httpx.Request("POST", "http://steel:3000/release"),
+                    json=body,
+                )
+                with patch(
+                    "commandcore_server.browser_gateway.httpx.AsyncClient"
+                ) as client:
+                    client.return_value.__aenter__.return_value.post.return_value = (
+                        response
+                    )
+                    with self.assertRaises(BrowserError):
+                        await self.send(
+                            "browser.close", {"expected_session_id": self.entry.id}
+                        )
+                self.assertIs(self.gateway.sessions[self.owner], self.entry)
+
+    async def test_queued_action_rejected_after_session_replacement(self):
+        with patch.object(
+            self.gateway, "_perform_action", new_callable=AsyncMock
+        ) as perform:
+            await self.entry.lock.acquire()
+            task = asyncio.create_task(self.send("browser.click", {"x": 10, "y": 10}))
+            try:
+                await asyncio.sleep(0)
+                self.assertFalse(task.done())
+                self.gateway.sessions[self.owner] = OwnedSession("b" * 36)
+            finally:
+                self.entry.lock.release()
+            with self.assertRaisesRegex(BrowserError, "session changed"):
+                await task
+            perform.assert_not_awaited()
+
+    async def test_queued_handoff_rejected_after_session_replacement(self):
+        await self.entry.lock.acquire()
+        task = asyncio.create_task(self.send("browser.handoff"))
+        replacement = OwnedSession("b" * 36)
+        try:
+            await asyncio.sleep(0)
+            self.assertFalse(task.done())
+            self.gateway.sessions[self.owner] = replacement
+        finally:
+            self.entry.lock.release()
+        with self.assertRaisesRegex(BrowserError, "session changed"):
+            await task
+        self.assertFalse(replacement.paused_for_human)
+
+    async def test_invalidation_during_snapshot_withholds_frame(self):
+        async def snapshot(entry):
+            self.gateway.sessions.pop(self.owner)
+            return {"screenshot_base64": self.fake_png}
+
+        with (
+            patch.object(self.gateway, "_snapshot", side_effect=snapshot),
+            self.assertRaisesRegex(BrowserError, "session changed"),
+        ):
+            await self.gateway.viewer_frame(
+                self.owner[1], self.owner[0], self.owner[2], {}
+            )
+        self.assertIsNone(self.entry.frame_image)
+
+    async def test_invalidation_during_release_cannot_delete_replacement(self):
+        replacement = OwnedSession("b" * 36)
+
+        async def post(url):
+            self.gateway.sessions[self.owner] = replacement
+            return httpx.Response(
+                200, request=httpx.Request("POST", url), json={"status": "released"}
+            )
+
+        with patch("commandcore_server.browser_gateway.httpx.AsyncClient") as client:
+            client.return_value.__aenter__.return_value.post.side_effect = post
+            with self.assertRaisesRegex(BrowserError, "session changed"):
+                await self.send("browser.close", {"expected_session_id": self.entry.id})
+        self.assertIs(self.gateway.sessions[self.owner], replacement)
 
     async def test_expired_manual_handoff_requires_new_link_not_ai_resume(self):
         self.publish()
