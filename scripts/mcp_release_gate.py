@@ -32,6 +32,20 @@ def load_definitions():
             and node.target.id == "TOOL_DEFINITIONS"
         ):
             approved.append(node)
+        # Several ChatGPT-facing Activity tools are declared in later
+        # TOOL_DEFINITIONS.extend([...]) blocks. Include only these explicit
+        # registry additions; otherwise schema changes silently evade the gate.
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "TOOL_DEFINITIONS"
+            and node.value.func.attr == "extend"
+            and len(node.value.args) == 1
+            and isinstance(node.value.args[0], (ast.List, ast.Tuple))
+        ):
+            approved.append(node)
     namespace = {"Any": object}
     exec(
         compile(ast.Module(body=approved, type_ignores=[]), str(source), "exec"),
@@ -48,6 +62,12 @@ def load_definitions():
         )
     )
     core_names = ast.literal_eval(core_names_node.value)
+    by_name = {tool["name"]: tool for tool in definitions}
+    missing = sorted(set(core_names) - set(by_name))
+    if missing:
+        raise ValueError(
+            "Core MCP tools missing from source registry: " + ", ".join(missing)
+        )
     return [tool for tool in definitions if tool["name"] in core_names]
 
 
