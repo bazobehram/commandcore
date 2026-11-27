@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import socket
 import threading
-import time
 
 import pytest
+from commandcore_server import browser_provision_ipc
 from commandcore_server.browser_provision_intent import (
     ProvisionNonceLedger,
     issue_provision_intent,
@@ -37,7 +37,32 @@ def _signed(owner: str = "first") -> str:
     )
 
 
-def _socket_server(tmp_path, consumer, *, peer_uid=None, count=1):
+@pytest.fixture
+def listener_ready(monkeypatch):
+    """Signal actual listen completion without making a probe connection.
+
+    bind() publishes the Unix socket path before listen(), so path existence
+    alone can race. Patch only this module's socket reference, not the global
+    socket class; no production behavior or peer validation is changed.
+    """
+    ready = threading.Event()
+
+    class ListeningSocket(socket.socket):
+        def listen(self, backlog):
+            super().listen(backlog)
+            ready.set()
+
+    class SocketModule:
+        def __getattr__(self, name):
+            return getattr(socket, name)
+
+        socket = ListeningSocket
+
+    monkeypatch.setattr(browser_provision_ipc, "socket", SocketModule())
+    return ready
+
+
+def _socket_server(tmp_path, consumer, listener_ready, *, peer_uid=None, count=1):
     tmp_path.chmod(0o700)
     path = tmp_path / "ipc.sock"
     failures = []
@@ -55,10 +80,7 @@ def _socket_server(tmp_path, consumer, *, peer_uid=None, count=1):
 
     task = threading.Thread(target=run, daemon=True)
     task.start()
-    for _ in range(100):
-        if path.exists():
-            break
-        time.sleep(0.01)
+    assert listener_ready.wait(timeout=5), failures
     assert path.exists(), failures
     return path, task, failures
 
@@ -69,7 +91,9 @@ def _finish(task, failures):
     assert not failures
 
 
-def test_real_unix_socket_accepts_verified_intents_then_refuses_replays(tmp_path):
+def test_real_unix_socket_accepts_verified_intents_then_refuses_replays(
+    tmp_path, listener_ready
+):
     tmp_path.chmod(0o700)
     ledger = ProvisionNonceLedger(str(tmp_path / "nonces.sqlite3"))
     owners = []
@@ -79,7 +103,7 @@ def test_real_unix_socket_accepts_verified_intents_then_refuses_replays(tmp_path
             verify_and_consume_provision_intent(token, KEY, ISSUER, ledger).subject
         )
 
-    path, thread, failures = _socket_server(tmp_path, consume, count=3)
+    path, thread, failures = _socket_server(tmp_path, consume, listener_ready, count=3)
     token = _signed()
     assert (
         send_provision_intent(token, str(path), operator_uid=os.getuid()) == "accepted"
@@ -96,9 +120,9 @@ def test_real_unix_socket_accepts_verified_intents_then_refuses_replays(tmp_path
     assert not path.exists()
 
 
-def test_wrong_server_uid_is_denied_before_sending_identity(tmp_path):
+def test_wrong_server_uid_is_denied_before_sending_identity(tmp_path, listener_ready):
     calls = []
-    path, thread, failures = _socket_server(tmp_path, calls.append)
+    path, thread, failures = _socket_server(tmp_path, calls.append, listener_ready)
     with pytest.raises(
         BrowserProvisionTransportDenied, match="untrusted operator peer"
     ):
@@ -107,10 +131,10 @@ def test_wrong_server_uid_is_denied_before_sending_identity(tmp_path):
     assert calls == []
 
 
-def test_wrong_client_uid_is_denied_before_calling_operator(tmp_path):
+def test_wrong_client_uid_is_denied_before_calling_operator(tmp_path, listener_ready):
     calls = []
     path, thread, failures = _socket_server(
-        tmp_path, calls.append, peer_uid=os.getuid() + 1
+        tmp_path, calls.append, listener_ready, peer_uid=os.getuid() + 1
     )
     with pytest.raises(BrowserProvisionTransportDenied):
         send_provision_intent(_signed(), str(path), operator_uid=os.getuid())
@@ -118,9 +142,9 @@ def test_wrong_client_uid_is_denied_before_calling_operator(tmp_path):
     assert calls == []
 
 
-def test_reject_oversize_bad_socket_and_symbolic_link(tmp_path):
+def test_reject_oversize_bad_socket_and_symbolic_link(tmp_path, listener_ready):
     path, thread, failures = _socket_server(
-        tmp_path, lambda _: pytest.fail("must not consume"), count=1
+        tmp_path, lambda _: pytest.fail("must not consume"), listener_ready, count=1
     )
     with pytest.raises(BrowserProvisionTransportDenied):
         send_provision_intent("a" * 5000, str(path), operator_uid=os.getuid())
@@ -148,9 +172,9 @@ def test_world_writable_socket_directory_is_rejected(tmp_path):
     assert not (tmp_path / "ipc.sock").exists()
 
 
-def test_wrong_operator_primary_group_is_denied(tmp_path):
+def test_wrong_operator_primary_group_is_denied(tmp_path, listener_ready):
     calls = []
-    path, thread, failures = _socket_server(tmp_path, calls.append)
+    path, thread, failures = _socket_server(tmp_path, calls.append, listener_ready)
     with pytest.raises(
         BrowserProvisionTransportDenied, match="untrusted operator peer"
     ):
@@ -161,7 +185,7 @@ def test_wrong_operator_primary_group_is_denied(tmp_path):
     assert calls == []
 
 
-def test_wrong_api_primary_group_is_denied_before_operator(tmp_path):
+def test_wrong_api_primary_group_is_denied_before_operator(tmp_path, listener_ready):
     calls = []
     tmp_path.chmod(0o700)
     path = tmp_path / "ipc.sock"
@@ -182,10 +206,7 @@ def test_wrong_api_primary_group_is_denied_before_operator(tmp_path):
 
     thread = threading.Thread(target=serve, daemon=True)
     thread.start()
-    for _ in range(100):
-        if path.exists():
-            break
-        time.sleep(0.01)
+    assert listener_ready.wait(timeout=5), failures
     assert path.exists(), failures
     with pytest.raises(BrowserProvisionTransportDenied):
         send_provision_intent(

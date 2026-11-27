@@ -57,6 +57,11 @@ async def test_brand_icon_discovery_preserves_older_protocols(protocol):
         else result["serverInfo"]
     )
     assert info["name"] == "commandcore"
+    assert (
+        "only for an explicitly requested aggregate task panel"
+        in result["instructions"]
+    )
+    assert "Call shell.exec directly" in result["instructions"]
     if protocol == "2025-06-18":
         assert "icons" not in info
     else:
@@ -122,6 +127,12 @@ def test_aliases_advertise_distinct_tool_titles():
         assert tool["annotations"]["title"] == tool["title"]
         assert tool["_meta"]["openai/toolInvocation/invoking"] == f"{tool['title']}…"
     watch = by_name["commandcore.watch"]
+    assert "Open only when explicitly requested" in watch["description"]
+    assert (
+        "Do not open an aggregate panel automatically"
+        in by_name["shell.exec"]["description"]
+    )
+    assert "call shell.exec directly" in by_name["shell.exec"]["description"]
     assert (
         by_name["commandcore.workspace"]["securitySchemes"] == watch["securitySchemes"]
     )
