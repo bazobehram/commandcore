@@ -268,3 +268,22 @@ python scripts/prepare_linux_release_review.py \
 Neither option signs or publishes anything. After independent signing, the
 corresponding trusted-key verifier, artifact checks, lifecycle acceptance and
 operator approval must pass. Never replace signed URLs after signing.
+
+### Independent Standard-only onboarding
+
+The shared server exposes `/install/linux-standard-ready` only when the local
+feed has a reviewed `linux-standard-onboarding.json`, a pinned `linux.sh`, and
+an Ed25519-signed current native manifest with both x86_64 and ARM64 artifacts.
+The configuration has exactly `schema_version` (1), `server_url` (the configured
+HTTPS origin of this deployment), `agent_public_key_b64` (independently trusted
+public verification key), and `installer_sha256` (reviewed installer bytes).
+The artifact URLs must match this same origin, version and filename; no private
+origin, unpinned installer, missing artifact or unsigned manifest is accepted.
+The runtime gate verifies the signature and checks artifact presence and size;
+operators must verify artifact hashes and acceptance before publication, and
+the installer verifies the downloaded artifact hash again before activation.
+The Standard wrapper explicitly disables Full Control helper preparation.
+It never reads a private signing key or silently downgrades a Full Control
+installation. Full Control keeps its separately published helper prerequisites.
+Use different local feed configuration files for the two independent origins;
+never copy private state or rewrite URLs inside a signed manifest.
