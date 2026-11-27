@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<title>Live Browser · CommandCore</title>
+<link rel="icon" href="/commandcore-mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/browser-live.css">
+<script defer src="/browser-live.js"></script>
+</head>
+<body>
+<main class="shell">
+<header><div class="brand"><img src="/commandcore-mark.svg" width="39" height="39" alt=""><div><b>CommandCore</b><span>Live browser · Direct view</span></div></div><span class="pill">OWNER-BOUND SESSION</span></header>
+<section class="heading"><div><p class="eyebrow">REMOTE CHROMIUM</p><h1>Your Browser<span class="dot">.</span></h1><p class="sub">One direct link to your active CommandCore browser. No Workspace navigation required.</p></div><a class="secondary" href="/workspace/">Workspace</a></section>
+<section class="toolbar">
+  <label for="session">Session</label>
+  <select id="session" aria-label="Authorized Browser session" disabled><option>Loading sessions…</option></select>
+  <button id="refresh" class="secondary" type="button">Refresh</button>
+  <button id="take" type="button" disabled>Take private control</button>
+</section>
+<div id="status" role="status" aria-live="polite">Connecting to your authorized Browser…</div>
+<div class="screen"><div class="chrome"><span class="lights" aria-hidden="true">● ● ●</span><strong>Remote Chromium</strong><span id="address">Connecting…</span></div>
+<div class="viewport"><div id="empty">Loading the live browser frame…</div><img id="frame" alt="Read-only screenshot of your remote browser session" hidden></div></div>
+<div class="foot"><span id="updated">Waiting for a frame</span><span>AI remains in control until you explicitly select private control.</span></div>
+<p id="auth" hidden><a class="button" href="/auth/login?return_to=browser_live">Sign in to CommandCore</a></p>
+<p class="security">To click, type, sign in, or approve actions privately, select <b>Take private control</b>. This starts an authenticated, time-limited session and pauses AI control. This viewing link contains no session token.</p>
+</main>
+</body>
+</html>
