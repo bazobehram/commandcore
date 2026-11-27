@@ -57,6 +57,7 @@ jobs:
         if: matrix.python-version == '3.13'
         run: |
           node --check apps/web/panel.js
+          node tests/test_panel_device_confirmation.cjs
           node --check apps/web/legacy-admin.js
           node scripts/legacy_admin_smoke.mjs
       - name: Agent-initiated enrollment and reconnect
