@@ -114,6 +114,72 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
+  it('does not replace a fresh operational presence with management presence', async () => {
+    const routes: Record<string, Reply> = { ...loggedInApi };
+    stubApi(routes);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    routes['GET /api/devices'] = { body: { devices: [
+      { id: 'node', display_name: 'Node', connected: true, status: 'online', last_seen: 200 },
+    ] } };
+    routes['GET /api/managed-devices'] = { body: { devices: [
+      { id: 'node', display_name: 'Node', connected: false, status: 'offline', last_seen: 100, grants: [] },
+    ] } };
+    await component.refresh(true);
+    expect(component.deviceOnline(component.devices()[0])).toBe(true);
+    expect(component.devices()[0].last_seen).toBe(200);
+    expect(component.devices()[0].managed_by_me).toBe(true);
+    fixture.destroy();
+  });
+
+  it('ignores a delayed full refresh after a newer fast presence refresh', async () => {
+    const routes: Record<string, Reply> = { ...loggedInApi };
+    const { fetchMock } = stubApi(routes);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    let finishManagement!: (response: Response) => void;
+    const delayed = new Promise<Response>(resolve => { finishManagement = resolve; });
+    let deviceCalls = 0;
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/managed-devices') return delayed;
+      if (url === '/api/devices') {
+        const online = ++deviceCalls > 1;
+        return apiReply({ body: { devices: [{ id: 'node', display_name: 'Node', connected: online, status: online ? 'online' : 'offline' }] } });
+      }
+      return apiReply(routes[(options?.method ?? 'GET') + ' ' + url] ?? { body: {} });
+    });
+    const slow = component.refresh(true);
+    await component.refreshDeviceStates();
+    expect(component.deviceOnline(component.devices()[0])).toBe(true);
+    finishManagement(apiReply({ body: { devices: [{ id: 'node', display_name: 'Node', connected: false }] } }));
+    await slow;
+    expect(component.deviceOnline(component.devices()[0])).toBe(true);
+    fixture.destroy();
+  });
+
+  it('ignores a delayed fast refresh after a newer full refresh', async () => {
+    const routes: Record<string, Reply> = { ...loggedInApi };
+    const { fetchMock } = stubApi(routes);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    let finishFast!: (response: Response) => void;
+    const delayed = new Promise<Response>(resolve => { finishFast = resolve; });
+    let deviceCalls = 0;
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/devices') {
+        if (++deviceCalls === 1) return delayed;
+        return apiReply({ body: { devices: [{ id: 'node', display_name: 'Node', connected: false, status: 'offline' }] } });
+      }
+      return apiReply(routes[(options?.method ?? 'GET') + ' ' + url] ?? { body: {} });
+    });
+    const fast = component.refreshDeviceStates();
+    await component.refresh(true);
+    finishFast(apiReply({ body: { devices: [{ id: 'node', display_name: 'Node', connected: true, status: 'online' }] } }));
+    await fast;
+    expect(component.deviceOnline(component.devices()[0])).toBe(false);
+    fixture.destroy();
+  });
+
   it('keeps the session intact when the sign-out request fails', async () => {
     const routes: Record<string, Reply> = {
       ...loggedInApi,

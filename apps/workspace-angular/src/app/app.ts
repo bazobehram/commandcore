@@ -43,6 +43,7 @@ export class App implements OnInit, OnDestroy {
  capabilities=['filesystem','shell','process','git','docker','services','packages','system_power','browser','desktop','screen','keyboard','mouse','clipboard','agent_update','privileged_helper'];
  private staleInspect=0; private staleActivity=0;
  private timer:any; private metricsTimer:any; private browserTimer:any; private fastTimer:any; private activityTimer:any; private browserSessionsTimer:any;
+ private deviceRefreshStarted=0; private deviceRefreshApplied=0;
  private fastBusy=false; private jobsBusy=false; private jobsTimer:any; private destroyed=false;
  private modalReturnFocus:HTMLElement|null=null;
  private readonly sessionEpoch=new SessionEpoch();
@@ -233,16 +234,17 @@ export class App implements OnInit, OnDestroy {
    }catch(e){this.message('Sign out failed: '+this.err(e));this.logoutBusy.set(false);}
  }
  async refreshDeviceStates(){
-  if(this.fastBusy||!this.loggedIn())return;const sessionVersion=this.sessionEpoch.snapshot();this.fastBusy=true;this.syncing.set(true);
+  if(this.fastBusy||!this.loggedIn())return;const sessionVersion=this.sessionEpoch.snapshot();const generation=++this.deviceRefreshStarted;this.fastBusy=true;this.syncing.set(true);
   try{
    const result=await request<{devices:Device[]}>('/api/devices');
-   if(!this.sessionEpoch.isCurrent(sessionVersion))return;
+   if(!this.sessionEpoch.isCurrent(sessionVersion)||generation<this.deviceRefreshApplied)return;
+   this.deviceRefreshApplied=generation;
    const previous=this.devices();const retained=new Map(previous.map(d=>[d.id,d]));
    const updated:Device[]=(result.devices||[]).filter(d=>!d.revoked_at).map(d=>({...retained.get(d.id),...d,managed_by_me:retained.get(d.id)?.managed_by_me||d.managed_by_me,grants:retained.get(d.id)?.grants||d.grants}));
    for(const old of previous){if(old.managed_by_me&&!old.revoked_at&&!updated.some(d=>d.id===old.id))updated.push(old);}
    const prior=this.selectedDevice()?.id;this.devices.set(updated);if(prior){const index=updated.findIndex(d=>d.id===prior);if(index>=0)this.selected.set(index);else this.selected.set(0);}
    this.syncHealthy.set(true);this.lastSynced.set(Date.now());
-  }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)){this.syncHealthy.set(false);if(isUnauthorized(e))this.endSession('Session expired. Sign in again.');}}
+  }catch(e){if(this.sessionEpoch.isCurrent(sessionVersion)){if(generation>=this.deviceRefreshApplied)this.syncHealthy.set(false);if(isUnauthorized(e))this.endSession('Session expired. Sign in again.');}}
   finally{this.fastBusy=false;this.syncing.set(false);}
  }
  async refreshActiveJobs(){
@@ -267,17 +269,26 @@ export class App implements OnInit, OnDestroy {
  async refresh(quiet=false){
   const sessionVersion=this.sessionEpoch.snapshot();
   if(!this.sessionEpoch.isCurrent(sessionVersion))return;
+  const generation=++this.deviceRefreshStarted;
   try{
    const [d,m,p]=await Promise.all([
     request<{devices:Device[]}>('/api/devices'),
-    request<{devices:Device[]}>('/api/managed-devices').then(v=>{this.managerError.set(false);return v;}).catch(()=>{this.managerError.set(true);return {devices:[]};}),
+    request<{devices:Device[]}>('/api/managed-devices').then(v=>({devices:v.devices,failed:false})).catch(()=>({devices:[],failed:true})),
     request<{enrollments:Pending[]}>('/api/enrollment/pending').catch(()=>({enrollments:[]}))
    ]);
    const merged=new Map<string,Device>();
    for(const device of d.devices||[])merged.set(device.id,device);
-   for(const item of m.devices||[])merged.set(item.id,{...(merged.get(item.id)||{}),...item,managed_by_me:true});
+   for(const item of m.devices||[]){
+    const accessible=merged.get(item.id);
+    // The operational device list is authoritative for presence. Management
+    // metadata must not overwrite its connection snapshot.
+    merged.set(item.id,{...accessible,...item,managed_by_me:true,...(accessible?{
+      connected:accessible.connected,status:accessible.status,last_seen:accessible.last_seen
+    }:{})});
+   }
    const list=Array.from(merged.values()).filter(x=>!x.revoked_at);
-   if(!this.sessionEpoch.isCurrent(sessionVersion))return;
+   if(!this.sessionEpoch.isCurrent(sessionVersion)||generation<this.deviceRefreshApplied)return;
+   this.deviceRefreshApplied=generation;this.managerError.set(m.failed);
    const prior=this.selectedDevice()?.id;
    this.devices.set(list);this.pending.set(p.enrollments||[]);
    if(prior){const idx=list.findIndex(x=>x.id===prior);this.selected.set(idx>=0?idx:0);}
