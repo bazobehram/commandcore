@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .activity_trace import safe_trace
+from .activity_visibility import safe_path
 from .auth import STANDARD_SCOPE, scope_allows
 from .models import Principal
 
@@ -97,7 +98,16 @@ def _enrich_request(
             "manager",
         ):
             value = args.get(key)
-            if isinstance(value, str) and _SAFE_LABEL.fullmatch(value):
+            # Apply the same restricted-path policy as Private, including
+            # colon-delimited image/tag components. Reject URL-shaped labels
+            # before normalization, including URLs containing userinfo.
+            if (
+                isinstance(value, str)
+                and _SAFE_LABEL.fullmatch(value)
+                and safe_path(value) not in (None, "[restricted path]")
+                and safe_path(value.replace(":", "/"))
+                not in (None, "[restricted path]")
+            ):
                 detail[key] = value
         if tool == "package.install" and isinstance(args.get("packages"), list):
             detail["package_count"] = min(1000, len(args["packages"]))
