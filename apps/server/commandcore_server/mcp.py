@@ -8,18 +8,6 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .mcp_ui_diagnostics import record_ui_resource_request
-from .metrics import Metrics
-from .models import Principal
-from .tools import (
-    DEVICE_TOOLS,
-    TOOL_DEFINITIONS,
-    ToolError,
-    ToolService,
-    operation_ui_context,
-)
-from .web_assets import web_asset
-from .shell_receipt import SHELL_UI_URI, build_shell_card
 from .mcp_protocol import (
     LEGACY_PROTOCOLS,
     MODERN_PROTOCOL,
@@ -32,6 +20,18 @@ from .mcp_protocol import (
     _with_server_info,
 )
 from .mcp_task_ledger import UITaskLedger
+from .mcp_ui_diagnostics import record_ui_resource_request
+from .metrics import Metrics
+from .models import Principal
+from .shell_receipt import SHELL_UI_URI, build_shell_card
+from .tools import (
+    DEVICE_TOOLS,
+    TOOL_DEFINITIONS,
+    ToolError,
+    ToolService,
+    operation_ui_context,
+)
+from .web_assets import web_asset
 
 # v2 resource identities are deployed successfully in the canonical OAuth
 # CommandCore plugin. Always retain the original v1 URI for old conversations,
@@ -485,11 +485,13 @@ class MCPHandler:
                 dict(
                     original_watch,
                     name="commandcore.workspace",
+                    title="Open CommandCore Workspace",
                     description="Open the full Activity and Browser workspace when the user explicitly requests it.",
                 ),
                 dict(
                     original_watch,
                     name="commandcore.viewer",
+                    title="Refresh CommandCore Viewer",
                     description="Renew this widget's verified conversation viewer; no new task or UI is opened.",
                     _meta={
                         "ui": {"visibility": ["app"]},
@@ -525,17 +527,18 @@ class MCPHandler:
         self.tasks = tools._ui_tasks
         self.tasks.bind_activity(getattr(tools, "live_activity", None))
         watch_first = (
-            "Before a new user device/Browser task, call commandcore.watch ONCE to show one compact live task, then run the ordinary tools. "
-            "Reuse that task for all steps, including Browser actions; do not call watch between steps or repeatedly within one task. "
-            "Ordinary operations return data and update that task without creating a new card. "
-            "After the last call returns, call commandcore.finish once with its task_id. Never retry a timed-out write automatically."
+            "Use commandcore.watch only when the user explicitly requests the legacy aggregate task panel. "
+            "For Browser requests, call browser.open or browser.search, then browser.watch when a live view is requested. "
+            "For shell requests, call shell.exec directly; each call returns its own terminal result and widget. "
+            "Do not open an aggregate panel automatically. If one is explicitly requested, reuse its task_id and call "
+            "commandcore.finish once after the last action returns. Never retry a timed-out write automatically."
         )
         for source in raw_definitions:
             entry = json.loads(json.dumps(source))
             tool_name = entry["name"]
             if tool_name == "commandcore.watch":
                 entry["description"] = (
-                    "Start one compact live task before a new user device or Browser task. Returns task_id; reuse it through all steps and finish once at the end. The card expands to Activity or Browser. "
+                    "Legacy aggregate live task panel. Open only when explicitly requested. Returns task_id; reuse it through the task and finish once at the end. "
                     + watch_first
                 )
             elif tool_name in OPERATION_TOOLS:
@@ -555,6 +558,15 @@ class MCPHandler:
                 "visibility", ["model", "app"]
             )
             entry["_meta"]["openai/widgetAccessible"] = True
+            # Aliases must not inherit another tool's display labels.
+            annotations = entry.get("annotations", {})
+            title = entry.get("title")
+            if title and annotations.get("title") not in (None, title):
+                annotations["title"] = title
+                entry["_meta"]["openai/toolInvocation/invoking"] = f"{title}…"[:64]
+                entry["_meta"]["openai/toolInvocation/invoked"] = f"{title}: complete"[
+                    :64
+                ]
             if tool_name == "activity.feed":
                 entry["inputSchema"]["properties"]["task_id"] = {
                     "type": "string",
@@ -702,9 +714,9 @@ class MCPHandler:
                 "instructions": (
                     "CommandCore controls enrolled computers. Call devices.list, then devices.select. "
                     "Reuse the returned selection_id in subsequent device tools. Explicit device_id overrides selection_id. "
-                    "Call commandcore.watch once at the start of a user device/Browser task. "
-                    "Reuse its single live task card for every step; ordinary tools return data. "
-                    "Call commandcore.finish once after the last action returns. "
+                    "Use commandcore.watch only for an explicitly requested aggregate task panel. "
+                    "Call shell.exec directly for individual operations and browser.watch for a requested Browser view. "
+                    "If an aggregate task is opened, reuse its task_id and finish once after the last action returns. "
                     "Open commandcore.workspace only for an explicitly requested full workspace. "
                     "Use browser.search for public searches, browser.links then browser.follow to open visible results without coordinates, and browser.back/browser.forward to revisit public pages. Never guess a result URL or replay an uncertain submission. Use browser.handoff for private "
                     "sign-in and approvals. Tool success is not visual UI acceptance."
@@ -742,9 +754,10 @@ class MCPHandler:
                     },
                     "instructions": (
                         "Use devices.select and pass selection_id to device tools. "
-                        "Call commandcore.watch once before a new user device/Browser task. "
-                        "Reuse its live card for all steps and call commandcore.finish once at the end. "
-                        "Ordinary tools return data. Use commandcore.workspace for an explicitly requested full workspace. "
+                        "Use commandcore.watch only for an explicitly requested aggregate task panel. "
+                        "Call shell.exec directly for individual operations and browser.watch for a requested Browser view. "
+                        "If an aggregate task is opened, reuse its task_id and finish once at the end. "
+                        "Use commandcore.workspace for an explicitly requested full workspace. "
                         "Request browser.handoff for private approval."
                     ),
                 },

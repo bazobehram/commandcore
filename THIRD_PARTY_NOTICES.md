@@ -26,3 +26,13 @@ artifact provenance/signing evidence.
 
 This file is an engineering inventory notice, not a substitute for legal review
 of a specific distribution.
+
+## Public Browser Chromium seccomp policy
+
+`scripts/vendor/chromium-sandbox-seccomp-probe.json` uses Docker/Moby seccomp
+policy structure and syscall rules, modified for CommandCore's isolated
+Chromium worker. Moby's upstream profile is available at
+https://github.com/moby/profiles/blob/main/seccomp/default.json and is licensed
+under Apache License 2.0; see `scripts/vendor/LICENSE.moby-profiles`.
+The historical origin of every local modification remains under review before
+binary/container redistribution; see `scripts/vendor/README.md`.

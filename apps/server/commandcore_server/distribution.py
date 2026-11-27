@@ -1,17 +1,161 @@
 """Public, read-only routes for explicitly published release files."""
 
 import base64
+import hashlib
 import json
 import re
 import shlex
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 
 
-def install_distribution_routes(app: FastAPI, directory: str) -> None:
+def _read_published(root: Path, name: str, limit: int) -> bytes:
+    path = root / name
+    if path.resolve() != path or not path.is_file():
+        raise ValueError("unpublished file")
+    with path.open("rb") as handle:
+        data = handle.read(limit + 1)
+    if not 0 < len(data) <= limit:
+        raise ValueError("invalid published file size")
+    return data
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate release field")
+        result[key] = value
+    return result
+
+
+def _standard_linux_script(root: Path, public_base_url: str) -> str:
+    """Only generate a Standard wrapper for an explicitly pinned signed local feed.
+
+    The operator verifies artifact provenance and lifecycle before publication.
+    At runtime verify the signed manifest, pinned script and artifact presence;
+    the installer verifies downloaded artifact bytes again before activation.
+    """
+    config = json.loads(
+        _read_published(root, "linux-standard-onboarding.json", 8192),
+        object_pairs_hook=_unique_object,
+    )
+    if (
+        not isinstance(config, dict)
+        or set(config)
+        != {"schema_version", "server_url", "agent_public_key_b64", "installer_sha256"}
+        or config["schema_version"] != 1
+    ):
+        raise ValueError("invalid onboarding config")
+    origin = config["server_url"]
+    if not isinstance(origin, str):
+        raise TypeError("invalid origin")
+    parsed = urlsplit(origin)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.port not in (None, 443)
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+        or any(ord(c) <= 32 or ord(c) == 127 for c in origin)
+        or origin.rstrip("/") != public_base_url.rstrip("/")
+    ):
+        raise ValueError("release origin mismatch")
+    origin = origin.rstrip("/")
+    public = base64.b64decode(config["agent_public_key_b64"], validate=True)
+    if len(public) != 32:
+        raise ValueError("invalid public key")
+    script = _read_published(root, "linux.sh", 65536)
+    if hashlib.sha256(script).hexdigest() != config["installer_sha256"]:
+        raise ValueError("installer pin mismatch")
+    body = script.decode("utf-8")
+    if (
+        not body.startswith("#!/bin/sh\n")
+        or "--no-full-control-preparation" not in body
+    ):
+        raise ValueError("unsupported installer")
+    manifest = json.loads(
+        _read_published(root, "manifest.json", 1048576),
+        object_pairs_hook=_unique_object,
+    )
+    if not isinstance(manifest, dict):
+        raise TypeError("invalid manifest")
+    version = manifest.get("version")
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("product") != "commandcore-agent"
+        or not isinstance(version, str)
+        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?", version)
+        or manifest.get("signing_key_id") != hashlib.sha256(public).hexdigest()[:16]
+    ):
+        raise ValueError("invalid manifest identity")
+    signature = base64.b64decode(manifest["signature"], validate=True)
+    Ed25519PublicKey.from_public_bytes(public).verify(
+        signature,
+        json.dumps(
+            {k: v for k, v in manifest.items() if k != "signature"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode(),
+    )
+    names = {
+        "x86_64": "commandcore-agent-linux-x86_64",
+        "arm64": "commandcore-agent-linux-arm64",
+    }
+    artifacts = manifest["artifacts"]
+    if not isinstance(artifacts, list) or len(artifacts) != 2:
+        raise ValueError("both native Linux architectures required")
+    seen = set()
+    for item in artifacts:
+        if not isinstance(item, dict) or not isinstance(item.get("architecture"), str):
+            raise TypeError("invalid artifact")
+        arch = item["architecture"]
+        if arch in seen or arch not in names:
+            raise ValueError("duplicate or unsupported architecture")
+        seen.add(arch)
+        name = names[arch]
+        relative = f"{version}/{name}"
+        file = root / relative
+        size = item["size"]
+        if (
+            item.get("filename") != name
+            or item.get("platform") != "linux"
+            or item.get("kind") != "executable"
+            or item.get("implementation", "rust") != "rust"
+            or item.get("url") != f"{origin}/releases/agent/{relative}"
+            or not isinstance(item.get("sha256"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", item["sha256"])
+            or type(size) is not int
+            or not 0 < size <= 134217728
+            or file.resolve() != file
+            or not file.is_file()
+            or file.stat().st_size != size
+        ):
+            raise ValueError("invalid or missing artifact")
+    return (
+        "#!/bin/sh\n# Reviewed Standard-only installation pins.\n"
+        + "export COMMANDCORE_RELEASE_PUBLIC_KEY_B64="
+        + shlex.quote(config["agent_public_key_b64"])
+        + "\n"
+        + "set -- --server "
+        + shlex.quote(origin)
+        + " --no-full-control-preparation\n"
+        + body
+    )
+
+
+def install_distribution_routes(
+    app: FastAPI, directory: str, *, public_base_url: str = ""
+) -> None:
     root = Path(directory).absolute() if directory else None
 
     def published(relative: str, media_type: str, immutable: bool = False):
@@ -36,6 +180,31 @@ def install_distribution_routes(app: FastAPI, directory: str) -> None:
     @app.head("/install/linux", include_in_schema=False)
     def linux_installer():
         return published("linux.sh", "text/x-shellscript")
+
+    @app.api_route(
+        "/install/linux-standard-ready",
+        methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
+    def linux_standard_ready():
+        try:
+            if root is None:
+                raise ValueError("unpublished")
+            content = _standard_linux_script(root, public_base_url)
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            UnicodeError,
+            InvalidSignature,
+        ):
+            raise HTTPException(503, "Signed Standard installer is not ready") from None
+        return Response(
+            content=content,
+            media_type="text/x-shellscript",
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+        )
 
     def one_command_linux_script() -> str:
         # The published feed operator supplies *public*, out-of-band-reviewed

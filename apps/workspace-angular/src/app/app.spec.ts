@@ -269,6 +269,32 @@ describe('Workspace component: authenticated session lifecycle', () => {
     fixture.destroy();
   });
 
+  it('only enables independently ready Standard or Full Control installers', async () => {
+    const routes: Record<string, Reply> = {
+      ...loggedInApi,
+      'HEAD /install/linux-ready': { status: 503 },
+      'HEAD /install/linux-standard-ready': { status: 200 },
+    };
+    stubApi(routes);
+    const fixture = await mountWorkspace();
+    const component = fixture.componentInstance;
+    component.openAdd('linux');
+    await vi.waitFor(() => expect(component.installChecked()).toBe(true));
+    fixture.detectChanges();
+    const host: HTMLElement = fixture.nativeElement;
+    const buttons = host.querySelectorAll<HTMLButtonElement>('.command-copy button');
+    expect(buttons[0].disabled).toBe(true);
+    expect(buttons[1].disabled).toBe(false);
+    expect(component.cmd('standard')).toContain('/install/linux-standard-ready');
+    routes['HEAD /install/linux-standard-ready'] = { status: 503 };
+    await component.checkInstall();
+    fixture.detectChanges();
+    expect(buttons[0].disabled).toBe(true);
+    expect(buttons[1].disabled).toBe(true);
+    expect(host.querySelector('.platform-picker small')?.textContent).toContain('Not published');
+    fixture.destroy();
+  });
+
   it('moves focus into Add Device and returns to the opener after Escape', async () => {
     stubApi(loggedInApi);
     const fixture = await mountWorkspace();

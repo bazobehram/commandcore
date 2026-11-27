@@ -26,10 +26,12 @@ from .agent_gateway import AgentManager
 from .auth import ADMIN_SCOPE, ALL_SCOPES, OAuthSettings, OAuthVerifier, scope_allows
 from .browser_console import install_browser_console
 from .browser_gateway import BROWSER_TOOL_NAMES, BrowserGateway
+from .browser_provision_api import BrowserOAuthProvisioner
 from .browser_viewer import install_browser_viewer
 from .browser_worker_attestation import WorkerAttestationVerifier
 from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
 from .browser_worker_binding import BrowserWorkerBinding
+from .browser_worker_dynamic import RefreshingOwnerBrowserWorkerPool
 from .browser_worker_pool import OwnerBrowserWorkerPool
 from .config import Settings
 from .db import Database
@@ -54,26 +56,39 @@ db = Database(settings.db_path)
 metrics = Metrics()
 agents = AgentManager(db, metrics, settings.max_job_output_bytes)
 browser = (
-    OwnerBrowserWorkerPool.from_manifest(
-        settings.browser_worker_manifest,
-        settings.browser_worker_binding_key,
-        settings.browser_allow_hosts,
-        settings.public_base_url,
-        attestation=(
-            (
-                Ed25519WorkerAttestationVerifier(
-                    settings.browser_attestation_path,
-                    settings.browser_attestation_public_key,
+    (
+        RefreshingOwnerBrowserWorkerPool(
+            settings.browser_worker_manifest,
+            settings.browser_worker_binding_key,
+            settings.browser_allow_hosts,
+            settings.public_base_url,
+            attestation=Ed25519WorkerAttestationVerifier(
+                settings.browser_attestation_path,
+                settings.browser_attestation_public_key,
+            ),
+        )
+        if settings.browser_dynamic_workers_enabled
+        else OwnerBrowserWorkerPool.from_manifest(
+            settings.browser_worker_manifest,
+            settings.browser_worker_binding_key,
+            settings.browser_allow_hosts,
+            settings.public_base_url,
+            attestation=(
+                (
+                    Ed25519WorkerAttestationVerifier(
+                        settings.browser_attestation_path,
+                        settings.browser_attestation_public_key,
+                    )
+                    if settings.browser_attestation_public_key
+                    else WorkerAttestationVerifier(
+                        settings.browser_attestation_path,
+                        settings.browser_attestation_key,
+                    )
                 )
-                if settings.browser_attestation_public_key
-                else WorkerAttestationVerifier(
-                    settings.browser_attestation_path,
-                    settings.browser_attestation_key,
-                )
-            )
-            if settings.oauth_enabled
-            else None
-        ),
+                if settings.oauth_enabled
+                else None
+            ),
+        )
     )
     if settings.browser_enabled and settings.browser_worker_manifest
     else (
@@ -98,12 +113,24 @@ browser = (
         else None
     )
 )
+provisioner = (
+    BrowserOAuthProvisioner(
+        worker_pool=browser,
+        provision_secret_path=settings.browser_provision_key_file,
+        socket_path=settings.browser_provision_socket,
+        operator_uid=settings.browser_provision_operator_uid,
+        operator_gid=settings.browser_provision_operator_gid,
+    )
+    if settings.browser_provision_api_enabled
+    else None
+)
 tools = ToolService(
     db,
     agents,
     settings.selection_ttl_seconds,
     browser=browser,
     public_base_url=settings.public_base_url,
+    browser_provisioner=provisioner,
 )
 visible_tools = (
     TOOL_DEFINITIONS
@@ -453,7 +480,11 @@ async def browser_security(request: Request, call_next):
 from .distribution import install_distribution_routes
 from .legal_pages import install_legal_pages
 
-install_distribution_routes(app, os.getenv("COMMANDCORE_DISTRIBUTION_DIR", ""))
+install_distribution_routes(
+    app,
+    os.getenv("COMMANDCORE_DISTRIBUTION_DIR", ""),
+    public_base_url=settings.public_base_url,
+)
 install_legal_pages(app, os.getenv("COMMANDCORE_LEGAL_PAGES_DIR", ""))
 
 from .onboarding_routes import install_routes

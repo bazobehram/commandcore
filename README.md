@@ -1,5 +1,7 @@
 # CommandCore
 
+<img src="assets/branding/commandcore-mark.png" alt="CommandCore turquoise octopus logo" width="96">
+
 <p align="center">
   <img src="assets/branding/commandcore-architecture-animated.svg" alt="Animated CommandCore architecture: MCP clients connect through an OAuth-protected control plane to authorized Linux and preview Windows devices" width="100%">
 </p>

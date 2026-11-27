@@ -22,6 +22,14 @@ from .security import issue_panel_session, token_hash
 from .web_assets import web_page
 
 
+def _panel_oauth_target(settings) -> dict[str, str]:
+    """Select provider syntax from trusted deployment config, never user input."""
+    parameter = getattr(settings, "panel_oauth_target_parameter", "audience")
+    if parameter not in {"audience", "resource"}:
+        raise ValueError("invalid panel OAuth target parameter")
+    return {parameter: settings.oauth_audience}
+
+
 def _panel_return_path(destination: str | None, handoff_token: str) -> str:
     """Never redirect OAuth callbacks to external or untrusted URL destinations."""
     if destination == "browser" and re.fullmatch(r"[A-Za-z0-9_-]{43}", handoff_token):
@@ -285,7 +293,7 @@ def install_routes(
                         if request.query_params.get("access") != "standard"
                         else "commandcore:read commandcore:standard"
                     ),
-                    "audience": settings.oauth_audience,
+                    **_panel_oauth_target(settings),
                 }
             )
         )
@@ -355,7 +363,7 @@ def install_routes(
                         "code_verifier": row["verifier"],
                         "redirect_uri": settings.public_base_url.rstrip("/")
                         + "/auth/callback",
-                        "audience": settings.oauth_audience,
+                        **_panel_oauth_target(settings),
                     },
                 )
                 exchanged.raise_for_status()

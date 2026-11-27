@@ -80,6 +80,10 @@ class Settings:
     ).strip()
     oauth_issuer: str = os.getenv("COMMANDCORE_OAUTH_ISSUER", "").strip()
     oauth_audience: str = os.getenv("COMMANDCORE_OAUTH_AUDIENCE", "").strip()
+    # Provider request syntax only; JWT audience verification is unchanged.
+    panel_oauth_target_parameter: str = os.getenv(
+        "COMMANDCORE_PANEL_OAUTH_TARGET_PARAMETER", "audience"
+    ).strip()
     oauth_jwks_url: str = os.getenv("COMMANDCORE_OAUTH_JWKS_URL", "").strip()
     oauth_authorization_servers: tuple[str, ...] = tuple(
         x.strip()
@@ -125,6 +129,24 @@ class Settings:
     browser_worker_manifest: str = os.getenv(
         "COMMANDCORE_BROWSER_WORKER_MANIFEST", ""
     ).strip()
+    browser_dynamic_workers_enabled: bool = _bool(
+        "COMMANDCORE_BROWSER_DYNAMIC_WORKERS_ENABLED", False
+    )
+    browser_provision_api_enabled: bool = _bool(
+        "COMMANDCORE_BROWSER_PROVISION_API_ENABLED", False
+    )
+    browser_provision_socket: str = os.getenv(
+        "COMMANDCORE_BROWSER_PROVISION_SOCKET", ""
+    ).strip()
+    browser_provision_key_file: str = os.getenv(
+        "COMMANDCORE_BROWSER_PROVISION_KEY_FILE", ""
+    ).strip()
+    browser_provision_operator_uid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_PROVISION_OPERATOR_UID", "-1")
+    )
+    browser_provision_operator_gid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_PROVISION_OPERATOR_GID", "-1")
+    )
     browser_worker_binding_path: str = os.getenv(
         "COMMANDCORE_BROWSER_WORKER_BINDING_PATH", ""
     ).strip()
@@ -139,6 +161,31 @@ class Settings:
     )
 
     def validate(self) -> None:
+        if self.panel_oauth_target_parameter not in {"audience", "resource"}:
+            raise RuntimeError(
+                "COMMANDCORE_PANEL_OAUTH_TARGET_PARAMETER must be audience or resource"
+            )
+        if self.browser_provision_api_enabled and not (
+            self.browser_dynamic_workers_enabled
+            and self.browser_enabled
+            and self.oauth_enabled
+            and self.browser_provision_socket.startswith("/")
+            and self.browser_provision_key_file.startswith("/")
+            and self.browser_provision_operator_uid > 0
+            and self.browser_provision_operator_gid > 0
+        ):
+            raise RuntimeError(
+                "OAuth Browser provisioning API requires the complete reviewed operator configuration"
+            )
+        if self.browser_dynamic_workers_enabled and not (
+            self.browser_enabled
+            and self.oauth_enabled
+            and self.browser_worker_manifest
+            and self.browser_attestation_public_key
+        ):
+            raise RuntimeError(
+                "dynamic Browser requires explicit OAuth, manifest and Ed25519 public proof"
+            )
         if self.private_owner_subject:
             if not self.oauth_enabled or self.public_bootstrap_enabled:
                 raise RuntimeError(
