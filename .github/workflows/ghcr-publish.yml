@@ -1,12 +1,14 @@
 name: Publish CommandCore image to GHCR
 on:
   push:
+    branches: [main]
     tags:
       - 'v*'
 permissions:
   contents: read
 jobs:
   publish:
+    if: github.repository == 'bazobehram/commandcore' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     environment: ghcr-publish
     permissions:
@@ -21,11 +23,16 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
-      - name: Validate release tag
+      - name: Validate reviewed source ref
         shell: bash
         run: |
-          [[ "$GITHUB_REF_TYPE" == "tag" ]]
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "branch" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          else
+            [[ "$GITHUB_REF_TYPE" == "tag" ]]
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]
+          fi
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Verify release checks
@@ -47,6 +54,7 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
           tags: |
             type=ref,event=tag
             type=sha,format=long
@@ -61,26 +69,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
-      - name: Generate signed GitHub provenance attestation
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-name: ghcr.io/${{ github.repository }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-          create-storage-record: false # Personal repository; avoid linked-artifact storage requirement
-      - name: Verify signed provenance for exact image digest
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_IMAGE: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          gh attestation verify "oci://${RELEASE_IMAGE}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ghcr-publish.yml" \
-            --source-ref "$GITHUB_REF" \
-            --source-digest "$GITHUB_SHA" \
-            --deny-self-hosted-runners
       - name: Record immutable image reference
         shell: bash
         run: |
@@ -102,6 +90,7 @@ jobs:
             --image-id "$image_id" \
             --revision "$revision" \
             --source "$source"
+          printf 'source_ref=%s\n' "$GITHUB_REF" >> "$RUNNER_TEMP/commandcore-image.txt"
           printf 'source_commit=%s\n' "$GITHUB_SHA" >> "$RUNNER_TEMP/commandcore-image.txt"
           printf 'image_id=%s\n' "$image_id" >> "$RUNNER_TEMP/commandcore-image.txt"
       - name: Verify immutable server code and packaged MCP UI bytes
@@ -117,6 +106,26 @@ jobs:
             --container "$candidate" --source-root . \
             --expected-image-id "$image_id" > "$RUNNER_TEMP/runtime-release-parity.json"
           cat "$RUNNER_TEMP/runtime-release-parity.json"
+      - name: Generate signed GitHub provenance attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false # Personal repository; avoid linked-artifact storage requirement
+      - name: Verify signed provenance for exact image digest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_IMAGE: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${RELEASE_IMAGE}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ghcr-publish.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: commandcore-image-digest

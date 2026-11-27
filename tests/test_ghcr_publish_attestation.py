@@ -10,9 +10,12 @@ WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/ghcr-publish
 
 def test_ghcr_publish_generates_and_verifies_signed_digest_provenance():
     workflow = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
-    assert workflow["on"]["push"]["tags"] == ["v*"]
+    assert workflow["on"] == {"push": {"branches": ["main"], "tags": ["v*"]}}
 
     job = workflow["jobs"]["publish"]
+    assert job["environment"] == "ghcr-publish"
+    assert job["runs-on"] == "ubuntu-latest"
+    assert "github.repository == 'bazobehram/commandcore'" in job["if"]
     permissions = job["permissions"]
     assert permissions == {
         "contents": "read",
@@ -33,7 +36,21 @@ def test_ghcr_publish_generates_and_verifies_signed_digest_provenance():
         for i, step in enumerate(steps)
         if step.get("name") == "Verify signed provenance for exact image digest"
     )
-    assert build_index < attest_index < verify_index
+    parity_index = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Verify immutable server code and packaged MCP UI bytes"
+    )
+    assert build_index < parity_index < attest_index < verify_index
+    assert any(
+        step.get("name") == "Validate reviewed source ref"
+        and '[[ "$GITHUB_REF" == "refs/heads/main" ]]' in step["run"]
+        for step in steps
+    )
+    assert (
+        next(step for step in steps if step.get("id") == "meta")["with"]["flavor"]
+        == "latest=false"
+    )
 
     attestation = steps[attest_index]
     assert attestation["uses"] == (

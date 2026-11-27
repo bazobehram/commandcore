@@ -116,7 +116,7 @@ use fresh-health validation before committing activation.
 
 ## Immutable GHCR release image metadata
 
-The tagged GHCR workflow uses an immutable registry digest and verifies
+The protected main/tag GHCR workflow uses an immutable registry digest and verifies
 the pulled image's OCI source and revision labels. It records both the
 registry manifest digest reference (ghcr.io/...@sha256:...) and the pulled
 platform-specific Docker image ID (sha256:...) in a CI artifact, together
@@ -129,7 +129,7 @@ pulled image at the exact registry digest, not a mutable image tag.
 The uploaded digest report is a workflow consistency check; it is not itself a
 cryptographic attestation or authorization to deploy.
 
-The protected GHCR tag workflow additionally signs the exact OCI image digest
+The protected GHCR main/tag workflow additionally signs the exact OCI image digest
 with GitHub Artifact Attestations (`actions/attest@v4`), pushes that attestation
 to GHCR, and verifies it with `gh attestation verify` constrained by source
 repository, exact signing workflow, source tag and commit. BuildKit provenance
@@ -165,3 +165,12 @@ an Agent bundle automatically, or demonstrate user-facing installation. The
 approved public key, isolated signing custody, clean-install/enrollment and
 rollback evidence must be verified before the Public installer endpoints are
 advertised as ready.
+
+
+Reviewed pushes to `main` also build an immutable SHA-addressed candidate image.
+The existing `ghcr-publish` environment remains protected; no PR or fork can
+publish. The byte-parity gate must pass before provenance is attached. The
+artifact records `source_ref`, `source_commit`, image digest and image ID.
+A `refs/heads/main` attestation identifies a candidate, not deployment approval
+or a native Agent release signature. Promotion still requires all exact-commit
+checks, both target acceptance and independent local configuration.
