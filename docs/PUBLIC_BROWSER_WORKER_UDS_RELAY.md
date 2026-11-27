@@ -25,6 +25,10 @@ The API side `browser_worker_uds_client.py` derives its path **only** from the p
 - A socket pathname replaced while the old relay process still runs is detected by API; the old process does not unlink the replacement.
 - Netti host-identity acceptance, synthetic backends only: API UID 10001/GID999 and operator UID994/GID987, with a temporary restricted group-accessible directory. Script (operator staging only): `/opt/commandcore-public/staging/plugin-review-20261120/run_worker_relay_cross_uid_20261123.sh`. No Docker workers were created.
 
+## Operator physical relay verification (source only)
+
+The operator-side `verify_physical_relay` helper now validates an explicitly pinned relay container and image, numeric non-root identity and exact command, dropped capabilities, read-only filesystem, resource limits, sole socket bind mount, isolated network ID and exclusive boundary/relay network membership. It checks both real Unix socket identities and re-inspects the container incarnation before returning evidence. The helper is not yet called by the physical worker lifecycle or signing loop; its evidence is not yet part of the signed API proof. Unit fixtures use real local Unix sockets and simulated Docker inspection, not installed Docker sidecars.
+
 ## Production STOP-SHIP: source code alone is not enough
 
 1. Extend the operator **physical worker registry, labels, pinned image identity and Ed25519 proof** to verify one sidecar's immutable container ID, network endpoint membership, seccomp/capabilities, read-only rootfs and mounted socket directory. Reject any extra or changed network membership, published ports or unapproved host mounts. The current two-container physical proof does NOT cover the new sidecar. Do not start it in production without this verification.
