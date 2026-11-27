@@ -252,6 +252,17 @@ class BrowserGateway:
                 # before permitting any further AI/human interaction.
                 self._unverified_recovery = owner
 
+    def _require_current_session(self, owner, entry: OwnedSession) -> None:
+        # A queued action must not operate on a session retired by Stop or
+        # invalidated by a worker-proof refresh while it waited for the lock.
+        if self.sessions.get(owner) is not entry:
+            raise BrowserError("browser session changed; refresh before continuing")
+        if self.worker_binding is not None:
+            try:
+                self.worker_binding.claim(owner)
+            except WorkerOwnershipError as exc:
+                raise BrowserError("browser owner binding unavailable") from exc
+
     def _save_session(self, owner, entry):
         if self._session_store:
             try:
@@ -478,8 +489,10 @@ class BrowserGateway:
         # capture the human login console. The next poll can retry safely.
         if not entry.paused_for_human and not entry.lock.locked():
             async with entry.lock:
+                self._require_current_session(owner, entry)
                 if not entry.paused_for_human:
                     shot = await asyncio.wait_for(self._snapshot(entry), timeout=8)
+                    self._require_current_session(owner, entry)
                     image = shot.get("screenshot_base64")
                     if image and (
                         image != entry.frame_image
@@ -555,6 +568,7 @@ class BrowserGateway:
                 raise BrowserError("browser owner binding unavailable") from exc
         entry = self.sessions[owner]
         async with entry.lock:
+            self._require_current_session(owner, entry)
             if (
                 not entry.paused_for_human
                 or not self._active_handoff(entry)
@@ -562,6 +576,7 @@ class BrowserGateway:
             ):
                 raise BrowserError("handoff not found or expired")
             shot = await self._snapshot_private_frame(entry)
+            self._require_current_session(owner, entry)
             if (
                 not entry.paused_for_human
                 or not self._active_handoff(entry)
@@ -627,8 +642,11 @@ class BrowserGateway:
             except WorkerOwnershipError as exc:
                 raise BrowserError(str(exc)) from exc
         await self._verify_recovered_session(owner)
-        entry = self.sessions[owner]
+        entry = self.sessions.get(owner)
+        if entry is None:
+            raise BrowserError("browser session changed; refresh before continuing")
         async with entry.lock:
+            self._require_current_session(owner, entry)
             if not self._active_handoff(entry) or not secrets.compare_digest(
                 entry.handoff_token or "", token
             ):
@@ -639,6 +657,7 @@ class BrowserGateway:
             consent_origin = None
             if allow_ai_interaction:
                 page = await self._snapshot_private_frame(entry)
+                self._require_current_session(owner, entry)
                 page_url = page.get("url")
                 check_url(page_url, self.allow_hosts)
                 parsed = urlsplit(page_url)
@@ -783,6 +802,7 @@ class BrowserGateway:
             if not entry:
                 return {"closed": False}
             async with entry.lock:
+                self._require_current_session(owner, entry)
                 if expected_session_id is not None and entry.id != expected_session_id:
                     raise BrowserError(
                         "Browser session changed; refresh before stopping"
@@ -791,19 +811,36 @@ class BrowserGateway:
                 # typing credentials or approving a sensitive action.
                 if entry.paused_for_human:
                     raise BrowserError("browser paused for human; cannot close")
-                async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
-                    r = await client.post(
-                        self.base_url + "/v1/sessions/" + entry.id + "/release"
-                    )
-                    r.raise_for_status()
-                    if r.json().get("status") != "released":
-                        raise BrowserError("Steel did not confirm session release")
+                try:
+                    async with httpx.AsyncClient(timeout=12, trust_env=False) as client:
+                        r = await client.post(
+                            self.base_url + "/v1/sessions/" + entry.id + "/release"
+                        )
+                        # Private already treats an absent exact session as closed.
+                        # Never transfer ownership or acknowledge other HTTP failures.
+                        if r.status_code not in (404, 410):
+                            r.raise_for_status()
+                            payload = r.json()
+                            if (
+                                not isinstance(payload, dict)
+                                or payload.get("status") != "released"
+                            ):
+                                raise BrowserError(
+                                    "Steel did not confirm session release"
+                                )
+                except (httpx.HTTPError, ValueError) as exc:
+                    raise BrowserError(
+                        "Steel session release could not be verified"
+                    ) from exc
+                self._require_current_session(owner, entry)
                 if self._session_store:
                     try:
                         self._session_store.delete()
                     except SessionStoreError as exc:
                         raise BrowserError("browser journal cleanup failed") from exc
                 self.sessions.pop(owner, None)
+                if self._unverified_recovery == owner:
+                    self._unverified_recovery = None
         return {"closed": True}
 
     async def _cdp_socket_uri(self, session_id: str) -> str:
@@ -1138,6 +1175,7 @@ class BrowserGateway:
                 raise BrowserError("saved browser session no longer exists")
         except (httpx.HTTPError, ValueError) as exc:
             raise BrowserError("cannot verify saved browser session") from exc
+        self._require_current_session(owner, entry)
         self._unverified_recovery = None
 
     async def call(
@@ -1196,6 +1234,7 @@ class BrowserGateway:
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
             async with entry.lock:
+                self._require_current_session(owner, entry)
                 return self._handoff(owner, args.get("reason", "login_or_approval"))
         if name == "browser.close":
             expected = args.get("expected_session_id")
@@ -1212,6 +1251,7 @@ class BrowserGateway:
             if not entry:
                 raise BrowserError("no browser session: call browser.open first")
         async with entry.lock:
+            self._require_current_session(owner, entry)
             # Recheck authority *inside* the lock. An agent action can be
             # waiting behind human handoff; the previous pre-lock check
             # let it execute after the handoff was granted.
@@ -1250,6 +1290,7 @@ class BrowserGateway:
                     )
                 # No clicks at a stale coordinate after navigation or a fresh page.
                 current = await self._snapshot_private_frame(entry)
+                self._require_current_session(owner, entry)
                 if current.get("url") != pending["url"]:
                     raise BrowserError(
                         "page changed; inspect the page and click manually"
@@ -1263,11 +1304,15 @@ class BrowserGateway:
             if name == "browser.elements":
                 if human:
                     raise BrowserError("human controls use the private console")
-                return await self._visible_elements(entry)
+                result = await self._visible_elements(entry)
+                self._require_current_session(owner, entry)
+                return result
             if name == "browser.links":
                 if human:
                     raise BrowserError("human controls use the private console")
-                return await self._visible_links(entry)
+                result = await self._visible_links(entry)
+                self._require_current_session(owner, entry)
+                return result
 
             if not human:
                 entry.action_running = True
@@ -1288,6 +1333,7 @@ class BrowserGateway:
                 if not human and name != "browser.click":
                     entry.pending_click = None
                 await self._perform_action(owner, entry, name, args, human=human)
+                self._require_current_session(owner, entry)
                 if not human and name == "browser.click":
                     # A completed safe click supersedes a previously blocked proposal.
                     entry.pending_click = None
@@ -1297,6 +1343,7 @@ class BrowserGateway:
                     # Avoid blocking user clicks behind redundant CDP work.
                     return {"status": "ok"}
                 shot = await self._snapshot(entry)
+                self._require_current_session(owner, entry)
                 self._publish_frame(
                     entry,
                     shot,
