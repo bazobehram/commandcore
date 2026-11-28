@@ -84,10 +84,18 @@ def state(tmp_path, monkeypatch):
         },
     }
     docker = SimpleNamespace(
-        inspect=lambda name: {
-            "Id": worker.steel_container_id,
-            "State": {"Running": True, "StartedAt": STAMP},
-        },
+        inspect=lambda name: (
+            {
+                "Id": worker.steel_container_id,
+                "State": {"Running": True, "StartedAt": STAMP},
+            }
+            if name == worker.steel_name
+            else {
+                "Id": worker.boundary_container_id,
+                "Mounts": [],
+                "HostConfig": {"Tmpfs": {"/data": "ro,nosuid,nodev,noexec,size=1m"}},
+            }
+        ),
         inspect_network=lambda name: networks[name],
     )
     monkeypatch.setattr(signer, "verify_physical_worker", lambda *_a: None)
@@ -182,3 +190,31 @@ def test_seed_reader_rejects_world_readable_and_symlink(tmp_path):
     alias.symlink_to(key)
     with pytest.raises(BrowserAttestationError):
         signer.read_seed(alias)
+
+
+@pytest.mark.parametrize(
+    "tmpfs,mounts",
+    [
+        (None, []),
+        ({"/data": "rw"}, []),
+        (
+            {"/data": "ro,nosuid,nodev,noexec,size=1m"},
+            [{"Type": "volume", "Destination": "/data"}],
+        ),
+    ],
+)
+def test_boundary_persistent_mount_denies_proof(state, tmpfs, mounts):
+    assert state.run() == 1
+    original = state.docker.inspect
+
+    def inspect(name):
+        record = original(name)
+        if name == state.worker.boundary_name:
+            record["HostConfig"]["Tmpfs"] = tmpfs
+            record["Mounts"] = mounts
+        return record
+
+    state.docker.inspect = inspect
+    assert state.run() == 0
+    with pytest.raises(BrowserAttestationError):
+        state.verifier.verify(state.worker.worker_id)

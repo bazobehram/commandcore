@@ -29,7 +29,10 @@ from commandcore_server.browser_worker_orchestrator import (
     is_trusted_systemd_credential,
     verify_physical_worker,
 )
-from commandcore_server.browser_worker_relay_identity import verify_physical_relay
+from commandcore_server.browser_worker_relay_identity import (
+    EMPTY_DATA_TMPFS,
+    verify_physical_relay,
+)
 
 _STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z")
 
@@ -138,6 +141,19 @@ def reconcile_once(
                 stamp = _steel_stamp(worker, docker)
                 verify_physical_worker(worker, docker)
                 _check_network_members(worker, docker)
+                boundary = docker.inspect(worker.boundary_name)
+                if (
+                    boundary.get("Id") != worker.boundary_container_id
+                    or boundary.get("Mounts")
+                    or ((boundary.get("HostConfig") or {}).get("Tmpfs") or {}).get(
+                        "/data"
+                    )
+                    != EMPTY_DATA_TMPFS
+                ):
+                    raise WorkerQuarantined(
+                        "public boundary has unexpected persistent storage"
+                    )
+
                 relay["socket_root"] = Path(relay["socket_root"])
                 evidence = verify_physical_relay(worker, docker, **relay)
                 if _steel_stamp(worker, docker) != stamp:
