@@ -16,7 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from browser_worker_lifecycle import provision
+from browser_worker_lifecycle import MAX_WORKERS, provision, relay_config
 from commandcore_server.browser_provision_intent import (
     BrowserProvisionIntentDenied,
     ProvisionNonceLedger,
@@ -76,6 +76,8 @@ def handle_request(
     intent_secret: bytes,
     binding_secret: str,
     now: int | None = None,
+    relay: dict | None = None,
+    active_limit: int = MAX_WORKERS,
 ) -> str:
     """Consume verified one-time request then delegate to immutable owner provision."""
     if not state_dir.is_absolute() or state_dir.is_symlink():
@@ -89,6 +91,10 @@ def handle_request(
         or intent_secret == binding_secret.encode()
     ):
         raise BrowserProvisionIntentDenied("distinct operator credentials required")
+    if type(active_limit) is not int or not 1 <= active_limit <= MAX_WORKERS:
+        raise BrowserProvisionIntentDenied("invalid operator capacity")
+    if relay is not None:
+        relay = relay_config(**relay)
     token = _request_from_private_file(request_file)
     ledger = ProvisionNonceLedger(str(state_dir / "provision-intent-nonces.sqlite3"))
     try:
@@ -122,6 +128,8 @@ def handle_request(
             steel_image,
             boundary_image,
             binding_secret,
+            relay=relay,
+            active_limit=active_limit,
         )
     finally:
         if temp_path is not None:

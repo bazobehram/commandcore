@@ -47,11 +47,14 @@ def test_full_local_listener_to_operator_adapter_with_fake_docker(
     tmp_path.chmod(0o700)
     ledger = ProvisionNonceLedger(str(tmp_path / "ledger.sqlite3"))
     seen = []
+    relay = {"api_uid": os.getuid(), "api_gid": os.getgid()}
+    monkeypatch.setattr(listener, "relay_config", lambda **kw: kw)
 
     def fake_handle_request(*, request_file, state_dir, issuer, **kwargs):
         assert issuer == ISSUER and state_dir == tmp_path
         assert request_file.stat().st_mode & 0o077 == 0
         assert kwargs["allow_hosts"] == "example.com"
+        assert kwargs["relay"] == relay and kwargs["active_limit"] == 2
         record = verify_and_consume_provision_intent(
             request_file.read_text(), KEY, ISSUER, ledger
         )
@@ -77,6 +80,8 @@ def test_full_local_listener_to_operator_adapter_with_fake_docker(
                 intent_secret=KEY,
                 binding_secret=BINDING,
                 max_connections=3,
+                relay=relay,
+                active_limit=2,
             )
         except Exception as exc:  # noqa: BLE001 - preserve worker thread assertion
             failures.append(exc)
@@ -136,5 +141,27 @@ def test_operator_listener_refuses_identical_signing_and_owner_keys(tmp_path):
             intent_secret=KEY,
             binding_secret=KEY.decode(),
             max_connections=1,
+        )
+    assert not (tmp_path / "no.sock").exists()
+
+
+def test_relay_peer_mismatch_refused_before_listening(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    monkeypatch.setattr(listener, "relay_config", lambda **kw: kw)
+    with pytest.raises(BrowserProvisionIntentDenied, match="peer identities differ"):
+        listener.run_operator_listener(
+            socket_path=str(tmp_path / "no.sock"),
+            state_dir=tmp_path,
+            expected_client_uid=10001,
+            expected_client_gid=999,
+            socket_gid=987,
+            issuer=ISSUER,
+            allow_hosts="example.com",
+            steel_image="mock:steel",
+            boundary_image="mock:boundary",
+            intent_secret=KEY,
+            binding_secret=BINDING,
+            relay={"api_uid": 10002, "api_gid": 999},
+            active_limit=2,
         )
     assert not (tmp_path / "no.sock").exists()

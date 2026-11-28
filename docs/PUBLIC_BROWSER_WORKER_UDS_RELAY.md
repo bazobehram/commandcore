@@ -61,3 +61,13 @@ This is source-level integration tested with simulated Docker operations.
 The recurring Ed25519 signer and public OAuth listener still need to consume
 the relay registry and deployment options; real Netti provisioning and
 two-owner acceptance are not established by these tests.
+
+### OAuth listener configuration
+
+The public operator listener now requires an explicit pinned relay image,
+socket root, operator UID/GID and active worker limit at CLI startup.
+The relay API peer is derived from the listener's expected client UID/GID.
+The verified intent carries only the owner identity; callers cannot select
+relay infrastructure or override capacity. The direct operator one-shot
+path remains available. A real listener deployment and the recurring
+signed proof publisher are still required before enabling public Browser.
