@@ -36,6 +36,7 @@ from commandcore_server.browser_worker_orchestrator import (
     verify_physical_worker,
 )
 from commandcore_server.browser_worker_relay_identity import (
+    EMPTY_DATA_TMPFS,
     SOCKET_TARGET,
     verify_physical_relay,
 )
@@ -276,6 +277,9 @@ def _create_relay(physical: PhysicalWorker, config: dict, created: list[str]):
         "ALL",
         "--security-opt",
         "no-new-privileges:true",
+        "--no-healthcheck",
+        "--tmpfs",
+        "/data:" + EMPTY_DATA_TMPFS,
         "--memory",
         "128m",
         "--cpus",
@@ -283,7 +287,7 @@ def _create_relay(physical: PhysicalWorker, config: dict, created: list[str]):
         "--pids-limit",
         "64",
         "--mount",
-        f"type=bind,src={directory},dst={SOCKET_TARGET}",
+        f"type=bind,src={directory},dst={SOCKET_TARGET},bind-propagation=rprivate",
         "--entrypoint",
         "python",
         config["image_id"],
@@ -420,6 +424,11 @@ def provision(
                 "no-new-privileges:true",
                 "--tmpfs",
                 "/tmp:rw,nosuid,size=16m",
+                *(
+                    ("--tmpfs", "/data:" + EMPTY_DATA_TMPFS)
+                    if relay is not None
+                    else ()
+                ),
                 "--memory",
                 "128m",
                 "--cpus",

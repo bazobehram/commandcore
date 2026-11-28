@@ -82,6 +82,7 @@ def relay(tmp_path):
                     "--api-gid",
                     str(api_gid),
                 ],
+                "Healthcheck": {"Test": ["NONE"]},
                 "Labels": {
                     PROJECT_LABEL: "1",
                     WORKER_LABEL: worker.worker_id,
@@ -92,6 +93,7 @@ def relay(tmp_path):
             "State": {"Running": True, "StartedAt": "2026-11-27T12:00:00.000000001Z"},
             "HostConfig": {
                 "Privileged": False,
+                "Tmpfs": {"/data": "ro,nosuid,nodev,noexec,size=1m"},
                 "ReadonlyRootfs": True,
                 "CapDrop": ["ALL"],
                 "SecurityOpt": ["no-new-privileges:true"],
@@ -173,6 +175,9 @@ def test_attests_pinned_relay_and_live_socket_identity(relay):
         (("Image",), "sha256:" + "2" * 64),
         (("Config", "User"), "0:0"),
         (("Config", "Cmd"), ["other"]),
+        (("Config", "Healthcheck"), {"Test": ["CMD", "other"]}),
+        (("HostConfig", "Tmpfs"), {"/data": "rw"}),
+        (("HostConfig", "Tmpfs"), {}),
         (("Config", "Labels", ROLE_LABEL), "boundary"),
         (("State", "Running"), False),
         (("State", "StartedAt"), ""),

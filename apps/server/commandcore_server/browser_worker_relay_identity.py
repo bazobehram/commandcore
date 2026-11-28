@@ -21,6 +21,7 @@ from .browser_worker_orchestrator import (
 )
 
 SOCKET_TARGET = "/run/commandcore-relay"
+EMPTY_DATA_TMPFS = "ro,nosuid,nodev,noexec,size=1m"
 
 
 def verify_physical_relay(
@@ -103,6 +104,7 @@ def verify_physical_relay(
         or config.get("User") != f"{operator_uid}:{operator_gid}"
         or config.get("Entrypoint") != ["python"]
         or config.get("Cmd") != command
+        or (config.get("Healthcheck") or {}).get("Test") != ["NONE"]
         or state.get("Running") is not True
         or not isinstance(started, str)
         or not re.fullmatch(
@@ -133,6 +135,7 @@ def verify_physical_relay(
             )
         )
         or host.get("PublishAllPorts")
+        or host.get("Tmpfs") != {"/data": EMPTY_DATA_TMPFS}
         or host.get("IpcMode") not in ("", "private")
         or host.get("NetworkMode")
         not in (worker.control_network, worker.control_network_id)

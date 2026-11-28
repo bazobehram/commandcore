@@ -316,4 +316,6 @@ def test_create_relay_uses_only_pinned_worker_network_and_image(
     assert args[args.index("--entrypoint") + 2] == config["image_id"]
     assert "--read-only" in args and "--privileged" not in args
     assert args.count("--mount") == 1
+    assert "--no-healthcheck" in args
+    assert "/data:ro,nosuid,nodev,noexec,size=1m" in args
     assert f.calls[1:] == [("start", cid), ("verify",)]
