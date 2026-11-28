@@ -9,6 +9,7 @@ uniqueness is necessary but not proof of separate physical worker processes.
 from __future__ import annotations
 
 import json
+import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from .browser_worker_attestation import (
 )
 from .browser_worker_attestation_ed25519 import Ed25519WorkerAttestationVerifier
 from .browser_worker_binding import BrowserWorkerBinding, WorkerOwnershipError
+from .browser_worker_publication import check_publication_file
 
 ProofVerifier = WorkerAttestationVerifier | Ed25519WorkerAttestationVerifier
 from urllib.parse import urlsplit
@@ -76,6 +78,8 @@ class OwnerBrowserWorkerPool:
         allow_hosts: tuple[str, ...],
         public_base_url: str,
         attestation: ProofVerifier | None = None,
+        *,
+        publication_identity: tuple[int, int] | None = None,
     ) -> OwnerBrowserWorkerPool:
         source = Path(path)
         try:
@@ -84,7 +88,11 @@ class OwnerBrowserWorkerPool:
             if (
                 not source.is_absolute()
                 or not stat.S_ISREG(st.st_mode)
-                or st.st_mode & 0o077
+                or (
+                    not check_publication_file(source, st, *publication_identity)
+                    if publication_identity is not None
+                    else bool(st.st_mode & 0o077)
+                )
                 or parent.st_mode & 0o022
             ):
                 raise ValueError("browser worker manifest requires private permissions")
@@ -109,11 +117,18 @@ class OwnerBrowserWorkerPool:
                 or any(not isinstance(v, str) or not v.strip() for v in row.values())
             ):
                 raise ValueError("malformed browser worker specification")
+            if publication_identity is not None and (
+                not re.fullmatch(r"w-[0-9a-f]{18}", row["worker_id"])
+                or Path(row["binding_path"])
+                != source.parent / (row["worker_id"] + ".sqlite3")
+            ):
+                raise ValueError("published owner binding path differs from worker")
             binding = BrowserWorkerBinding(
                 row["binding_path"],
                 row["worker_id"],
                 binding_secret,
                 require_claimed=True,
+                publication_identity=publication_identity,
             )
             workers.append(
                 BrowserGateway(

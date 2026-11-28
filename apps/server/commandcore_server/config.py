@@ -144,6 +144,9 @@ class Settings:
     browser_uds_relay_operator_gid: int = int(
         os.getenv("COMMANDCORE_BROWSER_UDS_RELAY_OPERATOR_GID", "-1")
     )
+    browser_publication_gid: int = int(
+        os.getenv("COMMANDCORE_BROWSER_PUBLICATION_GID", "-1")
+    )
     browser_provision_api_enabled: bool = _bool(
         "COMMANDCORE_BROWSER_PROVISION_API_ENABLED", False
     )
@@ -186,6 +189,8 @@ class Settings:
                 and self.browser_uds_relay_root.startswith("/")
                 and self.browser_uds_relay_operator_uid > 0
                 and self.browser_uds_relay_operator_gid > 0
+                and self.browser_publication_gid > 0
+                and self.browser_publication_gid != self.browser_uds_relay_operator_gid
                 and self.browser_attestation_public_key
             )
         ):
