@@ -18,6 +18,7 @@ from typing import Any
 from .browser_gateway import BrowserError, BrowserGateway
 from .browser_worker_binding import WorkerOwnershipError
 from .browser_worker_pool import Owner, OwnerBrowserWorkerPool, ProofVerifier
+from .browser_worker_publication import check_publication_file
 from .browser_worker_uds_client import WorkerUnixClient
 
 _MAX_MANIFEST_BYTES = 65536
@@ -37,6 +38,7 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
         relay_root: str = "",
         relay_operator_uid: int = -1,
         relay_operator_gid: int = -1,
+        publication_identity: tuple[int, int] | None = None,
     ) -> None:
         if attestation is None or len(binding_secret) < 32:
             raise ValueError("dynamic public Browser requires proof and owner key")
@@ -49,6 +51,7 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
             raise ValueError(
                 "public worker relay identity must be explicitly configured"
             )
+        self.publication_identity = publication_identity
         self.relay_root = relay_root
         self.relay_operator_uid = relay_operator_uid
         self.relay_operator_gid = relay_operator_gid
@@ -74,7 +77,13 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
                 info = os.fstat(fd)
                 if (
                     not stat.S_ISREG(info.st_mode)
-                    or info.st_mode & 0o077
+                    or (
+                        not check_publication_file(
+                            path, info, *self.publication_identity
+                        )
+                        if self.publication_identity is not None
+                        else bool(info.st_mode & 0o077)
+                    )
                     or info.st_size > _MAX_MANIFEST_BYTES
                 ):
                     raise BrowserError(
@@ -165,6 +174,7 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
                         self.allow_hosts,
                         self.public_base_url,
                         self.attestation,
+                        publication_identity=self.publication_identity,
                     )
                     incoming = tuple(candidate.workers)
                     if self.relay_root:
@@ -219,7 +229,14 @@ class RefreshingOwnerBrowserWorkerPool(OwnerBrowserWorkerPool):
                     k: v for k, v in self._worker_starts.items() if k in valid_ids
                 }
                 self._manifest_digest = digest
-            except (OSError, ValueError, TypeError, KeyError, BrowserError) as exc:
+            except (
+                OSError,
+                ValueError,
+                TypeError,
+                KeyError,
+                BrowserError,
+                WorkerOwnershipError,
+            ) as exc:
                 self._discard()
                 raise BrowserError(
                     "dynamic browser worker manifest unavailable or invalid"
