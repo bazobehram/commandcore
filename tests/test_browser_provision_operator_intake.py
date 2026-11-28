@@ -49,6 +49,8 @@ def run(request_file, root, **kwargs):
         intent_secret=kwargs.get("key", KEY),
         binding_secret=kwargs.get("binding", BINDING),
         now=1001,
+        relay=kwargs.get("relay"),
+        active_limit=kwargs.get("active_limit", 16),
     )
 
 
@@ -58,7 +60,7 @@ def test_verified_two_accounts_only_provision_once_and_owner_file_is_removed(
     tmp_path.chmod(0o700)
     seen = []
 
-    def fake_provision(root, owner_path, *_args):
+    def fake_provision(root, owner_path, *_args, **_kwargs):
         assert root == tmp_path
         assert owner_path.stat().st_mode & 0o077 == 0
         seen.append(json.loads(owner_path.read_text()))
@@ -127,7 +129,7 @@ def test_failed_provision_cleans_ephemeral_owner_file_and_consumes_nonce(
     tmp_path.chmod(0o700)
     seen = []
 
-    def fail(_root, owner_path, *_args):
+    def fail(_root, owner_path, *_args, **_kwargs):
         seen.append(owner_path.name)
         raise WorkerQuarantined("deliberate no-docker failure")
 
@@ -139,3 +141,34 @@ def test_failed_provision_cleans_ephemeral_owner_file_and_consumes_nonce(
     assert seen and not list(tmp_path.glob(".browser-owner-*.json"))
     with pytest.raises(BrowserProvisionIntentDenied, match="replayed"):
         run(request, tmp_path)
+
+
+def test_operator_relay_and_capacity_forwarded_not_taken_from_intent(
+    tmp_path, monkeypatch
+):
+    tmp_path.chmod(0o700)
+    relay = {"fixture": "operator-only"}
+    monkeypatch.setattr(intake, "relay_config", lambda **kw: kw)
+    seen = []
+
+    def provision(root, owner_path, *_args, **kwargs):
+        seen.append((json.loads(owner_path.read_text()), kwargs))
+        return "w-fixture"
+
+    monkeypatch.setattr(intake, "provision", provision)
+    request = tmp_path / "request.txt"
+    write_request(request, issue_provision_intent(user("alice"), KEY, now=1000))
+    assert run(request, tmp_path, relay=relay, active_limit=2) == "w-fixture"
+    assert seen[0][1] == {"relay": relay, "active_limit": 2}
+    assert seen[0][0]["subject"] == "alice"
+
+
+def test_invalid_capacity_rejects_before_consuming_request(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    request = tmp_path / "request.txt"
+    write_request(request, issue_provision_intent(user("alice"), KEY, now=1000))
+    monkeypatch.setattr(intake, "provision", lambda *_a, **_kw: "w-fixture")
+    for limit in (0, 17, True):
+        with pytest.raises(BrowserProvisionIntentDenied, match="capacity"):
+            run(request, tmp_path, active_limit=limit)
+    assert run(request, tmp_path, active_limit=2) == "w-fixture"
