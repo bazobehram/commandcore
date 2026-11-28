@@ -70,6 +70,14 @@ browser = (
             ),
             relay_operator_uid=settings.browser_uds_relay_operator_uid,
             relay_operator_gid=settings.browser_uds_relay_operator_gid,
+            publication_identity=(
+                (
+                    settings.browser_uds_relay_operator_uid,
+                    settings.browser_publication_gid,
+                )
+                if settings.browser_uds_relay_enabled
+                else None
+            ),
             attestation=Ed25519WorkerAttestationVerifier(
                 settings.browser_attestation_path,
                 settings.browser_attestation_public_key,

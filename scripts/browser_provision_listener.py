@@ -14,8 +14,10 @@ import tempfile
 from pathlib import Path
 
 from browser_provision_from_intent import handle_request
+from browser_worker_lifecycle import MAX_WORKERS, relay_config
 from commandcore_server.browser_provision_intent import BrowserProvisionIntentDenied
 from commandcore_server.browser_provision_ipc import serve_provision_intents
+from commandcore_server.browser_worker_orchestrator import WorkerQuarantined
 
 
 def private_secret(path: Path) -> bytes:
@@ -58,6 +60,8 @@ def run_operator_listener(
     intent_secret: bytes,
     binding_secret: str,
     max_connections: int | None = None,
+    relay: dict | None = None,
+    active_limit: int = MAX_WORKERS,
 ) -> None:
     if not state_dir.is_absolute() or state_dir.is_symlink():
         raise BrowserProvisionIntentDenied("operator private state path invalid")
@@ -70,6 +74,18 @@ def run_operator_listener(
         or intent_secret == binding_secret.encode()
     ):
         raise BrowserProvisionIntentDenied("distinct operator keys required")
+
+    if type(active_limit) is not int or not 1 <= active_limit <= MAX_WORKERS:
+        raise BrowserProvisionIntentDenied("invalid operator capacity")
+    if relay is not None:
+        relay = relay_config(**relay)
+        if (relay["api_uid"], relay["api_gid"]) != (
+            expected_client_uid,
+            expected_client_gid,
+        ):
+            raise BrowserProvisionIntentDenied(
+                "relay and intake peer identities differ"
+            )
 
     def consume(token: str) -> None:
         # Only the verified peer can submit. The signed intent and durable
@@ -91,6 +107,8 @@ def run_operator_listener(
                 boundary_image=boundary_image,
                 intent_secret=intent_secret,
                 binding_secret=binding_secret,
+                relay=relay,
+                active_limit=active_limit,
             )
         finally:
             file.unlink(missing_ok=True)
@@ -118,6 +136,11 @@ def main() -> None:
     parser.add_argument("--boundary-image", required=True)
     parser.add_argument("--intent-key-file", required=True, type=Path)
     parser.add_argument("--binding-key-file", required=True, type=Path)
+    parser.add_argument("--relay-image-id", required=True)
+    parser.add_argument("--relay-socket-root", required=True)
+    parser.add_argument("--relay-operator-uid", type=int, required=True)
+    parser.add_argument("--relay-operator-gid", type=int, required=True)
+    parser.add_argument("--active-limit", type=int, required=True)
     args = parser.parse_args()
     try:
         run_operator_listener(
@@ -132,8 +155,17 @@ def main() -> None:
             boundary_image=args.boundary_image,
             intent_secret=private_secret(args.intent_key_file),
             binding_secret=private_secret(args.binding_key_file).decode("ascii"),
+            relay=relay_config(
+                image_id=args.relay_image_id,
+                socket_root=args.relay_socket_root,
+                operator_uid=args.relay_operator_uid,
+                operator_gid=args.relay_operator_gid,
+                api_uid=args.expected_client_uid,
+                api_gid=args.expected_client_gid,
+            ),
+            active_limit=args.active_limit,
         )
-    except (BrowserProvisionIntentDenied, OSError, ValueError):
+    except (BrowserProvisionIntentDenied, WorkerQuarantined, OSError, ValueError):
         parser.exit(2, "Browser provisioning operator startup refused\n")
 
 

@@ -19,6 +19,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import TypeAlias
 
+from .browser_worker_publication import check_publication_file
+
 Owner: TypeAlias = tuple[str, str, str]
 
 
@@ -34,6 +36,7 @@ class BrowserWorkerBinding:
         secret: str,
         *,
         require_claimed: bool = False,
+        publication_identity: tuple[int, int] | None = None,
     ):
         if not worker_id or not re.fullmatch(r"[a-zA-Z0-9_-]{8,100}", worker_id):
             raise ValueError(
@@ -47,6 +50,9 @@ class BrowserWorkerBinding:
         if not self.path.is_absolute():
             raise ValueError("browser worker binding path must be absolute")
         self.worker_id = worker_id
+        if publication_identity is not None and not require_claimed:
+            raise WorkerOwnershipError("published owner binding must be read-only")
+        self._publication_identity = publication_identity
         self._require_claimed = require_claimed
         self._key = secret.encode("utf-8")
         self._storage_identity: tuple[int, int] | None = None
@@ -132,7 +138,10 @@ class BrowserWorkerBinding:
             ) from exc
         if not stat.S_ISDIR(parent.st_mode) or parent.st_mode & 0o022:
             raise WorkerOwnershipError("browser worker binding directory is unsafe")
-        if not stat.S_ISREG(file.st_mode) or file.st_mode & 0o077:
+        if self._publication_identity is not None:
+            if not check_publication_file(self.path, file, *self._publication_identity):
+                raise WorkerOwnershipError("published owner binding file is unsafe")
+        elif not stat.S_ISREG(file.st_mode) or file.st_mode & 0o077:
             raise WorkerOwnershipError("browser worker binding file is unsafe")
         identity = (file.st_dev, file.st_ino)
         if self._storage_identity is None:
